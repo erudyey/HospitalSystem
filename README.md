@@ -29,7 +29,7 @@ The application creates `clinic.db` automatically beside the source files. The d
 - `main.py` starts the application.
 - `gui.py` contains the Tkinter interface.
 - `database.py` contains the SQLite queries and schema setup.
-- `test_hospital_system.py` contains automated regression tests.
+- `tests/test_database.py` contains automated regression tests.
 
 ## Usage
 
@@ -41,3 +41,11 @@ The application creates `clinic.db` automatically beside the source files. The d
 ## Current limitations
 
 This is a local single-user desktop application. It does not include authentication, appointment conflict checks, editing or deleting records, or remote backup.
+
+## Verify
+
+Run the regression tests from the project folder:
+
+```powershell
+python -m unittest discover -s tests -v
+```

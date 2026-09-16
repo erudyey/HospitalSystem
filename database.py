@@ -1,23 +1,36 @@
 """SQLite storage for the hospital management application."""
 
 import sqlite3
-from contextlib import closing
+from collections.abc import Iterator
+from contextlib import closing, contextmanager
 from pathlib import Path
-
 
 DB_PATH = Path(__file__).with_name("clinic.db")
 
 
-def get_connection():
+def get_connection() -> sqlite3.Connection:
     """Return a connection with foreign-key checks enabled."""
     connection = sqlite3.connect(DB_PATH)
     connection.execute("PRAGMA foreign_keys = ON")
     return connection
 
 
-def init_db():
+@contextmanager
+def database_connection() -> Iterator[sqlite3.Connection]:
+    """Commit successful work, roll back errors, and always close the connection."""
+    with closing(get_connection()) as connection:
+        try:
+            yield connection
+        except sqlite3.Error:
+            connection.rollback()
+            raise
+        else:
+            connection.commit()
+
+
+def init_db() -> None:
     """Create the application tables when they do not already exist."""
-    with closing(get_connection()) as connection, connection:
+    with database_connection() as connection:
         connection.executescript(
             """
             CREATE TABLE IF NOT EXISTS patients (
@@ -39,9 +52,9 @@ def init_db():
         )
 
 
-def add_patient(full_name, contact, age):
+def add_patient(full_name: str, contact: str, age: int) -> int:
     """Add a patient and return the new patient ID."""
-    with closing(get_connection()) as connection, connection:
+    with database_connection() as connection:
         cursor = connection.execute(
             "INSERT INTO patients (full_name, contact, age) VALUES (?, ?, ?)",
             (full_name, contact, age),
@@ -49,17 +62,17 @@ def add_patient(full_name, contact, age):
         return cursor.lastrowid
 
 
-def get_all_patients():
+def get_all_patients() -> list[tuple[int, str, str, int]]:
     """Return patients ordered by their IDs."""
-    with closing(get_connection()) as connection, connection:
+    with database_connection() as connection:
         return connection.execute(
             "SELECT patient_id, full_name, contact, age FROM patients ORDER BY patient_id"
         ).fetchall()
 
 
-def add_appointment(patient_id, doctor_name, appointment_date):
+def add_appointment(patient_id: int, doctor_name: str, appointment_date: str) -> int:
     """Add an appointment for a patient ID and return its appointment ID."""
-    with closing(get_connection()) as connection, connection:
+    with database_connection() as connection:
         cursor = connection.execute(
             """
             INSERT INTO appointments (patient_id, doctor_name, app_date)
@@ -70,9 +83,11 @@ def add_appointment(patient_id, doctor_name, appointment_date):
         return cursor.lastrowid
 
 
-def get_appointments_by_patient(patient_id):
+def get_appointments_by_patient(
+    patient_id: int,
+) -> list[tuple[int, str, str, str, str, str]]:
     """Return a patient's appointments with the patient details."""
-    with closing(get_connection()) as connection, connection:
+    with database_connection() as connection:
         return connection.execute(
             """
             SELECT a.app_id, p.full_name, p.contact, a.doctor_name, a.app_date, a.status
@@ -85,9 +100,9 @@ def get_appointments_by_patient(patient_id):
         ).fetchall()
 
 
-def update_appointment_status(appointment_id, status):
+def update_appointment_status(appointment_id: int, status: str) -> bool:
     """Set an appointment's status and return whether it was found."""
-    with closing(get_connection()) as connection, connection:
+    with database_connection() as connection:
         cursor = connection.execute(
             "UPDATE appointments SET status = ? WHERE app_id = ?",
             (status, appointment_id),

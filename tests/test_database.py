@@ -1,10 +1,10 @@
 """Regression tests for the SQLite storage layer."""
 
 import os
-from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from pathlib import Path
 
 import database as db
 
@@ -26,8 +26,12 @@ class DatabaseTests(unittest.TestCase):
         db.add_appointment(first_patient, "Dr. Santos", "2026-09-17")
         db.add_appointment(second_patient, "Dr. Cruz", "2026-09-18")
 
-        self.assertEqual(db.get_appointments_by_patient(first_patient)[0][3], "Dr. Santos")
-        self.assertEqual(db.get_appointments_by_patient(second_patient)[0][3], "Dr. Cruz")
+        self.assertEqual(
+            db.get_appointments_by_patient(first_patient)[0][3], "Dr. Santos"
+        )
+        self.assertEqual(
+            db.get_appointments_by_patient(second_patient)[0][3], "Dr. Cruz"
+        )
 
     def test_appointment_status_updates(self):
         patient_id = db.add_patient("Sam Lee", "09170000003", 22)
@@ -50,7 +54,9 @@ class DatabaseTests(unittest.TestCase):
             os.chdir(original_directory)
 
         self.assertTrue(db.DB_PATH.exists())
-        self.assertEqual(db.get_all_patients(), [(patient_id, "Taylor Kim", "09170000004", 23)])
+        self.assertEqual(
+            db.get_all_patients(), [(patient_id, "Taylor Kim", "09170000004", 23)]
+        )
 
 
 if __name__ == "__main__":
