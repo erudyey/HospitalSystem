@@ -1,51 +1,108 @@
 # Hospital Management System
 
-A desktop coursework application for registering patients and managing their appointments.
+> Modern, standalone, offline-first Windows desktop coursework application for registering patients and managing appointments: built with Svelte 5, `shadcn-svelte`, Tailwind CSS, Django, SQLite (WAL mode), Waitress, and `pywebview`.
 
-## Features
+[![CI Status](https://github.com/erudyey/HospitalSystem/actions/workflows/ci.yml/badge.svg)](https://github.com/erudyey/HospitalSystem/actions/workflows/ci.yml)
+[![Type Checked with basedpyright](https://img.shields.io/badge/types-basedpyright-blue.svg)](https://github.com/DetachHead/basedpyright)
+[![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-- Register patients with a name, contact detail, and age.
-- Book appointments for a selected patient.
-- View a patient's appointments and mark them completed or cancelled.
-- View all registered patient records.
-- Store data locally in SQLite.
+---
 
-## Requirements
+## Highlights and Architecture
 
-- Python 3 with Tkinter support.
+- **Desktop Shell (`desktop/`)**: Native Windows desktop window powered by Microsoft Edge WebView2 and `pywebview`. Pre-binds ephemeral loopback sockets, guarantees single-instance execution via Win32 named mutex (`CreateMutexW`), and manages server lifecycle cleanly with zero orphan processes.
+- **Backend Service Layer (`backend/`)**: Django with pure Python services, atomic database transactions (`transaction.atomic()`), strict model validation (`full_clean()`), and loopback session token security (`hmac.compare_digest`).
+- **Frontend Workspaces (`frontend/`)**: Modern Svelte 5 single-page application built on the official community port of `shadcn-svelte` (`bits-ui`), styled with a Warm Clinical palette and an Inter 16px base with Golden Ratio ($\phi \approx 1.618$) line-heights and Fibonacci spatial rhythm.
+- **Zero-Node Runtime**: Built and bundled using **Deno 2** for fast, zero-overhead frontend compilation without a Node.js installation.
+- **Local Persistence**: Production database automatically maintained at `%LOCALAPPDATA%\HospitalSystem\clinic.sqlite3` with SQLite Write-Ahead Logging (`WAL` mode).
 
-## Run
+---
 
-From this folder, run:
+## Quickstart
 
-```powershell
-python main.py
-```
+### Prerequisites
 
-The application creates `clinic.db` automatically beside the source files. The database is local application data and is not tracked by Git.
+- **OS**: Windows 10 or 11 (64-bit) with Microsoft Edge WebView2 Runtime (pre-installed on modern Windows).
+- **Python**: 3.12+ (managed via `uv` or system Python).
+- **Deno**: 2.x (`scoop install deno`).
 
-## Project layout
+### Development and Automation (`run.ps1`)
 
-- `main.py` starts the application.
-- `gui.py` contains the Tkinter interface.
-- `database.py` contains the SQLite queries and schema setup.
-- `tests/test_database.py` contains automated regression tests.
-
-## Usage
-
-1. Register a patient in **Patient Registration**.
-2. Select that patient by name and ID in **Book Appointment**.
-3. Select the patient in **Appointment Status** to view or update appointments.
-4. Use **Patient Records** to view all registrations.
-
-## Current limitations
-
-This is a local single-user desktop application. It does not include authentication, appointment conflict checks, editing or deleting records, or remote backup.
-
-## Verify
-
-Run the regression tests from the project folder:
+A unified PowerShell task runner is provided in the repository root:
 
 ```powershell
-python -m unittest discover -s tests -v
+# 1. First-time setup (virtualenv, python dependencies, and frontend packages)
+.\run.ps1 setup
+
+# 2. Launch concurrent Vite HMR and Django API development servers
+.\run.ps1 dev
+
+# 3. Launch live pywebview desktop application window
+.\run.ps1 desktop
+
+# 4. Run automated test suite (pytest + basedpyright)
+.\run.ps1 test
+
+# 5. Format and lint Python (Ruff) and frontend (Deno)
+.\run.ps1 format
+
+# 6. Package standalone Windows executable (dist/HospitalSystem.exe)
+.\run.ps1 package
 ```
+
+---
+
+## Project Structure
+
+```text
+HospitalSystem/
+├── backend/                  # Django backend core
+│   ├── config/               # Settings, WSGI, URLs, WhiteNoise static serving
+│   ├── clinic/               # Domain models, services, views, loopback middleware, importer
+│   └── tests/                # Automated pytest suite (services, API, legacy importer)
+├── desktop/                  # Desktop launcher & Windows runtime hardening
+│   └── launcher.py           # Single-instance mutex, ephemeral socket, Waitress thread
+├── frontend/                 # Svelte 5 SPA
+│   ├── src/
+│   │   ├── components/       # PatientsWorkspace & AppointmentsWorkspace
+│   │   ├── lib/              # shadcn-svelte UI components, API client, utils
+│   │   ├── app.css           # Inter 16px typography & Warm Clinical CSS tokens
+│   │   └── App.svelte        # Application shell & global error boundary
+│   ├── deno.json             # Deno tasks & compiler options
+│   ├── tsconfig.json         # TypeScript configuration for editor LSP
+│   └── vite.config.ts        # Vite build configuration
+├── docs/                     # Technical specifications & design records
+│   ├── overview.md           # System overview & migration rationale
+│   ├── system-architecture.md# Process lifecycle & security boundaries
+│   ├── api-contracts.md      # REST endpoints & JSON error envelopes
+│   └── development.md        # Contributor guide & packaging workflow
+├── package.py                # Standalone PyInstaller freeze script
+├── desktop.spec              # PyInstaller Windows desktop specification
+├── pyproject.toml            # Ruff and pytest configuration
+├── pyrightconfig.json        # basedpyright strict type configuration
+└── run.ps1                   # Ergonomic task runner script
+```
+
+---
+
+## Verification and Quality Gates
+
+Run all automated checks from the project root:
+
+```powershell
+# Run backend test suite (15 tests) & basedpyright type checker
+.\run.ps1 test
+
+# Run Ruff linter and format verification
+.venv\Scripts\ruff.exe check
+.venv\Scripts\ruff.exe format --check
+
+# Run basedpyright strict type checker directly
+.venv\Scripts\python.exe -m basedpyright
+```
+
+---
+
+## Legacy Data Migration
+
+A dedicated migration service (`backend.clinic.importer`) is available to inspect and import legacy `clinic.db` SQLite records into the modernized database. It uses Python's atomic `sqlite3.Connection.backup()` API to take a read-only snapshot before validating row integrity, preserving patient IDs, duplicate-name records, and appointment relationships.

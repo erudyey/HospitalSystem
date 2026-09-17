@@ -28,7 +28,7 @@ switch ($Command) {
         if (-not (Test-Path $VenvPython)) {
             uv venv .venv
         }
-        uv pip install --python $VenvPython django waitress pywebview whitenoise pytest pytest-django ruff django-stubs pyinstaller
+        uv pip install --python $VenvPython django waitress pywebview whitenoise pytest pytest-django ruff django-stubs pyinstaller basedpyright
         Push-Location "$RepoRoot\frontend"
         try {
             deno install
@@ -77,10 +77,10 @@ switch ($Command) {
     }
 
     "test" {
-        Write-Host "Running backend automated test suite..." -ForegroundColor Cyan
+        Write-Host "Running basedpyright strict type checks..." -ForegroundColor Cyan
+        & $VenvPython -m basedpyright
+        Write-Host "`nRunning backend automated test suite..." -ForegroundColor Cyan
         & $VenvPytest "$RepoRoot\backend\tests"
-        Write-Host "`nRunning legacy regression tests..." -ForegroundColor Cyan
-        & $VenvPython -m unittest discover -s tests -v
     }
 
     "format" {

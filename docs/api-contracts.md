@@ -1,38 +1,38 @@
-# API Contracts & Data Specifications
+# API contracts and data specifications
 
-This document outlines the REST API endpoints, request/response formats, error payloads, and database entity schemas.
+This document outlines the REST API endpoints, JSON request and response payloads, error models, and database field constraints for the Hospital Management System.
 
 ---
 
-## 1. Data Models
+## 1. Data models
 
 ### Patient
 | Field | Type | Rules |
 |---|---|---|
 | `id` | Integer (Primary Key) | Auto-incrementing positive integer identifier. |
-| `full_name` | String (Max 150) | Required; trimmed of leading/trailing whitespace. Identical names permitted. |
-| `contact` | String (Max 100) | Optional; stored as string; trimmed. |
-| `age` | Integer | Required positive whole number ($> 0$). |
+| `full_name` | String (Max 150) | Required. Leading and trailing whitespace is stripped. Duplicate names are allowed. |
+| `contact` | String (Max 100) | Optional string. Leading and trailing whitespace is stripped. |
+| `age` | Integer | Required positive whole number greater than 0. |
 
 ### Appointment
 | Field | Type | Rules |
 |---|---|---|
 | `id` | Integer (Primary Key) | Auto-incrementing positive integer identifier. |
-| `patient_id` | Integer (Foreign Key) | Required; points to a valid `Patient.id`. Cascades on patient deletion if ever implemented. |
+| `patient_id` | Integer (Foreign Key) | Required. References a valid `Patient.id`. |
 | `doctor_name` | String (Max 150) | Required non-blank text identifying the doctor. |
-| `app_date` | Date (ISO string) | Required canonical `YYYY-MM-DD` date. |
-| `status` | String (Choices) | Default: `Scheduled`. Valid values: `Scheduled`, `Completed`, `Cancelled`. |
+| `app_date` | Date (ISO string) | Required date in `YYYY-MM-DD` format. |
+| `status` | String | Default: `Scheduled`. Allowed values: `Scheduled`, `Completed`, `Cancelled`. |
 
 ---
 
-## 2. API Endpoints
+## 2. API endpoints
 
-All API endpoints are prefixed with `/api/` and require the `X-Session-Token` header.
+All API routes start with `/api/` and require either the `X-Session-Token` HTTP header or the local loopback session cookie.
 
 ### `GET /api/health/`
-Readiness probe and CSRF cookie initialization.
+Readiness check and CSRF cookie initialization. This endpoint is exempt from token verification so the desktop launcher can probe server availability before window display.
 - **Status**: `200 OK`
-- **Response Body**:
+- **Response**:
   ```json
   {
     "status": "ok",
@@ -43,11 +43,11 @@ Readiness probe and CSRF cookie initialization.
 ---
 
 ### `GET /api/patients/?q={query}`
-List and search registered patients.
-- **Query Parameters**:
-  - `q` (optional): Filter substring against `full_name` (case-insensitive) or exact numeric match against `id`.
+List and search patient records.
+- **Query parameters**:
+  - `q` (optional): Substring filter for `full_name` (case-insensitive) or exact numeric match for `id`.
 - **Status**: `200 OK`
-- **Response Body**:
+- **Response**:
   ```json
   [
     {
@@ -63,7 +63,7 @@ List and search registered patients.
 
 ### `POST /api/patients/`
 Register a new patient.
-- **Request Body**:
+- **Request body**:
   ```json
   {
     "full_name": "Maria Santos",
@@ -72,14 +72,14 @@ Register a new patient.
   }
   ```
 - **Status**: `201 Created`
-- **Response Body**: Persisted patient object with allocated `id`.
+- **Response**: Persisted patient object with newly assigned `id`.
 
 ---
 
 ### `GET /api/patients/{patient_id}/appointments/`
-Retrieve all appointments for a specific patient.
-- **Status**: `200 OK` (or `404 Not Found` if patient does not exist)
-- **Response Body**:
+Retrieve all appointments booked for a specific patient.
+- **Status**: `200 OK` (or `404 Not Found` if the patient does not exist)
+- **Response**:
   ```json
   [
     {
@@ -96,8 +96,8 @@ Retrieve all appointments for a specific patient.
 ---
 
 ### `POST /api/appointments/`
-Book a new appointment.
-- **Request Body**:
+Book a new appointment for an existing patient.
+- **Request body**:
   ```json
   {
     "patient_id": 1,
@@ -106,27 +106,27 @@ Book a new appointment.
   }
   ```
 - **Status**: `201 Created`
-- **Response Body**: Persisted appointment object with status `Scheduled`.
+- **Response**: Persisted appointment object initialized with status `Scheduled`.
 
 ---
 
 ### `PATCH /api/appointments/{id}/status/`
 Update an appointment's status.
-- **Request Body**:
+- **Request body**:
   ```json
   {
     "status": "Completed"
   }
   ```
-- **Rules**: Status must be `Completed` or `Cancelled`.
-- **Status**: `200 OK` (or `404 Not Found` if appointment ID does not exist)
-- **Response Body**: Updated appointment object.
+- **Rules**: `status` must be either `Completed` or `Cancelled`.
+- **Status**: `200 OK` (or `404 Not Found` if the appointment does not exist)
+- **Response**: Updated appointment object.
 
 ---
 
-## 3. Standard Error Format
+## 3. Standard error format
 
-All error responses return structured JSON with clear field-level breakdowns:
+When an API call fails, the response returns a structured JSON error envelope:
 
 ```json
 {
@@ -134,16 +134,16 @@ All error responses return structured JSON with clear field-level breakdowns:
     "code": "VALIDATION_ERROR",
     "message": "The submitted data failed validation.",
     "fields": {
-      "age": ["Age must be a positive whole number."],
+      "age": ["Age must be a positive whole number greater than 0."],
       "doctor_name": ["Doctor name is required."]
     }
   }
 }
 ```
 
-### Error Codes
-- `UNAUTHORIZED`: Missing or invalid `X-Session-Token` (HTTP 403).
-- `VALIDATION_ERROR`: Malformed fields or business rule violation (HTTP 400).
-- `NOT_FOUND`: Patient or appointment record does not exist (HTTP 404).
-- `BAD_REQUEST`: Invalid JSON payload or unparseable request (HTTP 400).
-- `SERVER_ERROR`: Unexpected internal error (HTTP 500).
+### Common error codes
+- `UNAUTHORIZED`: Missing or invalid session token (HTTP 403).
+- `VALIDATION_ERROR`: Field validation or domain rule failure (HTTP 400).
+- `NOT_FOUND`: Referenced patient or appointment ID does not exist (HTTP 404).
+- `BAD_REQUEST`: Malformed JSON or non-object payload (HTTP 400).
+- `SERVER_ERROR`: Unhandled internal exception (HTTP 500).

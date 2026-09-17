@@ -1,27 +1,35 @@
-# Developer Guide & Local Workflow
+# Developer guide and local workflow
 
-This guide details environment setup, local development workflows, automated testing, and packaging procedures.
+This guide covers setting up your local environment, running development servers, executing automated tests, and packaging the standalone Windows executable.
 
 ---
 
 ## 1. Prerequisites
 
-1. **Python 3.12+** with `uv` installed.
-2. **Deno 2+** (`scoop install deno`) for frontend compilation and task running.
-3. **Microsoft Edge WebView2 Runtime** (pre-installed on Windows 10/11).
+Before starting, install the following tools:
+- **Windows 10 or 11 (64-bit)** with Microsoft Edge WebView2 runtime (pre-installed on modern Windows).
+- **Python 3.12+** with `uv` for package management.
+- **Deno 2+** (`scoop install deno`) for Svelte compilation and frontend tooling.
 
 ---
 
-## 2. Quick Setup
+## 2. Quick setup
 
-Clone the repository and run the setup commands:
+From the repository root, run the setup task in PowerShell:
 
 ```powershell
-# 1. Create project-local virtual environment and install dependencies
-uv venv .venv
-uv pip install -r requirements.txt   # or via .\run.ps1 setup
+# Creates .venv, installs Python dependencies, and installs frontend packages
+.\run.ps1 setup
+```
 
-# 2. Install frontend dependencies with Deno
+Alternatively, set up the layers manually:
+
+```powershell
+# 1. Python virtual environment
+uv venv .venv
+uv pip install --python .venv\Scripts\python.exe django waitress pywebview whitenoise pytest pytest-django ruff django-stubs pyinstaller basedpyright
+
+# 2. Frontend dependencies
 cd frontend
 deno install
 cd ..
@@ -29,50 +37,60 @@ cd ..
 
 ---
 
-## 3. Developer Task Runner (`run.ps1`)
+## 3. Developer task runner (`run.ps1`)
 
-The repository includes a PowerShell helper script (`run.ps1`) to standardize all common development tasks:
+The PowerShell script `run.ps1` standardizes everyday development workflows:
 
-| Command | Description |
+| Command | Action |
 |---|---|
-| `.\run.ps1 dev` | Starts concurrent Vite development server (port 5173) and Django API server (port 8000) with hot reloading. |
-| `.\run.ps1 desktop` | Builds the frontend and starts the live `pywebview` native desktop shell. |
-| `.\run.ps1 test` | Runs the pytest backend test suite and type-checking pass. |
-| `.\run.ps1 format` | Runs Ruff (Python formatting/linting) and Deno fmt (frontend). |
-| `.\run.ps1 package` | Compiles frontend, collects static assets, and builds `dist/HospitalSystem.exe` via PyInstaller. |
+| `.\run.ps1 dev` | Starts Vite HMR on port 5173 and Django development server on port 8000 concurrently. |
+| `.\run.ps1 desktop` | Builds production frontend assets and launches the live `pywebview` desktop window. |
+| `.\run.ps1 test` | Runs the basedpyright strict type checker and the pytest backend test suite. |
+| `.\run.ps1 format` | Formats and lints Python code (Ruff) and frontend code (Deno fmt). |
+| `.\run.ps1 package` | Compiles frontend, packages dependencies, and creates `dist/HospitalSystem.exe` via PyInstaller. |
 
 ---
 
-## 4. Testing
+## 4. Testing and quality checks
 
-### Run Backend Tests
+### Automated tests
+Run the complete automated test suite:
+```powershell
+.\run.ps1 test
+```
+
+Or run pytest directly:
 ```powershell
 .venv\Scripts\pytest.exe backend/tests/ -v
 ```
 
-### Run Baseline Legacy Regression Tests
+### Type checking
+Run basedpyright across all Python files:
 ```powershell
-python -m unittest discover -s tests -v
+.venv\Scripts\python.exe -m basedpyright
+```
+
+Check frontend TypeScript files:
+```powershell
+cd frontend
+deno check src/main.ts
+cd ..
+```
+
+### Formatting and linting
+Check Python formatting and linting:
+```powershell
+.venv\Scripts\ruff.exe check
+.venv\Scripts\ruff.exe format --check
 ```
 
 ---
 
-## 5. Type Checking & Zed IDE Integration
-
-Zed IDE natively reads `.venv` and `pyrightconfig.json`:
-- `django-stubs` provides full model attribute and query typing.
-- Type annotations are enforced across `backend/clinic/services.py` and `backend/clinic/models.py`.
-- Run manual type checks with:
-  ```powershell
-  .venv\Scripts\pyright.exe
-  ```
-
----
-
-## 6. Standalone Desktop Packaging
+## 5. Standalone desktop packaging
 
 To create a self-contained Windows executable:
 ```powershell
 .\run.ps1 package
 ```
-This produces `dist/HospitalSystem.exe`. The output can be copied to any compatible Windows machine without requiring Python, Deno, or external runtimes installed.
+
+This generates `dist/HospitalSystem.exe`. The executable runs completely offline and writes its SQLite database to `%LOCALAPPDATA%\HospitalSystem\clinic.sqlite3`. It does not require Python, Deno, or external development tools to be installed on target machines.

@@ -1,10 +1,10 @@
-# System Architecture & Technical Specifications
+# System architecture and technical specifications
 
-This document defines the runtime lifecycle, security boundaries, and architectural layers of the modernized Hospital Management System.
+This document outlines the runtime lifecycle, process boundaries, and design layers of the Hospital Management System.
 
 ---
 
-## 1. Architectural Layers & Boundaries
+## 1. Architectural layers and boundaries
 
 ```text
 +-------------------------------------------------------------------------+
@@ -14,19 +14,19 @@ This document defines the runtime lifecycle, security boundaries, and architectu
 |  +-------------------------------------------------------------------+  |
 +------------------------------------|------------------------------------+
                                      | HTTP Requests (127.0.0.1 loopback)
-                                     | Header: X-Session-Token
+                                     | Header: X-Session-Token or Strict Cookie
                                      v
 +-------------------------------------------------------------------------+
 |                    Waitress Production WSGI Server                       |
 |  +-------------------------------------------------------------------+  |
 |  |                    WhiteNoise Static Asset Host                   |  |
 |  +-------------------------------------------------------------------+  |
-|  |                  Django Request / Response Stack                  |  |
+|  |                  Django Request and Response Stack                |  |
 |  |                                                                   |  |
-|  |  [Security Token Middleware]  ->  Validates Session Token         |  |
-|  |  [JSON API Views]             ->  Thin HTTP & Error Serialization |  |
-|  |  [Python Services Layer]      ->  Pure Business Validation & Logic|  |
-|  |  [Django ORM]                 ->  Models & Transactions           |  |
+|  |  [Security Token Middleware]  ->  Validates per-launch token       |  |
+|  |  [JSON API Views]             ->  Thin HTTP and error serialization|  |
+|  |  [Python Services Layer]      ->  Pure business validation & logic |  |
+|  |  [Django ORM]                 ->  Strongly typed models & atomic TX|  |
 |  +-------------------------------------------------------------------+  |
 +------------------------------------|------------------------------------+
                                      | SQLite WAL (Write-Ahead Logging)
@@ -38,56 +38,52 @@ This document defines the runtime lifecycle, security boundaries, and architectu
 
 ---
 
-## 2. Desktop Lifecycle & Process Orchestration
+## 2. Desktop lifecycle and process management
 
-The desktop application execution lifecycle follows a strict sequence in `desktop/launcher.py`:
+The application runs as a local Windows desktop program through `desktop/launcher.py`. Its startup sequence follows these steps:
 
-1. **Single-Instance Win32 Mutex**:
-   - `CreateMutexW(None, False, "Local\\HospitalSystem_AppMutex")` guarantees only one instance runs. If a mutex exists, the previous window is focused and the new process terminates cleanly.
-2. **Ephemeral Port Pre-Binding**:
-   - Rather than checking a port and later binding it (susceptible to race conditions), an ephemeral socket binds `127.0.0.1:0`. The OS allocates an unused port, which is immediately reserved and handed to Waitress.
-3. **Loopback Server Launch**:
-   - Waitress starts inside a background daemon thread (`daemon=True`).
-   - A 256-bit cryptographically secure session token (`secrets.token_urlsafe(32)`) is generated in memory.
-4. **Readiness Probe**:
-   - The launcher polls `GET http://127.0.0.1:{port}/api/health/` until HTTP 200 is confirmed or a 10-second timeout expires.
-5. **Window Initialization & In-Memory Token Injection**:
-   - `pywebview.create_window` opens a native window using Microsoft Edge WebView2.
-   - The session token is injected directly into JavaScript window memory through `webview`'s host API. The token is never exposed in URLs, command-line arguments, or HTML source files.
-6. **Graceful Shutdown**:
-   - Closing the desktop window fires pywebview's `closing` event and Python `atexit` hooks, terminating the server thread and closing SQLite connections without leaving orphan processes.
+1. **Single-instance Windows mutex**:
+   `CreateMutexW` checks for an existing `Local\HospitalSystem_AppMutex`. If one is already registered, the launcher warns the user with a native Windows message box and exits immediately, preventing conflicting SQLite locks.
+2. **Ephemeral port pre-binding**:
+   The launcher pre-binds an ephemeral socket on `127.0.0.1:0`. The operating system allocates an available port, which is immediately reserved and handed to Waitress, avoiding check-then-bind race conditions.
+3. **Loopback server startup**:
+   Waitress starts inside a background daemon thread. A 256-bit unguessable session token is generated using Python's `secrets.token_urlsafe(32)`.
+4. **Readiness probe**:
+   The launcher polls `http://127.0.0.1:{port}/api/health/` until HTTP 200 is confirmed, with an 8-second safety timeout.
+5. **Window launch and token handoff**:
+   The launcher opens pywebview using the Microsoft Edge WebView2 runtime, pointing to `http://127.0.0.1:{port}/?token={session_token}`. The Django root handler verifies this initial token, synchronously embeds `<script>window.__SESSION_TOKEN__ = '{token}';</script>` into the HTML `<head>`, sets a `SameSite=Strict` cookie, and scrubs the query string from the window URL with `history.replaceState`. This guarantees the token is available before any Svelte component mounts.
+6. **Graceful shutdown**:
+   When the user closes the window, pywebview's `closing` event and Python's `atexit` hooks fire, closing the server socket and stopping the background thread cleanly.
 
 ---
 
-## 3. Local Runtime Security
+## 3. Local security model
 
-1. **Loopback Isolation**:
-   - Waitress binds strictly to `127.0.0.1` (never `0.0.0.0` or external NICs). Windows Defender Firewall prompts are never triggered because loopback sockets are strictly local.
-2. **Session Token Validation**:
-   - `clinic.middleware.LoopbackSecurityMiddleware` intercepts every request to `/api/`.
-   - Requests without a valid `X-Session-Token` matching the launch secret are rejected with `HTTP 403 Forbidden`.
-   - Token comparisons use `hmac.compare_digest` to prevent timing attacks.
-3. **CSRF Enforcement**:
-   - Django’s CSRF protection is active for all state-changing endpoints (`POST`, `PATCH`), using standard double-submit cookie patterns.
+1. **Loopback isolation**:
+   Waitress binds exclusively to IPv4 `127.0.0.1`. It never listens on `0.0.0.0` or local network interfaces, so Windows Defender Firewall never prompts for incoming network permissions.
+2. **Session token verification**:
+   `LoopbackSecurityMiddleware` intercepts incoming `/api/` calls. Requests without a valid `X-Session-Token` header or matching strict cookie receive an immediate HTTP 403 Forbidden. Constant-time comparison via `hmac.compare_digest` prevents timing side-channels.
+3. **CSRF protection**:
+   Django's CSRF middleware runs on all mutating endpoints (`POST`, `PATCH`), requiring the standard `X-CSRFToken` header.
 
 ---
 
-## 4. Pure Service Layer Pattern
+## 4. Pure Python service layer
 
-In accordance with system boundaries:
-- **Views are Thin Adapters**: `clinic.views` only parses JSON, calls a service function, and maps returns to HTTP status codes.
-- **Services are Pure Functions**: `clinic.services` contains all validation, database queries, and status transitions:
-  - Validates models explicitly with `instance.full_clean()` before saving.
-  - Executes writes within `transaction.atomic()`.
-  - Never accepts or returns Django HTTP `Request` or `Response` objects.
-  - Easily testable in pure unit tests without spin-up of HTTP servers.
+Business logic lives strictly in `backend/clinic/services.py`:
+- **Views are thin adapters**: `clinic.views` only parses JSON, invokes the appropriate service function, and maps returns to JSON HTTP responses.
+- **Services are framework-independent Python functions**:
+  - Validates models explicitly with `model.full_clean()` before saving.
+  - Wraps all write operations inside `transaction.atomic()`.
+  - Accepts and returns standard Python types and model instances, never Django `HttpRequest` or `HttpResponse` objects.
+  - Can be tested directly in unit tests without starting an HTTP server.
 
 ---
 
-## 5. Persistence & Storage Paths
+## 5. Persistence and database storage
 
-- **Packaged / Production Mode**: `%LOCALAPPDATA%\HospitalSystem\clinic.sqlite3`.
-- **Test Mode**: In-memory SQLite or isolated temporary directories.
-- **Performance & Concurrency**:
-  - `PRAGMA journal_mode = WAL;` (Write-Ahead Logging) allows concurrent readers and writers without database locking errors on Windows.
-  - `PRAGMA foreign_keys = ON;` strictly enforces referential integrity.
+- **Production path**: `%LOCALAPPDATA%\HospitalSystem\clinic.sqlite3`.
+- **Test path**: In-memory database (`:memory:`) or isolated temporary directory per test run.
+- **Concurrency settings**:
+  - `PRAGMA journal_mode = WAL;` (Write-Ahead Logging) permits concurrent reads while a write transaction is active, avoiding lock errors on Windows.
+  - `PRAGMA foreign_keys = ON;` enforces relational integrity between patients and appointments.

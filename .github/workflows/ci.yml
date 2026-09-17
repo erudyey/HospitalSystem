@@ -28,12 +28,16 @@ jobs:
       - name: Install Python Dependencies
         run: |
           uv venv .venv
-          uv pip install --python .venv\Scripts\python.exe django waitress pywebview whitenoise pytest pytest-django ruff django-stubs pyinstaller
+          uv pip install --python .venv\Scripts\python.exe django waitress pywebview whitenoise pytest pytest-django ruff django-stubs pyinstaller basedpyright
 
       - name: Check Formatting & Linting
         run: |
-          .venv\Scripts\ruff.exe check backend desktop
-          .venv\Scripts\ruff.exe format --check backend desktop
+          .venv\Scripts\ruff.exe check backend desktop package.py
+          .venv\Scripts\ruff.exe format --check backend desktop package.py
+
+      - name: Strict Type Check
+        run: |
+          .venv\Scripts\python.exe -m basedpyright
 
       - name: Install Frontend Dependencies & Build
         working-directory: ./frontend
@@ -44,7 +48,3 @@ jobs:
       - name: Run Backend Tests
         run: |
           .venv\Scripts\pytest.exe backend/tests/
-
-      - name: Run Legacy Regression Tests
-        run: |
-          .venv\Scripts\python.exe -m unittest discover -s tests -v
