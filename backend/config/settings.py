@@ -69,15 +69,15 @@ USE_TZ = False
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATIC_ROOT.mkdir(parents=True, exist_ok=True)
 
 # Path to frontend production build
-if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-    BUNDLE_ROOT = Path(sys._MEIPASS)
-else:
-    BUNDLE_ROOT = BASE_DIR
+meipass = getattr(sys, "_MEIPASS", None)
+BUNDLE_ROOT = Path(str(meipass)) if getattr(sys, "frozen", False) and meipass else BASE_DIR
 
 FRONTEND_DIST = BUNDLE_ROOT / "frontend" / "dist"
 
+WHITENOISE_ROOT = str(FRONTEND_DIST) if FRONTEND_DIST.exists() else None
 STATICFILES_DIRS = [FRONTEND_DIST] if FRONTEND_DIST.exists() else []
 STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
 

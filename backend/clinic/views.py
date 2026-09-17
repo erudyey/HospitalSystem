@@ -84,8 +84,10 @@ def patients_collection(request: HttpRequest) -> JsonResponse:
 
     # POST: register patient
     data, err_response = parse_json(request)
-    if err_response:
-        return err_response
+    if err_response or data is None:
+        return err_response or JsonResponse(
+            format_error("BAD_REQUEST", "Request body must not be empty."), status=400
+        )
 
     try:
         patient = services.register_patient(
@@ -125,8 +127,10 @@ def patient_appointments(request: HttpRequest, patient_id: int) -> JsonResponse:
 def appointments_collection(request: HttpRequest) -> JsonResponse:
     """Book a new appointment."""
     data, err_response = parse_json(request)
-    if err_response:
-        return err_response
+    if err_response or data is None:
+        return err_response or JsonResponse(
+            format_error("BAD_REQUEST", "Request body must not be empty."), status=400
+        )
 
     patient_id = data.get("patient_id")
     if patient_id is None:
@@ -174,8 +178,10 @@ def appointments_collection(request: HttpRequest) -> JsonResponse:
 def appointment_status(request: HttpRequest, appointment_id: int) -> JsonResponse:
     """Update an appointment's status to Completed or Cancelled."""
     data, err_response = parse_json(request)
-    if err_response:
-        return err_response
+    if err_response or data is None:
+        return err_response or JsonResponse(
+            format_error("BAD_REQUEST", "Request body must not be empty."), status=400
+        )
 
     new_status = data.get("status", "")
     try:

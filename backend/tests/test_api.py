@@ -15,7 +15,7 @@ class ClinicAPITests(TestCase):
     def setUp(self) -> None:
         self.client = Client()
         self.token = "test-secret-session-token-32-chars-long"
-        self.auth_headers = {"HTTP_X_SESSION_TOKEN": self.token}
+        self.auth_client = Client(headers={"X-Session-Token": self.token})
 
     def test_health_check_available_without_token(self) -> None:
         # Act
@@ -40,11 +40,10 @@ class ClinicAPITests(TestCase):
     def test_register_patient_api(self) -> None:
         # Act: Successful registration
         payload = {"full_name": "Anna Cruz", "contact": "09191234567", "age": 29}
-        response = self.client.post(
+        response = self.auth_client.post(
             "/api/patients/",
             data=json.dumps(payload),
             content_type="application/json",
-            **self.auth_headers,
         )
 
         # Assert: 201 Created with JSON representation
@@ -58,11 +57,10 @@ class ClinicAPITests(TestCase):
     def test_register_patient_validation_error_envelope(self) -> None:
         # Act: Missing name
         payload = {"full_name": "", "contact": "123", "age": -1}
-        response = self.client.post(
+        response = self.auth_client.post(
             "/api/patients/",
             data=json.dumps(payload),
             content_type="application/json",
-            **self.auth_headers,
         )
 
         # Assert: 400 Bad Request with standardized error envelope
@@ -83,21 +81,17 @@ class ClinicAPITests(TestCase):
             "doctor_name": "Dr. Tan",
             "app_date": "2026-10-01",
         }
-        book_resp = self.client.post(
+        book_resp = self.auth_client.post(
             "/api/appointments/",
             data=json.dumps(book_payload),
             content_type="application/json",
-            **self.auth_headers,
         )
         self.assertEqual(book_resp.status_code, 201)
         app_data = book_resp.json()
         self.assertEqual(app_data["status"], "Scheduled")
 
         # Act 2: Fetch appointments for patient
-        list_resp = self.client.get(
-            f"/api/patients/{patient.id}/appointments/",
-            **self.auth_headers,
-        )
+        list_resp = self.auth_client.get(f"/api/patients/{patient.id}/appointments/")
         self.assertEqual(list_resp.status_code, 200)
         appointments = list_resp.json()
         self.assertEqual(len(appointments), 1)
@@ -105,11 +99,10 @@ class ClinicAPITests(TestCase):
 
         # Act 3: Patch status to Completed
         patch_payload = {"status": "Completed"}
-        patch_resp = self.client.patch(
+        patch_resp = self.auth_client.patch(
             f"/api/appointments/{app_data['id']}/status/",
             data=json.dumps(patch_payload),
             content_type="application/json",
-            **self.auth_headers,
         )
         self.assertEqual(patch_resp.status_code, 200)
         self.assertEqual(patch_resp.json()["status"], "Completed")

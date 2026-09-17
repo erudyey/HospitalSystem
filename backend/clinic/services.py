@@ -94,7 +94,7 @@ def book_appointment(patient_id: int, doctor_name: str, app_date_str: str) -> Ap
 def list_patient_appointments(patient_id: int) -> list[Appointment]:
     """Return all appointments for a patient ordered by ID."""
     patient = Patient.objects.get(id=patient_id)
-    return list(patient.appointments.all().order_by("id"))
+    return list(Appointment.objects.filter(patient=patient).order_by("id"))
 
 
 def update_appointment_status(appointment_id: int, new_status: str) -> Appointment:

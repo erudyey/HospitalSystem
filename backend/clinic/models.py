@@ -13,6 +13,7 @@ class AppointmentStatus(models.TextChoices):
 class Patient(models.Model):
     """Patient record uniquely identified by an integer ID."""
 
+    id: int
     full_name = models.CharField(max_length=150)
     contact = models.CharField(max_length=100, blank=True, default="")
     age = models.PositiveIntegerField()
@@ -44,6 +45,8 @@ class Patient(models.Model):
 class Appointment(models.Model):
     """Appointment record associating a patient with a doctor and date."""
 
+    id: int
+    patient_id: int
     patient = models.ForeignKey(
         Patient,
         on_delete=models.CASCADE,

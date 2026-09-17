@@ -2,6 +2,5 @@
   "venvPath": ".",
   "venv": ".venv",
   "typeCheckingMode": "standard",
-  "pythonVersion": "3.12",
-  "reportMissingTypeStubs": false
+  "pythonVersion": "3.12"
 }
