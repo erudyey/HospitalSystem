@@ -1,0 +1,102 @@
+<#
+.SYNOPSIS
+    Task runner script for HospitalSystem development, testing, and packaging.
+.EXAMPLE
+    .\run.ps1 dev
+    .\run.ps1 desktop
+    .\run.ps1 test
+    .\run.ps1 format
+    .\run.ps1 package
+#>
+param (
+    [Parameter(Position = 0, Mandatory = $true)]
+    [ValidateSet("dev", "desktop", "test", "format", "package", "setup")]
+    [string]$Command
+)
+
+$ErrorActionPreference = "Stop"
+$RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location $RepoRoot
+
+$VenvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"
+$VenvPytest = Join-Path $RepoRoot ".venv\Scripts\pytest.exe"
+$VenvRuff = Join-Path $RepoRoot ".venv\Scripts\ruff.exe"
+
+switch ($Command) {
+    "setup" {
+        Write-Host "Setting up project dependencies..." -ForegroundColor Cyan
+        if (-not (Test-Path $VenvPython)) {
+            uv venv .venv
+        }
+        uv pip install --python $VenvPython django waitress pywebview whitenoise pytest pytest-django ruff django-stubs pyinstaller
+        Push-Location "$RepoRoot\frontend"
+        try {
+            deno install
+        } finally {
+            Pop-Location
+        }
+        Write-Host "Setup complete!" -ForegroundColor Green
+    }
+
+    "dev" {
+        Write-Host "Starting development servers (Vite + Django)..." -ForegroundColor Cyan
+        $env:DJANGO_SETTINGS_MODULE = "backend.config.settings"
+        $env:DEBUG = "True"
+        
+        # Migrate local dev DB
+        & $VenvPython "$RepoRoot\backend\manage.py" migrate
+
+        # Run Vite and Django concurrently
+        $frontendJob = Start-Job -ScriptBlock {
+            param($path)
+            Set-Location $path
+            deno task dev
+        } -ArgumentList "$RepoRoot\frontend"
+
+        try {
+            & $VenvPython "$RepoRoot\backend\manage.py" runserver 127.0.0.1:8000
+        } finally {
+            Stop-Job $frontendJob
+            Remove-Job $frontendJob
+        }
+    }
+
+    "desktop" {
+        Write-Host "Launching HospitalSystem Desktop..." -ForegroundColor Cyan
+        # Ensure frontend is built if dist does not exist
+        if (-not (Test-Path "$RepoRoot\frontend\dist\index.html")) {
+            Write-Host "Building frontend first..." -ForegroundColor Yellow
+            Push-Location "$RepoRoot\frontend"
+            try {
+                deno task build
+            } finally {
+                Pop-Location
+            }
+        }
+        & $VenvPython "$RepoRoot\desktop\launcher.py"
+    }
+
+    "test" {
+        Write-Host "Running backend automated test suite..." -ForegroundColor Cyan
+        & $VenvPytest "$RepoRoot\backend\tests"
+        Write-Host "`nRunning legacy regression tests..." -ForegroundColor Cyan
+        & $VenvPython -m unittest discover -s tests -v
+    }
+
+    "format" {
+        Write-Host "Running Ruff linter and formatter..." -ForegroundColor Cyan
+        & $VenvRuff check --fix "$RepoRoot\backend" "$RepoRoot\desktop"
+        & $VenvRuff format "$RepoRoot\backend" "$RepoRoot\desktop"
+        Push-Location "$RepoRoot\frontend"
+        try {
+            deno fmt
+        } finally {
+            Pop-Location
+        }
+    }
+
+    "package" {
+        Write-Host "Packaging HospitalSystem as Windows .exe..." -ForegroundColor Cyan
+        & $VenvPython "$RepoRoot\package.py"
+    }
+}

@@ -1,0 +1,1 @@
+# Clinic Django App

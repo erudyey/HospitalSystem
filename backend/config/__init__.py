@@ -1,0 +1,1 @@
+# HospitalSystem Django configuration module
