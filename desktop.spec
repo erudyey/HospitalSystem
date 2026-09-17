@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
 import sys
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 block_cipher = None
 
@@ -9,34 +10,32 @@ FRONTEND_DIST = REPO_ROOT / 'frontend' / 'dist'
 
 datas = [
     (str(FRONTEND_DIST), 'frontend/dist'),
+    ('backend/clinic/migrations', 'backend/clinic/migrations'),
 ]
+datas += collect_data_files('webview')
 
-# Add backend migrations and templates if any
-datas.append(('backend/clinic/migrations', 'backend/clinic/migrations'))
+hiddenimports = (
+    collect_submodules('whitenoise')
+    + collect_submodules('backend')
+    + collect_submodules('django.middleware')
+    + collect_submodules('django.contrib.staticfiles')
+    + collect_submodules('django.db.backends.sqlite3')
+    + collect_submodules('django.db.migrations')
+    + collect_submodules('django.core.management')
+    + collect_submodules('waitress')
+    + collect_submodules('webview')
+    + [
+        'clr',
+        'pythonnet',
+    ]
+)
 
 a = Analysis(
     ['desktop/launcher.py'],
     pathex=[str(REPO_ROOT)],
     binaries=[],
     datas=datas,
-    hiddenimports=[
-        'waitress',
-        'whitenoise',
-        'django',
-        'backend.config.settings',
-        'backend.config.urls',
-        'backend.config.wsgi',
-        'backend.clinic',
-        'backend.clinic.apps',
-        'backend.clinic.models',
-        'backend.clinic.views',
-        'backend.clinic.services',
-        'backend.clinic.middleware',
-        'backend.clinic.importer',
-        'webview',
-        'clr',
-        'pythonnet',
-    ],
+    hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

@@ -91,6 +91,10 @@ def main() -> None:
         import django
 
         django.setup()
+        from django.core.management import call_command
+
+        call_command("migrate", interactive=False)
+
         from waitress.server import create_server
 
         from backend.config.wsgi import application
