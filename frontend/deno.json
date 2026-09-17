@@ -4,5 +4,8 @@
     "build": "deno run -A npm:vite build",
     "preview": "deno run -A npm:vite preview"
   },
+  "compilerOptions": {
+    "lib": ["deno.ns", "dom", "dom.iterable", "esnext"]
+  },
   "nodeModulesDir": "auto"
 }
