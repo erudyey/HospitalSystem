@@ -1,9 +1,16 @@
 __pycache__/
 *.py[cod]
 .ruff_cache/
-pyrightconfig.json
+.pytest_cache/
 .venv/
 venv/
 
 clinic.db
 clinic.db-*
+clinic_dev.sqlite3
+clinic_dev.sqlite3-*
+
+frontend/node_modules/
+frontend/dist/
+dist/
+build/
