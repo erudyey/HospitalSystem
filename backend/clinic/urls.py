@@ -24,4 +24,11 @@ urlpatterns = [
         views.appointment_status,
         name="api-appointment-status",
     ),
+    # Authentication & Staff
+    path("auth/register/", views.auth_register, name="api-auth-register"),
+    path("auth/login/", views.auth_login, name="api-auth-login"),
+    path("auth/me/", views.auth_me, name="api-auth-me"),
+    path("auth/logout/", views.auth_logout, name="api-auth-logout"),
+    path("auth/profile/", views.auth_profile, name="api-auth-profile"),
+    path("doctors/", views.doctors_collection, name="api-doctors"),
 ]

@@ -12,7 +12,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods
 
 from backend.clinic import services
-from backend.clinic.models import Appointment, Patient
+from backend.clinic.models import Appointment, Patient, StaffRole, StaffUser
 
 
 def format_error(
@@ -73,10 +73,38 @@ def serialize_appointment(appointment: Appointment) -> dict[str, Any]:
         "id": appointment.id,
         "patient_id": appointment.patient_id,
         "patient_name": appointment.patient.full_name,
+        "doctor_id": appointment.doctor_id,
         "doctor_name": appointment.doctor_name,
         "app_date": appointment.app_date.isoformat(),
+        "app_time": appointment.app_time.strftime("%H:%M"),
+        "reason_for_visit": appointment.reason_for_visit,
         "status": appointment.status,
     }
+
+
+def serialize_staff_user(user: StaffUser) -> dict[str, Any]:
+    """Serialize StaffUser instance to dictionary."""
+    role_label = StaffRole(user.role).label if user.role in StaffRole.values else user.role
+    return {
+        "id": user.id,
+        "username": user.username,
+        "full_name": user.full_name,
+        "role": user.role,
+        "role_label": role_label,
+        "specialty": user.specialty,
+        "license_number": user.license_number,
+        "contact": user.contact,
+        "created_at": user.created_at.isoformat(),
+    }
+
+
+def get_authenticated_user(request: HttpRequest) -> StaffUser | None:
+    """Extract and validate UserSession token from request headers."""
+    auth_header = request.headers.get("X-User-Token") or request.headers.get("Authorization", "")
+    token = auth_header[7:].strip() if auth_header.startswith("Bearer ") else auth_header.strip()
+    if not token:
+        return None
+    return services.validate_session(token)
 
 
 @ensure_csrf_cookie
@@ -273,3 +301,115 @@ def appointment_status(request: HttpRequest, appointment_id: int) -> JsonRespons
         )
     except ValidationError as err:
         return validation_error_response(err, "Status update failed validation.")
+
+
+# Authentication and Staff Views
+
+
+@require_http_methods(["POST"])
+def auth_register(request: HttpRequest) -> JsonResponse:
+    """Register a new staff account (Receptionist or Doctor)."""
+    data, err_response = parse_json(request)
+    if err_response or data is None:
+        return err_response or JsonResponse(
+            format_error("BAD_REQUEST", "Request body must not be empty."), status=400
+        )
+
+    try:
+        staff = services.register_staff(
+            username=data.get("username", ""),
+            password=data.get("password", ""),
+            full_name=data.get("full_name", ""),
+            role=data.get("role", StaffRole.RECEPTIONIST),
+            specialty=data.get("specialty", ""),
+            license_number=data.get("license_number", ""),
+            contact=data.get("contact", ""),
+        )
+        return JsonResponse(serialize_staff_user(staff), status=201)
+    except ValidationError as err:
+        return validation_error_response(err, "Staff registration failed validation.")
+
+
+@require_http_methods(["POST"])
+def auth_login(request: HttpRequest) -> JsonResponse:
+    """Authenticate staff credentials and issue a new session token."""
+    data, err_response = parse_json(request)
+    if err_response or data is None:
+        return err_response or JsonResponse(
+            format_error("BAD_REQUEST", "Request body must not be empty."), status=400
+        )
+
+    username = data.get("username", "")
+    password = data.get("password", "")
+
+    try:
+        staff, session = services.authenticate_staff(username=username, password=password)
+        return JsonResponse(
+            {
+                "token": session.token,
+                "user": serialize_staff_user(staff),
+            },
+            status=200,
+        )
+    except ValidationError as err:
+        return validation_error_response(err, "Authentication failed.")
+
+
+@require_GET
+def auth_me(request: HttpRequest) -> JsonResponse:
+    """Return the currently authenticated staff profile."""
+    user = get_authenticated_user(request)
+    if not user:
+        return JsonResponse(
+            format_error("UNAUTHENTICATED", "Active session required. Please sign in."),
+            status=401,
+        )
+    return JsonResponse({"user": serialize_staff_user(user)}, status=200)
+
+
+@require_http_methods(["POST"])
+def auth_logout(request: HttpRequest) -> JsonResponse:
+    """Terminate the active session token."""
+    auth_header = request.headers.get("X-User-Token") or request.headers.get("Authorization", "")
+    token = auth_header[7:].strip() if auth_header.startswith("Bearer ") else auth_header.strip()
+    if token:
+        services.logout_staff(token)
+    return JsonResponse({"status": "ok", "message": "Successfully logged out."}, status=200)
+
+
+@require_http_methods(["PUT"])
+def auth_profile(request: HttpRequest) -> JsonResponse:
+    """Update active staff profile details and change password."""
+    user = get_authenticated_user(request)
+    if not user:
+        return JsonResponse(
+            format_error("UNAUTHENTICATED", "Active session required. Please sign in."),
+            status=401,
+        )
+
+    data, err_response = parse_json(request)
+    if err_response or data is None:
+        return err_response or JsonResponse(
+            format_error("BAD_REQUEST", "Request body must not be empty."), status=400
+        )
+
+    try:
+        updated_user = services.update_staff_profile(
+            user_id=user.id,
+            full_name=data.get("full_name", user.full_name),
+            contact=data.get("contact", user.contact),
+            specialty=data.get("specialty", user.specialty),
+            license_number=data.get("license_number", user.license_number),
+            current_password=data.get("current_password") or None,
+            new_password=data.get("new_password") or None,
+        )
+        return JsonResponse({"user": serialize_staff_user(updated_user)}, status=200)
+    except ValidationError as err:
+        return validation_error_response(err, "Profile update failed validation.")
+
+
+@require_GET
+def doctors_collection(_request: HttpRequest) -> JsonResponse:
+    """Return list of active physician accounts for appointment scheduling."""
+    doctors = services.list_doctors()
+    return JsonResponse([serialize_staff_user(d) for d in doctors], safe=False, status=200)

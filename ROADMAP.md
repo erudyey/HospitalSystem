@@ -93,13 +93,13 @@ None (Foundation)_
 _Scope: `backend/clinic/services.py`, `backend/clinic/views.py`,
 `backend/clinic/urls.py`_ _Dependency: Slice 1_
 
-- [ ] Implement `register_staff()` with PBKDF2 password hashing.
-- [ ] Implement `authenticate_staff()` returning a secure `UserSession` token.
-- [ ] Implement `validate_session()` and `logout_staff()`.
-- [ ] Implement `update_staff_profile()` and password change validation.
-- [ ] Implement `list_doctors()` returning active physicians.
-- [ ] Expose REST endpoints under `/api/auth/*` and `/api/doctors/`.
-- [ ] Write unit and integration tests in `backend/tests/test_auth.py`.
+- [x] Implement `register_staff()` with PBKDF2 password hashing.
+- [x] Implement `authenticate_staff()` returning a secure `UserSession` token.
+- [x] Implement `validate_session()` and `logout_staff()`.
+- [x] Implement `update_staff_profile()` and password change validation.
+- [x] Implement `list_doctors()` returning active physicians.
+- [x] Expose REST endpoints under `/api/auth/*` and `/api/doctors/`.
+- [x] Write unit and integration tests in `backend/tests/test_auth.py`.
 
 ### Slice 3: Clinical Logic & Schedule Conflict Engine
 

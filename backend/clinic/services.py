@@ -4,13 +4,22 @@ All operations execute inside database transactions, perform explicit validation
 and return strongly-typed model instances decoupled from HTTP requests.
 """
 
+import secrets
 from datetime import date
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Q
+from django.utils import timezone
 
-from backend.clinic.models import Appointment, AppointmentStatus, Patient
+from backend.clinic.models import (
+    Appointment,
+    AppointmentStatus,
+    Patient,
+    StaffRole,
+    StaffUser,
+    UserSession,
+)
 
 
 def register_patient(full_name: str, contact: str = "", age: int = 0) -> Patient:
@@ -232,3 +241,156 @@ def update_appointment_status(appointment_id: int, new_status: str) -> Appointme
         appointment.status = clean_status
         appointment.save()
         return appointment
+
+
+# Staff Authentication and Profile Services
+
+
+def register_staff(
+    username: str,
+    password: str,
+    full_name: str,
+    role: str = StaffRole.RECEPTIONIST,
+    specialty: str = "",
+    license_number: str = "",
+    contact: str = "",
+) -> StaffUser:
+    """Register a new staff account with validated role and hashed password."""
+    clean_username = (username or "").strip().lower()
+    clean_name = (full_name or "").strip()
+    clean_role = (role or "").strip().lower()
+    clean_specialty = (specialty or "").strip()
+    clean_license = (license_number or "").strip()
+    clean_contact = (contact or "").strip()
+
+    errors: dict[str, str] = {}
+
+    if not clean_username:
+        errors["username"] = "Username is required."
+    elif StaffUser.objects.filter(username=clean_username).exists():
+        errors["username"] = f"Username '{clean_username}' is already taken."
+
+    if not clean_name:
+        errors["full_name"] = "Full name is required."
+
+    if clean_role not in StaffRole.values:
+        errors["role"] = f"Invalid role '{clean_role}'. Must be receptionist or doctor."
+
+    if not password or len(password) < 6:
+        errors["password"] = "Password must be at least 6 characters long."
+
+    if errors:
+        raise ValidationError(errors)
+
+    with transaction.atomic():
+        staff = StaffUser(
+            username=clean_username,
+            full_name=clean_name,
+            role=clean_role,
+            specialty=clean_specialty,
+            license_number=clean_license,
+            contact=clean_contact,
+        )
+        staff.set_password(password)
+        staff.save()
+        return staff
+
+
+def authenticate_staff(username: str, password: str) -> tuple[StaffUser, UserSession]:
+    """Verify credentials and issue a new secure session token."""
+    clean_username = (username or "").strip().lower()
+    if not clean_username or not password:
+        raise ValidationError({"auth": "Username and password are required."})
+
+    try:
+        staff = StaffUser.objects.get(username=clean_username)
+    except StaffUser.DoesNotExist:
+        raise ValidationError({"auth": "Invalid username or password."}) from None
+
+    if not staff.check_password(password):
+        raise ValidationError({"auth": "Invalid username or password."})
+
+    # Generate a cryptographically secure 64-character URL-safe session token
+    token = secrets.token_urlsafe(48)
+
+    with transaction.atomic():
+        session = UserSession(token=token, user=staff)
+        session.save()
+        return staff, session
+
+
+def validate_session(token: str) -> StaffUser | None:
+    """Validate a session token and update its last active timestamp."""
+    clean_token = (token or "").strip()
+    if not clean_token:
+        return None
+
+    try:
+        session = UserSession.objects.select_related("user").get(token=clean_token)
+        session.last_active = timezone.now()
+        session.save(update_fields=["last_active"])
+        return session.user
+    except UserSession.DoesNotExist:
+        return None
+
+
+def logout_staff(token: str) -> bool:
+    """Terminate an active session token."""
+    clean_token = (token or "").strip()
+    if not clean_token:
+        return False
+
+    with transaction.atomic():
+        deleted_count, _ = UserSession.objects.filter(token=clean_token).delete()
+        return deleted_count > 0
+
+
+def update_staff_profile(
+    user_id: int,
+    full_name: str,
+    contact: str = "",
+    specialty: str = "",
+    license_number: str = "",
+    current_password: str | None = None,
+    new_password: str | None = None,
+) -> StaffUser:
+    """Update staff profile information and optionally change password."""
+    clean_name = (full_name or "").strip()
+    clean_contact = (contact or "").strip()
+    clean_specialty = (specialty or "").strip()
+    clean_license = (license_number or "").strip()
+
+    errors: dict[str, str] = {}
+    if not clean_name:
+        errors["full_name"] = "Full name is required."
+
+    try:
+        staff = StaffUser.objects.get(id=user_id)
+    except StaffUser.DoesNotExist:
+        raise ValidationError({"user": f"Staff user #{user_id} does not exist."}) from None
+
+    if new_password:
+        if not current_password:
+            errors["current_password"] = "Current password is required to set a new password."
+        elif not staff.check_password(current_password):
+            errors["current_password"] = "Incorrect current password."
+        elif len(new_password) < 6:
+            errors["new_password"] = "New password must be at least 6 characters long."
+
+    if errors:
+        raise ValidationError(errors)
+
+    with transaction.atomic():
+        staff.full_name = clean_name
+        staff.contact = clean_contact
+        staff.specialty = clean_specialty
+        staff.license_number = clean_license
+        if new_password:
+            staff.set_password(new_password)
+        staff.save()
+        return staff
+
+
+def list_doctors() -> list[StaffUser]:
+    """Return all registered physician accounts ordered by full name."""
+    return list(StaffUser.objects.filter(role=StaffRole.DOCTOR).order_by("full_name"))
