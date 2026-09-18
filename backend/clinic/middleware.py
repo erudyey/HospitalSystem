@@ -23,7 +23,9 @@ class LoopbackSecurityMiddleware:
             if settings.DEBUG and not session_token:
                 return self.get_response(request)
 
-            provided_token = request.headers.get("X-Session-Token", "")
+            provided_token = request.headers.get("X-Session-Token", "") or request.COOKIES.get(
+                "session_token", ""
+            )
             if not session_token or not hmac.compare_digest(provided_token, session_token):
                 return JsonResponse(
                     {

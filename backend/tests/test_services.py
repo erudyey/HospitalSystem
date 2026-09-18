@@ -96,20 +96,112 @@ class ClinicServicesTests(TestCase):
             services.book_appointment(patient.id, "Dr. Santos", "invalid-date")
         self.assertIn("app_date", ctx.exception.message_dict)
 
-    def test_update_appointment_status(self) -> None:
+    def test_update_patient(self) -> None:
+        # Arrange
+        patient = services.register_patient("Morgan Reed", "09171112233", 31)
+
+        # Act
+        updated = services.update_patient(patient.id, "Morgan R. Reed", "09179998877", 32)
+
+        # Assert
+        self.assertEqual(updated.full_name, "Morgan R. Reed")
+        self.assertEqual(updated.contact, "09179998877")
+        self.assertEqual(updated.age, 32)
+
+    def test_delete_patient_cascades_appointments(self) -> None:
+        # Arrange
+        patient = services.register_patient("Jordan Bell", "09173334455", 40)
+        app1 = services.book_appointment(patient.id, "Dr. Reyes", "2026-10-01")
+        app2 = services.book_appointment(patient.id, "Dr. Mendoza", "2026-10-05")
+
+        # Act
+        services.delete_patient(patient.id)
+
+        # Assert: Patient and associated appointments are deleted
+        self.assertEqual(len(services.list_patients(query=str(patient.id))), 0)
+        all_apps = services.list_all_appointments()
+        app_ids = [a.id for a in all_apps]
+        self.assertNotIn(app1.id, app_ids)
+        self.assertNotIn(app2.id, app_ids)
+
+    def test_list_all_appointments(self) -> None:
+        # Arrange
+        p1 = services.register_patient("Patient One", "111", 20)
+        p2 = services.register_patient("Patient Two", "222", 30)
+        app1 = services.book_appointment(p1.id, "Dr. A", "2026-10-01")
+        app2 = services.book_appointment(p2.id, "Dr. B", "2026-10-02")
+
+        # Act
+        all_apps = services.list_all_appointments()
+
+        # Assert
+        ids = [a.id for a in all_apps]
+        self.assertIn(app1.id, ids)
+        self.assertIn(app2.id, ids)
+
+    def test_update_appointment_reschedule(self) -> None:
+        # Arrange
+        patient = services.register_patient("Casey Vance", "09175556677", 29)
+        app = services.book_appointment(patient.id, "Dr. Old", "2026-10-10")
+
+        # Act
+        updated = services.update_appointment(app.id, "Dr. New", "2026-10-15")
+
+        # Assert
+        self.assertEqual(updated.doctor_name, "Dr. New")
+        self.assertEqual(updated.app_date, date(2026, 10, 15))
+
+    def test_update_completed_appointment_rejected(self) -> None:
+        # Arrange
+        patient = services.register_patient("Drew Scott", "09177778899", 50)
+        app = services.book_appointment(patient.id, "Dr. Stone", "2026-10-10")
+        services.update_appointment_status(app.id, "Completed")
+
+        # Act & Assert: Modifying a completed appointment is rejected
+        with self.assertRaises(ValidationError) as ctx:
+            services.update_appointment(app.id, "Dr. Altered", "2026-10-20")
+        self.assertIn("appointment", ctx.exception.message_dict)
+
+    def test_delete_appointment(self) -> None:
+        # Arrange
+        patient = services.register_patient("Riley Quinn", "09178889900", 25)
+        app = services.book_appointment(patient.id, "Dr. Clark", "2026-10-12")
+
+        # Act
+        services.delete_appointment(app.id)
+
+        # Assert
+        self.assertEqual(len(services.list_patient_appointments(patient.id)), 0)
+
+    def test_appointment_state_machine_invariants(self) -> None:
         # Arrange
         patient = services.register_patient("Taylor Kim", "09170000005", 28)
         app = services.book_appointment(patient.id, "Dr. Santos", "2026-09-20")
 
-        # Act: Mark completed
+        # 1. Scheduled -> Completed
         updated = services.update_appointment_status(app.id, "Completed")
         self.assertEqual(updated.status, AppointmentStatus.COMPLETED)
 
-        # Act: Mark cancelled
-        updated_cancelled = services.update_appointment_status(app.id, "Cancelled")
-        self.assertEqual(updated_cancelled.status, AppointmentStatus.CANCELLED)
+        # 2. Completed -> Cancelled is FORBIDDEN (immutable clinical record)
+        with self.assertRaises(ValidationError) as ctx:
+            services.update_appointment_status(app.id, "Cancelled")
+        self.assertIn("status", ctx.exception.message_dict)
 
-        # Act & Assert: Reverting to Scheduled is rejected by service contract
+        # 3. Completed -> Scheduled is FORBIDDEN
         with self.assertRaises(ValidationError) as ctx:
             services.update_appointment_status(app.id, "Scheduled")
         self.assertIn("status", ctx.exception.message_dict)
+
+        # 4. New appointment: Scheduled -> Cancelled
+        app2 = services.book_appointment(patient.id, "Dr. Santos", "2026-09-21")
+        cancelled = services.update_appointment_status(app2.id, "Cancelled")
+        self.assertEqual(cancelled.status, AppointmentStatus.CANCELLED)
+
+        # 5. Cancelled -> Completed is FORBIDDEN (must restore to Scheduled first)
+        with self.assertRaises(ValidationError) as ctx:
+            services.update_appointment_status(app2.id, "Completed")
+        self.assertIn("status", ctx.exception.message_dict)
+
+        # 6. Cancelled -> Scheduled is ALLOWED (restoration)
+        restored = services.update_appointment_status(app2.id, "Scheduled")
+        self.assertEqual(restored.status, AppointmentStatus.SCHEDULED)

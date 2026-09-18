@@ -9,7 +9,7 @@ from typing import Any
 from django.core.exceptions import ValidationError
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
-from django.views.decorators.http import require_GET, require_http_methods, require_POST
+from django.views.decorators.http import require_GET, require_http_methods
 
 from backend.clinic import services
 from backend.clinic.models import Appointment, Patient
@@ -26,6 +26,16 @@ def format_error(
             "fields": fields or {},
         }
     }
+
+
+def validation_error_response(err: ValidationError, message: str) -> JsonResponse:
+    """Construct standardized 400 JsonResponse for a ValidationError."""
+    fields = (
+        {k: list(v) if isinstance(v, list) else [str(v)] for k, v in err.message_dict.items()}
+        if hasattr(err, "message_dict")
+        else {"general": err.messages}
+    )
+    return JsonResponse(format_error("VALIDATION_ERROR", message, fields), status=400)
 
 
 def parse_json(request: HttpRequest) -> tuple[dict[str, Any] | None, JsonResponse | None]:
@@ -52,6 +62,7 @@ def serialize_patient(patient: Patient) -> dict[str, Any]:
         "full_name": patient.full_name,
         "contact": patient.contact,
         "age": patient.age,
+        "appointment_count": getattr(patient, "appointment_count", 0),
     }
 
 
@@ -71,7 +82,7 @@ def serialize_appointment(appointment: Appointment) -> dict[str, Any]:
 @require_GET
 def health_check(_request: HttpRequest) -> JsonResponse:
     """Readiness probe and CSRF cookie setter."""
-    return JsonResponse({"status": "ok", "version": "2.0.0"})
+    return JsonResponse({"status": "ok", "version": "0.0.0-alpha"})
 
 
 @require_http_methods(["GET", "POST"])
@@ -97,15 +108,44 @@ def patients_collection(request: HttpRequest) -> JsonResponse:
         )
         return JsonResponse(serialize_patient(patient), status=201)
     except ValidationError as err:
-        fields = (
-            {k: list(v) if isinstance(v, list) else [str(v)] for k, v in err.message_dict.items()}
-            if hasattr(err, "message_dict")
-            else {"general": err.messages}
-        )
+        return validation_error_response(err, "Patient registration failed validation.")
+
+
+@require_http_methods(["GET", "PUT", "DELETE"])
+def patient_detail(request: HttpRequest, patient_id: int) -> JsonResponse:
+    """Retrieve (GET), update (PUT), or delete (DELETE) a single patient."""
+    try:
+        if request.method == "GET":
+            patient = services.get_patient(patient_id=patient_id)
+            return JsonResponse(serialize_patient(patient), status=200)
+
+        elif request.method == "PUT":
+            data, err_response = parse_json(request)
+            if err_response or data is None:
+                return err_response or JsonResponse(
+                    format_error("BAD_REQUEST", "Request body must not be empty."), status=400
+                )
+            patient = services.update_patient(
+                patient_id=patient_id,
+                full_name=data.get("full_name", ""),
+                contact=data.get("contact", ""),
+                age=data.get("age", 0),
+            )
+            return JsonResponse(serialize_patient(patient), status=200)
+
+        elif request.method == "DELETE":
+            services.delete_patient(patient_id=patient_id)
+            return JsonResponse({}, status=204)
+
+    except Patient.DoesNotExist:
         return JsonResponse(
-            format_error("VALIDATION_ERROR", "Patient registration failed validation.", fields),
-            status=400,
+            format_error("NOT_FOUND", f"Patient #{patient_id} does not exist."),
+            status=404,
         )
+    except ValidationError as err:
+        return validation_error_response(err, "Patient operation failed validation.")
+
+    return JsonResponse(format_error("METHOD_NOT_ALLOWED", "Method not allowed."), status=405)
 
 
 @require_GET
@@ -123,9 +163,16 @@ def patient_appointments(request: HttpRequest, patient_id: int) -> JsonResponse:
         )
 
 
-@require_POST
+@require_http_methods(["GET", "POST"])
 def appointments_collection(request: HttpRequest) -> JsonResponse:
-    """Book a new appointment."""
+    """List all appointments (GET) or book a new appointment (POST)."""
+    if request.method == "GET":
+        appointments = services.list_all_appointments()
+        return JsonResponse(
+            [serialize_appointment(a) for a in appointments], safe=False, status=200
+        )
+
+    # POST: book appointment
     data, err_response = parse_json(request)
     if err_response or data is None:
         return err_response or JsonResponse(
@@ -163,20 +210,48 @@ def appointments_collection(request: HttpRequest) -> JsonResponse:
         )
         return JsonResponse(serialize_appointment(appointment), status=201)
     except ValidationError as err:
-        fields = (
-            {k: list(v) if isinstance(v, list) else [str(v)] for k, v in err.message_dict.items()}
-            if hasattr(err, "message_dict")
-            else {"general": err.messages}
-        )
+        return validation_error_response(err, "Appointment booking failed validation.")
+
+
+@require_http_methods(["GET", "PUT", "DELETE"])
+def appointment_detail(request: HttpRequest, appointment_id: int) -> JsonResponse:
+    """Retrieve (GET), update/reschedule (PUT), or delete (DELETE) a single appointment."""
+    try:
+        if request.method == "GET":
+            appointment = Appointment.objects.select_related("patient").get(id=appointment_id)
+            return JsonResponse(serialize_appointment(appointment), status=200)
+
+        elif request.method == "PUT":
+            data, err_response = parse_json(request)
+            if err_response or data is None:
+                return err_response or JsonResponse(
+                    format_error("BAD_REQUEST", "Request body must not be empty."), status=400
+                )
+            appointment = services.update_appointment(
+                appointment_id=appointment_id,
+                doctor_name=data.get("doctor_name", ""),
+                app_date_str=data.get("app_date", ""),
+            )
+            return JsonResponse(serialize_appointment(appointment), status=200)
+
+        elif request.method == "DELETE":
+            services.delete_appointment(appointment_id=appointment_id)
+            return JsonResponse({}, status=204)
+
+    except Appointment.DoesNotExist:
         return JsonResponse(
-            format_error("VALIDATION_ERROR", "Appointment booking failed validation.", fields),
-            status=400,
+            format_error("NOT_FOUND", f"Appointment #{appointment_id} does not exist."),
+            status=404,
         )
+    except ValidationError as err:
+        return validation_error_response(err, "Appointment operation failed validation.")
+
+    return JsonResponse(format_error("METHOD_NOT_ALLOWED", "Method not allowed."), status=405)
 
 
 @require_http_methods(["PATCH"])
 def appointment_status(request: HttpRequest, appointment_id: int) -> JsonResponse:
-    """Update an appointment's status to Completed or Cancelled."""
+    """Update an appointment's status following state machine rules."""
     data, err_response = parse_json(request)
     if err_response or data is None:
         return err_response or JsonResponse(
@@ -196,12 +271,4 @@ def appointment_status(request: HttpRequest, appointment_id: int) -> JsonRespons
             status=404,
         )
     except ValidationError as err:
-        fields = (
-            {k: list(v) if isinstance(v, list) else [str(v)] for k, v in err.message_dict.items()}
-            if hasattr(err, "message_dict")
-            else {"general": err.messages}
-        )
-        return JsonResponse(
-            format_error("VALIDATION_ERROR", "Status update failed validation.", fields),
-            status=400,
-        )
+        return validation_error_response(err, "Status update failed validation.")

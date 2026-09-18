@@ -36,7 +36,7 @@ Readiness check and CSRF cookie initialization. This endpoint is exempt from tok
   ```json
   {
     "status": "ok",
-    "version": "2.0.0"
+    "version": "0.0.0-alpha"
   }
   ```
 
