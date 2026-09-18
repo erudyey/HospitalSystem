@@ -280,6 +280,12 @@ def delete_appointment(appointment_id: int) -> tuple[int, dict[str, int]]:
     """Delete an appointment record."""
     with transaction.atomic():
         appointment = Appointment.objects.select_for_update().get(id=appointment_id)
+        if appointment.status == AppointmentStatus.COMPLETED:
+            raise ValidationError(
+                {
+                    "appointment": "Completed appointments are immutable clinical records and cannot be deleted."
+                }
+            )
         return appointment.delete()
 
 

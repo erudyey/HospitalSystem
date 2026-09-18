@@ -175,6 +175,15 @@ class ClinicServicesTests(TestCase):
         # Assert
         self.assertEqual(len(services.list_patient_appointments(patient.id)), 0)
 
+    def test_delete_completed_appointment_rejected(self) -> None:
+        patient = services.register_patient("Jordan Lee", "09170000099", 40)
+        app = services.book_appointment(patient.id, "Dr. House", "2026-10-12")
+        services.update_appointment_status(app.id, AppointmentStatus.COMPLETED)
+
+        with self.assertRaises(ValidationError) as ctx:
+            services.delete_appointment(app.id)
+        self.assertIn("appointment", ctx.exception.message_dict)
+
     def test_appointment_state_machine_invariants(self) -> None:
         # Arrange
         patient = services.register_patient("Taylor Kim", "09170000005", 28)
