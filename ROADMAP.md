@@ -134,6 +134,8 @@ _Scope: `frontend/src/components/AppointmentsWorkspace.svelte`,
 - [ ] Add real-time conflict warning banner when selecting conflicting time
       slots.
 - [ ] Add `reason_for_visit` input field.
+- [ ] Add dual submit actions in booking dialog: **"Book Appointment"** and
+      **"Book & Check In"** (walk-in triage).
 - [ ] Add **"Check In Patient"** quick-action button in appointment list.
 - [ ] Display formatted date and time in appointment rows (e.g.,
       `2026-09-18 • 09:30 AM`).
@@ -170,6 +172,8 @@ _Scope: `frontend/src/components/AuthModal.svelte`, `UserProfileDialog.svelte`,
       password updates.
 - [ ] Update `App.svelte` navigation header with active user card, role badge,
       profile settings, and logout button.
+- [ ] Add quick "Switch Account" menu in top navigation for instantaneous role
+      switching during demonstrations.
 - [ ] Implement conditional workspace mounting based on active user role.
 
 ### Slice 7: Seed Data & End-to-End Quality Gates
