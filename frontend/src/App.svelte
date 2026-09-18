@@ -28,6 +28,10 @@
     activeWorkspace = "appointments";
   }
 
+  function handleClearSelectedPatient() {
+    selectedPatientForBooking = null;
+  }
+
   function handleQuickRegisterPatient() {
     activeWorkspace = "patients";
     triggerPatientRegister = true;
@@ -92,7 +96,7 @@
 
 <div class="min-h-screen bg-background text-foreground flex flex-row selection:bg-primary/10 selection:text-primary antialiased">
   <!-- Left Sidebar Navigation -->
-  <aside class="w-64 border-r border-border bg-card flex flex-col shrink-0 min-h-screen select-none">
+  <aside class="w-64 border-r border-border bg-card flex flex-col shrink-0 h-screen sticky top-0 select-none">
     <!-- Clinic Brand Header (Cross in a Box Icon) -->
     <div class="px-4 h-14 border-b border-border flex items-center gap-2.5">
       <div class="size-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shrink-0 shadow-xs">
@@ -202,6 +206,7 @@
         <AppointmentsWorkspace
           bind:isBookingModalOpen={triggerAppointmentBook}
           preselectedPatient={selectedPatientForBooking}
+          onClearPreselectedPatient={handleClearSelectedPatient}
         />
       {/if}
     </main>

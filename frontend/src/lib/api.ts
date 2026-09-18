@@ -139,7 +139,8 @@ function getSessionToken(): string {
 
 export function getUserToken(): string {
   try {
-    return localStorage.getItem("user_token") || sessionStorage.getItem("user_token") || "";
+    return localStorage.getItem("user_token") ||
+      sessionStorage.getItem("user_token") || "";
   } catch {
     return "";
   }

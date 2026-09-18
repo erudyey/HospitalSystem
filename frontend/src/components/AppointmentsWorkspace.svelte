@@ -43,11 +43,13 @@
   interface Props {
     isBookingModalOpen?: boolean;
     preselectedPatient?: Patient | null;
+    onClearPreselectedPatient?: () => void;
   }
 
   let {
     isBookingModalOpen = $bindable(false),
     preselectedPatient = null,
+    onClearPreselectedPatient,
   }: Props = $props();
 
   // Patients for dropdown selection
@@ -306,6 +308,7 @@
     if (preselectedPatient) {
       selectedPatientId = preselectedPatient.id;
       openBookingModal(preselectedPatient.id);
+      onClearPreselectedPatient?.();
     }
   });
 
@@ -369,6 +372,32 @@
 
     <!-- Search, Refresh, and Action -->
     <div class="flex items-center gap-2">
+      {#if totalPages > 1}
+        <div class="hidden sm:flex items-center gap-1.5 mr-1 text-xs text-muted-foreground border-r border-border pr-2.5">
+          <span class="font-medium text-foreground tabular-nums">
+            {currentPage}/{totalPages}
+          </span>
+          <button
+            type="button"
+            class="p-1 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            onclick={() => (currentPage = Math.max(1, currentPage - 1))}
+            disabled={currentPage === 1}
+            title="Previous Page"
+          >
+            <ChevronLeft class="size-3.5" />
+          </button>
+          <button
+            type="button"
+            class="p-1 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            onclick={() => (currentPage = Math.min(totalPages, currentPage + 1))}
+            disabled={currentPage >= totalPages}
+            title="Next Page"
+          >
+            <ChevronRight class="size-3.5" />
+          </button>
+        </div>
+      {/if}
+
       <div class="relative w-full md:w-64">
         <Search class="absolute left-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
         <Input
@@ -420,9 +449,9 @@
       {errorMessage}
     </div>
   {:else}
-    <div class="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden">
-      <Table>
-        <TableHeader>
+    <div class="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col">
+      <Table containerClass="max-h-[calc(100vh-340px)] min-h-[240px]">
+        <TableHeader class="sticky top-0 bg-card z-10 shadow-xs border-b [&_tr]:bg-card">
           <TableRow>
             <TableHead class="w-24">
               <button
@@ -651,7 +680,7 @@
       </Table>
 
       <!-- Integrated Table Footer Pagination (Matching Reference Screenshot) -->
-      <div class="border-t border-border px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground bg-muted/20">
+      <div class="border-t border-border px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground bg-muted/20 shrink-0">
         <div class="flex items-center gap-2">
           <span>Rows per page</span>
           <select
