@@ -160,20 +160,25 @@ Slice 3_
 - [ ] Create `PatientChartDialog.svelte` displaying complete patient clinical
       timeline.
 
-### Slice 6: Session Gateway & Profile Dialog
+### Slice 6: Auth Gateway & Settings Suite
 
-_Scope: `frontend/src/components/AuthModal.svelte`, `UserProfileDialog.svelte`,
+_Scope: `frontend/src/components/AuthModal.svelte`, `SettingsDialog.svelte`,
 `frontend/src/App.svelte`_ _Dependency: Slice 2, Slice 4, Slice 5_
 
 - [ ] Create `AuthModal.svelte` with Sign In and Register Staff tabs.
-- [ ] Add demo quick-fill buttons for instant testing (`Receptionist`,
-      `Dr. Reyes`, `Dr. Santos`, `Dr. Tan`).
-- [ ] Create `UserProfileDialog.svelte` for name, contact, specialty, and
-      password updates.
-- [ ] Update `App.svelte` navigation header with active user card, role badge,
-      profile settings, and logout button.
-- [ ] Add quick "Switch Account" menu in top navigation for instantaneous role
-      switching during demonstrations.
+- [ ] Add conditional demo quick-fill buttons for instant testing
+      (`Receptionist`, `Dr. Reyes`, `Dr. Santos`, `Dr. Tan`).
+- [ ] Create `SettingsDialog.svelte` with tabbed architecture:
+  - [ ] **Tab 1: Profile & Security**: Name, contact, doctor specialty, license,
+        and password update.
+  - [ ] **Tab 2: Clinic Preferences**: Demo Mode toggle (On/Off) and default
+        appointment slot duration.
+  - [ ] **Tab 3: System & Storage**: Physical database path, record statistics,
+        and SQLite WAL engine status.
+  - [ ] **Log Out Action**: Invalidate session in database, clear state, and
+        open login gateway.
+- [ ] Update `App.svelte` navigation header with user card, role badge, settings
+      trigger, and conditional quick-switcher.
 - [ ] Implement conditional workspace mounting based on active user role.
 
 ### Slice 7: Seed Data & End-to-End Quality Gates
