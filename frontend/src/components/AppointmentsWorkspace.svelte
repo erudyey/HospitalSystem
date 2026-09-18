@@ -1,101 +1,198 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { api, type Patient, type Appointment, type ApiError } from "$lib/api";
-  import Button from "$lib/components/ui/Button.svelte";
-  import Input from "$lib/components/ui/Input.svelte";
-  import Badge from "$lib/components/ui/Badge.svelte";
-  import Card from "$lib/components/ui/Card.svelte";
-  import CardHeader from "$lib/components/ui/CardHeader.svelte";
-  import CardTitle from "$lib/components/ui/CardTitle.svelte";
-  import CardContent from "$lib/components/ui/CardContent.svelte";
-  import Table from "$lib/components/ui/Table.svelte";
-  import TableHeader from "$lib/components/ui/TableHeader.svelte";
-  import TableHead from "$lib/components/ui/TableHead.svelte";
-  import TableBody from "$lib/components/ui/TableBody.svelte";
-  import TableRow from "$lib/components/ui/TableRow.svelte";
-  import TableCell from "$lib/components/ui/TableCell.svelte";
+  import { Button } from "$lib/components/ui/button";
+  import { Input } from "$lib/components/ui/input";
+  import { Badge } from "$lib/components/ui/badge";
+  import {
+    Table,
+    TableHeader,
+    TableHead,
+    TableBody,
+    TableRow,
+    TableCell,
+  } from "$lib/components/ui/table";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import * as Dialog from "$lib/components/ui/dialog";
+  import * as Tabs from "$lib/components/ui/tabs";
+  import EditAppointmentDialog from "./EditAppointmentDialog.svelte";
+  import DeleteAppointmentDialog from "./DeleteAppointmentDialog.svelte";
+  import {
+    CalendarPlus,
+    Search,
+    RefreshCw,
+    MoreHorizontal,
+    CheckCircle2,
+    Clock,
+    XCircle,
+    RotateCcw,
+    Calendar,
+    Trash2,
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
+    Loader2,
+  } from "lucide-svelte";
 
   interface Props {
+    isBookingModalOpen?: boolean;
     preselectedPatient?: Patient | null;
   }
 
-  let { preselectedPatient = null }: Props = $props();
+  let {
+    isBookingModalOpen = $bindable(false),
+    preselectedPatient = null,
+  }: Props = $props();
 
-  // All patients for dropdown selector
+  // Patients for dropdown selection
   let patientList = $state<Patient[]>([]);
+
+  // Appointments master collection
+  let allAppointments = $state<Appointment[]>([]);
+  let isLoading = $state(false);
+  let errorMessage = $state<string | null>(null);
+  let bannerNotice = $state<string | null>(null);
+
+  // Filters
+  type StatusFilter = "ALL" | "Scheduled" | "Completed" | "Cancelled";
+  let activeFilter = $state<StatusFilter>("ALL");
+  let searchQuery = $state("");
+
+  // Pagination
+  let pageSize = $state(10);
+  let currentPage = $state(1);
+
+  // Booking Modal State
   let selectedPatientId = $state<number | null>(null);
-
-  // Appointments for currently selected patient
-  let appointments = $state<Appointment[]>([]);
-  let isLoadingAppointments = $state(false);
-  let appointmentError = $state<string | null>(null);
-
-  // Booking Form State
   let doctorName = $state("");
   let appDate = $state(new Date().toISOString().split("T")[0]);
-  let isBooking = $state(false);
+  let isSubmitting = $state(false);
   let bookingErrors = $state<Record<string, string[]>>({});
-  let successNotice = $state<string | null>(null);
 
-  // Status update state
-  let updatingAppId = $state<number | null>(null);
+  // Edit / Delete Dialog State
+  let isEditDialogOpen = $state(false);
+  let appointmentForEdit = $state<Appointment | null>(null);
 
-  // Abort controller to prevent race conditions when switching patients
-  let currentAbortController: AbortController | null = null;
+  let isDeleteDialogOpen = $state(false);
+  let appointmentForDelete = $state<Appointment | null>(null);
 
-  async function loadPatientList() {
+  async function loadInitialData() {
+    isLoading = true;
+    errorMessage = null;
     try {
-      patientList = await api.listPatients();
-      if (!selectedPatientId && patientList.length > 0) {
-        selectedPatientId = patientList[0].id;
-        loadAppointmentsForPatient(selectedPatientId);
-      }
-    } catch {
-      // Ignored in list fetch
-    }
-  }
-
-  async function loadAppointmentsForPatient(patientId: number | null) {
-    if (patientId === null) {
-      appointments = [];
-      return;
-    }
-
-    // Cancel in-flight request if user switches patient quickly
-    if (currentAbortController) {
-      currentAbortController.abort();
-    }
-    currentAbortController = new AbortController();
-
-    isLoadingAppointments = true;
-    appointmentError = null;
-
-    try {
-      appointments = await api.listPatientAppointments(patientId, currentAbortController.signal);
+      const [patients, appointments] = await Promise.all([
+        api.listPatients(),
+        api.listAllAppointments(),
+      ]);
+      patientList = patients;
+      allAppointments = appointments;
     } catch (err) {
-      const e = err as { name?: string; message?: string };
-      if (e.name === "AbortError") {
-        return; // Ignore cancelled requests
-      }
-      appointmentError = e.message || "Failed to load appointments.";
+      const e = err as ApiError;
+      errorMessage = e.message || "Failed to load clinic records.";
     } finally {
-      isLoadingAppointments = false;
+      isLoading = false;
     }
   }
 
-  function handlePatientChange(e: Event) {
-    const target = e.target as HTMLSelectElement;
-    const newId = target.value ? parseInt(target.value, 10) : null;
-    selectedPatientId = newId;
-    successNotice = null;
-    bookingErrors = {};
-    loadAppointmentsForPatient(newId);
+  async function reloadAppointments() {
+    isLoading = true;
+    try {
+      allAppointments = await api.listAllAppointments();
+    } catch (err) {
+      const e = err as ApiError;
+      errorMessage = e.message || "Failed to refresh appointments.";
+    } finally {
+      isLoading = false;
+    }
   }
 
-  async function handleBookAppointment(e: SubmitEvent) {
+  // Filter count counters
+  let countAll = $derived(allAppointments.length);
+  let countScheduled = $derived(
+    allAppointments.filter((a) => a.status === "Scheduled").length
+  );
+  let countCompleted = $derived(
+    allAppointments.filter((a) => a.status === "Completed").length
+  );
+  let countCancelled = $derived(
+    allAppointments.filter((a) => a.status === "Cancelled").length
+  );
+
+  // Filtered appointments
+  let filteredAppointments = $derived.by(() => {
+    let list = allAppointments;
+
+    if (activeFilter !== "ALL") {
+      list = list.filter((app) => app.status === activeFilter);
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      list = list.filter(
+        (app) =>
+          app.patient_name.toLowerCase().includes(q) ||
+          app.doctor_name.toLowerCase().includes(q) ||
+          String(app.id).includes(q) ||
+          String(app.patient_id).includes(q)
+      );
+    }
+
+    return list;
+  });
+
+  // Pagination Derivations & Clamping
+  let totalPages = $derived(
+    Math.max(1, Math.ceil(filteredAppointments.length / pageSize))
+  );
+
+  $effect(() => {
+    if (currentPage > totalPages) {
+      currentPage = totalPages;
+    }
+  });
+
+  let paginatedAppointments = $derived.by(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredAppointments.slice(start, start + pageSize);
+  });
+
+  let startRecord = $derived(
+    filteredAppointments.length === 0 ? 0 : (currentPage - 1) * pageSize + 1
+  );
+  let endRecord = $derived(
+    Math.min(currentPage * pageSize, filteredAppointments.length)
+  );
+
+  function handleFilterChange(filter: StatusFilter) {
+    activeFilter = filter;
+    currentPage = 1;
+  }
+
+  function handleSearchInput(e: Event) {
+    const target = e.target as HTMLInputElement;
+    searchQuery = target.value;
+    currentPage = 1;
+  }
+
+  function openBookingModal(patientId?: number) {
+    if (patientId) {
+      selectedPatientId = patientId;
+    } else if (preselectedPatient) {
+      selectedPatientId = preselectedPatient.id;
+    } else if (patientList.length > 0) {
+      selectedPatientId = patientList[0].id;
+    }
+    doctorName = "";
+    appDate = new Date().toISOString().split("T")[0];
+    bookingErrors = {};
+    isBookingModalOpen = true;
+  }
+
+  async function handleCreateBooking(e: SubmitEvent) {
     e.preventDefault();
     if (!selectedPatientId) {
-      bookingErrors = { general: ["Please select a patient before booking an appointment."] };
+      bookingErrors = { general: ["Please select a patient."] };
       return;
     }
 
@@ -109,9 +206,8 @@
       return;
     }
 
-    isBooking = true;
+    isSubmitting = true;
     bookingErrors = {};
-    successNotice = null;
 
     try {
       const newApp = await api.bookAppointment({
@@ -120,280 +216,476 @@
         app_date: appDate,
       });
 
-      doctorName = "";
-      successNotice = `Appointment #${newApp.id} booked with ${newApp.doctor_name} for ${newApp.app_date}.`;
-      await loadAppointmentsForPatient(selectedPatientId);
+      isBookingModalOpen = false;
+      bannerNotice = `Appointment #${newApp.id} booked with ${newApp.doctor_name} for ${newApp.app_date}.`;
+      await reloadAppointments();
     } catch (err) {
       const e = err as ApiError;
       bookingErrors = e.fields || { general: [e.message] };
     } finally {
-      isBooking = false;
+      isSubmitting = false;
     }
   }
 
-  async function handleStatusChange(appointmentId: number, status: "Completed" | "Cancelled") {
-    updatingAppId = appointmentId;
-    successNotice = null;
-
+  async function handleStatusChange(
+    appointmentId: number,
+    status: "Scheduled" | "Completed" | "Cancelled"
+  ) {
+    bannerNotice = null;
     try {
       const updated = await api.updateAppointmentStatus(appointmentId, status);
-      successNotice = `Appointment #${updated.id} marked as ${updated.status}.`;
-      if (selectedPatientId) {
-        await loadAppointmentsForPatient(selectedPatientId);
-      }
+      bannerNotice = `Appointment #${updated.id} status updated to ${updated.status}.`;
+      await reloadAppointments();
     } catch (err) {
       const e = err as ApiError;
-      alert(`Status update failed: ${e.message}`);
-    } finally {
-      updatingAppId = null;
+      errorMessage = `Status update failed: ${e.message}`;
     }
+  }
+
+  function openEditAppointment(app: Appointment) {
+    appointmentForEdit = app;
+    isEditDialogOpen = true;
+  }
+
+  function openDeleteAppointment(app: Appointment) {
+    appointmentForDelete = app;
+    isDeleteDialogOpen = true;
   }
 
   $effect(() => {
-    if (preselectedPatient && preselectedPatient.id !== selectedPatientId) {
+    if (preselectedPatient) {
       selectedPatientId = preselectedPatient.id;
-      loadAppointmentsForPatient(selectedPatientId);
+      openBookingModal(preselectedPatient.id);
     }
   });
 
   onMount(() => {
-    loadPatientList();
+    loadInitialData();
   });
 </script>
 
-<div class="space-y-8">
-  <!-- Top Notice -->
-  {#if successNotice}
-    <div class="rounded-lg bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-800 flex items-center justify-between shadow-sm">
-      <div class="flex items-center space-x-2">
-        <svg class="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-        </svg>
-        <span class="font-medium">{successNotice}</span>
+<div class="flex flex-col gap-6">
+  <!-- Banner Notice -->
+  {#if bannerNotice}
+    <div class="rounded-xl bg-emerald-50 border border-emerald-200/80 p-4 text-sm text-emerald-900 flex items-center justify-between shadow-sm">
+      <div class="flex items-center gap-2">
+        <CheckCircle2 class="size-5 text-emerald-600 shrink-0" />
+        <span class="font-medium">{bannerNotice}</span>
       </div>
-      <button onclick={() => (successNotice = null)} class="text-emerald-700 hover:text-emerald-900 text-xs font-semibold cursor-pointer">Dismiss</button>
+      <button onclick={() => (bannerNotice = null)} class="text-emerald-700 hover:text-emerald-900 text-xs font-semibold cursor-pointer">
+        Dismiss
+      </button>
     </div>
   {/if}
 
-  <!-- Patient Selector Bar -->
-  <Card class="bg-gradient-to-r from-stone-50 to-white border-stone-200">
-    <CardContent class="py-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-      <div class="flex items-center space-x-3 w-full md:w-auto">
-        <label for="patientSelector" class="text-xs font-bold uppercase tracking-wider text-stone-600 whitespace-nowrap">
-          Active Patient:
-        </label>
-        <select
-          id="patientSelector"
-          class="h-10 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:outline-none focus:ring-2 focus:ring-[#0F766E] w-full md:w-80 shadow-sm cursor-pointer"
-          value={selectedPatientId || ""}
-          onchange={handlePatientChange}
-        >
-          <option value="" disabled>-- Choose a patient --</option>
-          {#each patientList as p (p.id)}
-            <option value={p.id}>
-              {p.full_name} (ID: #{p.id}) - Age {p.age}
-            </option>
-          {/each}
-        </select>
-      </div>
-
-      <div class="flex items-center space-x-2">
-        <Button variant="outline" size="sm" onclick={loadPatientList}>
-          Refresh Patients
-        </Button>
-      </div>
-    </CardContent>
-  </Card>
-
-  <!-- Golden Ratio Split: 38.2% Form, 61.8% History Table -->
-  <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-    <!-- Booking Form (38.2% -> col-span-5) -->
-    <div class="lg:col-span-5">
-      <Card>
-        <CardHeader>
-          <CardTitle>Book Appointment</CardTitle>
-          <p class="text-xs text-stone-500 mt-1">Schedule a consultation for the active patient.</p>
-        </CardHeader>
-        <CardContent>
-          {#if !selectedPatientId}
-            <div class="text-center py-8 text-stone-500 text-sm">
-              Please select a patient from the dropdown above to book an appointment.
-            </div>
-          {:else}
-            <form onsubmit={handleBookAppointment} class="space-y-4">
-              <!-- Doctor Name -->
-              <div>
-                <label for="doctorName" class="block text-xs font-semibold uppercase tracking-wider text-stone-600 mb-1.5">
-                  Doctor Name <span class="text-rose-500">*</span>
-                </label>
-                <Input
-                  id="doctorName"
-                  type="text"
-                  placeholder="e.g. Dr. Maria Cruz"
-                  bind:value={doctorName}
-                  error={!!bookingErrors.doctor_name}
-                  disabled={isBooking}
-                />
-                {#if bookingErrors.doctor_name}
-                  <p class="text-xs text-rose-600 mt-1">{bookingErrors.doctor_name.join(" ")}</p>
-                {/if}
-              </div>
-
-              <!-- Date Picker -->
-              <div>
-                <label for="appDate" class="block text-xs font-semibold uppercase tracking-wider text-stone-600 mb-1.5">
-                  Appointment Date (YYYY-MM-DD) <span class="text-rose-500">*</span>
-                </label>
-                <Input
-                  id="appDate"
-                  type="date"
-                  bind:value={appDate}
-                  error={!!bookingErrors.app_date}
-                  disabled={isBooking}
-                />
-                {#if bookingErrors.app_date}
-                  <p class="text-xs text-rose-600 mt-1">{bookingErrors.app_date.join(" ")}</p>
-                {/if}
-              </div>
-
-              {#if bookingErrors.general}
-                <div class="rounded-md bg-rose-50 border border-rose-200 p-3 text-xs text-rose-700">
-                  {bookingErrors.general.join(" ")}
-                </div>
-              {/if}
-
-              <Button type="submit" loading={isBooking} class="w-full mt-2">
-                Confirm Booking
-              </Button>
-            </form>
-          {/if}
-        </CardContent>
-      </Card>
+  <!-- Top Metrics Cards (Matching Reference Screenshot) -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+    <div class="rounded-xl border bg-card text-card-foreground p-6 shadow-sm">
+      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Consultations</p>
+      <p class="text-2xl font-bold tracking-tight text-foreground mt-2">{countAll}</p>
+      <p class="text-[11px] text-muted-foreground mt-1">Master schedule count</p>
     </div>
-
-    <!-- Appointment History Table (61.8% -> col-span-7) -->
-    <div class="lg:col-span-7">
-      <Card>
-        <CardHeader class="flex flex-row items-center justify-between pb-4">
-          <div>
-            <CardTitle>Appointment History</CardTitle>
-            <p class="text-xs text-stone-500 mt-1">Consultation schedule and status updates.</p>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!selectedPatientId || isLoadingAppointments}
-            onclick={() => loadAppointmentsForPatient(selectedPatientId)}
-          >
-            Refresh
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {#if !selectedPatientId}
-            <div class="text-center py-12 text-stone-400 text-sm">
-              Select a patient above to view appointment records.
-            </div>
-          {:else if isLoadingAppointments}
-            <div class="py-12 text-center text-sm text-stone-500 flex items-center justify-center space-x-2">
-              <svg class="animate-spin h-5 w-5 text-teal-700" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              <span>Loading patient appointments...</span>
-            </div>
-          {:else if appointmentError}
-            <div class="rounded-md bg-rose-50 border border-rose-200 p-4 text-sm text-rose-700">
-              {appointmentError}
-            </div>
-          {:else if appointments.length === 0}
-            <div class="text-center py-12 px-4 border border-dashed border-stone-200 rounded-lg">
-              <svg class="mx-auto h-10 w-10 text-stone-300 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              <h4 class="text-sm font-medium text-stone-700">No appointments scheduled</h4>
-              <p class="text-xs text-stone-500 mt-1">Book an appointment using the form on the left.</p>
-            </div>
-          {:else}
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead class="w-14">Appt #</TableHead>
-                  <TableHead>Doctor</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead class="w-28 text-center">Status</TableHead>
-                  <TableHead class="w-36 text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {#each appointments as app (app.id)}
-                  <TableRow>
-                    <TableCell class="font-mono text-xs font-semibold text-stone-600">
-                      #{app.id}
-                    </TableCell>
-                    <TableCell class="font-medium text-stone-900">
-                      {app.doctor_name}
-                    </TableCell>
-                    <TableCell class="tabular-nums text-xs text-stone-600">
-                      {app.app_date}
-                    </TableCell>
-                    <TableCell class="text-center">
-                      {#if app.status === "Scheduled"}
-                        <Badge variant="scheduled">Scheduled</Badge>
-                      {:else if app.status === "Completed"}
-                        <Badge variant="completed">Completed</Badge>
-                      {:else if app.status === "Cancelled"}
-                        <Badge variant="cancelled">Cancelled</Badge>
-                      {/if}
-                    </TableCell>
-                    <TableCell class="text-right space-x-1">
-                      {#if app.status === "Scheduled"}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          class="h-7 text-xs px-2 text-emerald-700 border-emerald-200 hover:bg-emerald-50"
-                          loading={updatingAppId === app.id}
-                          onclick={() => handleStatusChange(app.id, "Completed")}
-                        >
-                          Complete
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          class="h-7 text-xs px-2 text-rose-700 hover:bg-rose-50"
-                          loading={updatingAppId === app.id}
-                          onclick={() => handleStatusChange(app.id, "Cancelled")}
-                        >
-                          Cancel
-                        </Button>
-                      {:else if app.status === "Completed"}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          class="h-7 text-xs px-2 text-rose-700 hover:bg-rose-50"
-                          loading={updatingAppId === app.id}
-                          onclick={() => handleStatusChange(app.id, "Cancelled")}
-                        >
-                          Cancel
-                        </Button>
-                      {:else if app.status === "Cancelled"}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          class="h-7 text-xs px-2 text-emerald-700 hover:bg-emerald-50"
-                          loading={updatingAppId === app.id}
-                          onclick={() => handleStatusChange(app.id, "Completed")}
-                        >
-                          Restore
-                        </Button>
-                      {/if}
-                    </TableCell>
-                  </TableRow>
-                {/each}
-              </TableBody>
-            </Table>
-          {/if}
-        </CardContent>
-      </Card>
+    <div class="rounded-xl border bg-card text-card-foreground p-6 shadow-sm">
+      <p class="text-xs font-medium text-sky-700 uppercase tracking-wider">Scheduled</p>
+      <p class="text-2xl font-bold tracking-tight text-foreground mt-2">{countScheduled}</p>
+      <p class="text-[11px] text-muted-foreground mt-1">Pending clinical visits</p>
+    </div>
+    <div class="rounded-xl border bg-card text-card-foreground p-6 shadow-sm">
+      <p class="text-xs font-medium text-emerald-700 uppercase tracking-wider">Completed</p>
+      <p class="text-2xl font-bold tracking-tight text-foreground mt-2">{countCompleted}</p>
+      <p class="text-[11px] text-muted-foreground mt-1">Discharged records</p>
+    </div>
+    <div class="rounded-xl border bg-card text-card-foreground p-6 shadow-sm">
+      <p class="text-xs font-medium text-zinc-600 uppercase tracking-wider">Cancelled</p>
+      <p class="text-2xl font-bold tracking-tight text-foreground mt-2">{countCancelled}</p>
+      <p class="text-[11px] text-muted-foreground mt-1">Deferred or withdrawn</p>
     </div>
   </div>
+
+  <!-- Segmented Tabs & Toolbar Bar (Matching Reference Screenshot) -->
+  <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+    <!-- Status Filter Tabs -->
+    <Tabs.Root
+      value={activeFilter}
+      onValueChange={(val) => {
+        if (val) {
+          activeFilter = val as StatusFilter;
+          currentPage = 1;
+        }
+      }}
+    >
+      <Tabs.List>
+        <Tabs.Trigger value="ALL" class="min-w-[72px]">
+          All <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countAll})</span>
+        </Tabs.Trigger>
+        <Tabs.Trigger value="Scheduled" class="min-w-[110px]">
+          Scheduled <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countScheduled})</span>
+        </Tabs.Trigger>
+        <Tabs.Trigger value="Completed" class="min-w-[110px]">
+          Completed <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countCompleted})</span>
+        </Tabs.Trigger>
+        <Tabs.Trigger value="Cancelled" class="min-w-[104px]">
+          Cancelled <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countCancelled})</span>
+        </Tabs.Trigger>
+      </Tabs.List>
+    </Tabs.Root>
+
+    <!-- Search, Refresh, and Action -->
+    <div class="flex items-center gap-2">
+      <div class="relative w-full md:w-64">
+        <Search class="absolute left-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
+        <Input
+          type="text"
+          placeholder="Filter doctor, patient, ID..."
+          value={searchQuery}
+          oninput={handleSearchInput}
+          class="pl-9 h-9"
+        />
+      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        class="h-9 px-3 cursor-pointer"
+        onclick={reloadAppointments}
+        disabled={isLoading}
+      >
+        {#if isLoading}
+          <Loader2 class="size-3.5 animate-spin" />
+        {:else}
+          <RefreshCw class="size-3.5" />
+        {/if}
+        <span class="sr-only">Refresh</span>
+      </Button>
+      <Button onclick={() => openBookingModal()} size="sm" class="h-9 px-3 cursor-pointer">
+        <CalendarPlus class="size-3.5 mr-1.5" />
+        <span>New Appointment</span>
+      </Button>
+    </div>
+  </div>
+
+  <!-- Appointments Table View (Matching Reference Screenshot) -->
+  {#if errorMessage}
+    <div class="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
+      {errorMessage}
+    </div>
+  {:else}
+    <div class="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead class="w-20">Appt #</TableHead>
+            <TableHead>Patient</TableHead>
+            <TableHead>Doctor</TableHead>
+            <TableHead class="w-32">Date</TableHead>
+            <TableHead class="w-28 text-center">Status</TableHead>
+            <TableHead class="w-16 text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {#if isLoading && allAppointments.length === 0}
+            <TableRow>
+              <TableCell colspan={6} class="h-32 text-center text-sm text-muted-foreground">
+                <div class="flex items-center justify-center gap-2">
+                  <RefreshCw class="animate-spin size-4 text-primary" />
+                  <span>Loading consultation schedules...</span>
+                </div>
+              </TableCell>
+            </TableRow>
+          {:else if filteredAppointments.length === 0}
+            <TableRow>
+              <TableCell colspan={6} class="h-32 text-center text-sm text-muted-foreground">
+                {searchQuery || activeFilter !== "ALL"
+                  ? "No appointments match your active filter or search query."
+                  : "No appointments have been booked yet. Click 'New Appointment' to schedule a consultation."}
+              </TableCell>
+            </TableRow>
+          {:else}
+            {#each paginatedAppointments as app (app.id)}
+              <TableRow>
+                <!-- Appt ID -->
+                <TableCell class="font-mono text-xs text-muted-foreground">
+                  #{app.id}
+                </TableCell>
+
+                <!-- Patient -->
+                <TableCell class="font-medium text-foreground">
+                  {app.patient_name}
+                  <span class="text-xs text-muted-foreground ml-1 font-normal">(ID #{app.patient_id})</span>
+                </TableCell>
+
+                <!-- Doctor -->
+                <TableCell class="text-foreground">
+                  {app.doctor_name}
+                </TableCell>
+
+                <!-- Date -->
+                <TableCell class="tabular-nums text-xs text-muted-foreground">
+                  {app.app_date}
+                </TableCell>
+
+                <!-- Status Indicator Badge -->
+                <TableCell class="text-center">
+                  {#if app.status === "Scheduled"}
+                    <span class="inline-flex items-center gap-1.5 text-xs text-sky-700 font-medium">
+                      <Clock class="size-3.5 text-sky-600 shrink-0" />
+                      Scheduled
+                    </span>
+                  {:else if app.status === "Completed"}
+                    <span class="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
+                      <CheckCircle2 class="size-3.5 text-emerald-600 shrink-0" />
+                      Completed
+                    </span>
+                  {:else if app.status === "Cancelled"}
+                    <span class="inline-flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
+                      <XCircle class="size-3.5 text-muted-foreground shrink-0" />
+                      Cancelled
+                    </span>
+                  {/if}
+                </TableCell>
+
+                <!-- Dropdown Menu Actions -->
+                <TableCell class="text-right">
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger class="inline-flex items-center justify-center rounded-md size-8 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                      <MoreHorizontal class="size-4" />
+                      <span class="sr-only">Open menu</span>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content align="end">
+                      {#if app.status === "Scheduled"}
+                        <DropdownMenu.Item
+                          onclick={() => handleStatusChange(app.id, "Completed")}
+                          class="text-emerald-700 focus:bg-emerald-50 focus:text-emerald-800 cursor-pointer"
+                        >
+                          <CheckCircle2 class="size-4 mr-2" />
+                          <span>Mark Completed</span>
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item
+                          onclick={() => openEditAppointment(app)}
+                          class="cursor-pointer"
+                        >
+                          <Calendar class="size-4 mr-2" />
+                          <span>Reschedule / Edit</span>
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Separator />
+                        <DropdownMenu.Item
+                          onclick={() => handleStatusChange(app.id, "Cancelled")}
+                          class="text-amber-700 focus:bg-amber-50 focus:text-amber-800 cursor-pointer"
+                        >
+                          <XCircle class="size-4 mr-2" />
+                          <span>Cancel Appointment</span>
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Item
+                          onclick={() => openDeleteAppointment(app)}
+                          class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
+                        >
+                          <Trash2 class="size-4 mr-2" />
+                          <span>Delete</span>
+                        </DropdownMenu.Item>
+                      {:else if app.status === "Cancelled"}
+                        <DropdownMenu.Item
+                          onclick={() => handleStatusChange(app.id, "Scheduled")}
+                          class="text-sky-700 focus:bg-sky-50 focus:text-sky-800 cursor-pointer"
+                        >
+                          <RotateCcw class="size-4 mr-2" />
+                          <span>Restore to Scheduled</span>
+                        </DropdownMenu.Item>
+                        <DropdownMenu.Separator />
+                        <DropdownMenu.Item
+                          onclick={() => openDeleteAppointment(app)}
+                          class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
+                        >
+                          <Trash2 class="size-4 mr-2" />
+                          <span>Delete</span>
+                        </DropdownMenu.Item>
+                      {:else if app.status === "Completed"}
+                        <!-- Completed records are immutable: only deletion is permissible -->
+                        <DropdownMenu.Item
+                          onclick={() => openDeleteAppointment(app)}
+                          class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
+                        >
+                          <Trash2 class="size-4 mr-2" />
+                          <span>Delete</span>
+                        </DropdownMenu.Item>
+                      {/if}
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
+                </TableCell>
+              </TableRow>
+            {/each}
+          {/if}
+        </TableBody>
+      </Table>
+
+      <!-- Integrated Table Footer Pagination (Matching Reference Screenshot) -->
+      <div class="border-t border-border px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground bg-muted/20">
+        <div class="flex items-center gap-2">
+          <span>Rows per page</span>
+          <select
+            class="h-8 rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+            bind:value={pageSize}
+            onchange={() => (currentPage = 1)}
+          >
+            <option value={10}>10</option>
+            <option value={25}>25</option>
+            <option value={50}>50</option>
+          </select>
+          <span class="ml-2">
+            Showing {startRecord} to {endRecord} of {filteredAppointments.length} record(s)
+          </span>
+        </div>
+
+        <div class="flex items-center gap-4">
+          <span class="font-medium text-foreground">
+            Page {currentPage} of {totalPages}
+          </span>
+          <div class="inline-flex items-center gap-1">
+            <button
+              class="p-1 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              onclick={() => (currentPage = 1)}
+              disabled={currentPage === 1}
+              title="First Page"
+            >
+              <ChevronsLeft class="size-4" />
+            </button>
+            <button
+              class="p-1 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              onclick={() => (currentPage = Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1}
+              title="Previous Page"
+            >
+              <ChevronLeft class="size-4" />
+            </button>
+            <button
+              class="p-1 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              onclick={() => (currentPage = Math.min(totalPages, currentPage + 1))}
+              disabled={currentPage >= totalPages}
+              title="Next Page"
+            >
+              <ChevronRight class="size-4" />
+            </button>
+            <button
+              class="p-1 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+              onclick={() => (currentPage = totalPages)}
+              disabled={currentPage >= totalPages}
+              title="Last Page"
+            >
+              <ChevronsRight class="size-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Modal Dialog: New Appointment -->
+  <Dialog.Root bind:open={isBookingModalOpen}>
+    <Dialog.Content class="sm:max-w-md">
+      <Dialog.Header>
+        <Dialog.Title>Schedule Consultation</Dialog.Title>
+        <Dialog.Description>
+          Select a registered patient, consultation date, and attending physician.
+        </Dialog.Description>
+      </Dialog.Header>
+
+      <form onsubmit={handleCreateBooking} class="flex flex-col gap-4 py-2">
+        <!-- Patient Selector -->
+        <div>
+          <label for="modalPatientSelect" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+            Patient <span class="text-destructive">*</span>
+          </label>
+          <select
+            id="modalPatientSelect"
+            class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm w-full focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+            bind:value={selectedPatientId}
+            disabled={isSubmitting}
+          >
+            {#each patientList as p (p.id)}
+              <option value={p.id}>
+                #{p.id} &bull; {p.full_name} (Age {p.age})
+              </option>
+            {/each}
+          </select>
+        </div>
+
+        <!-- Doctor Name -->
+        <div>
+          <label for="modalDoctor" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+            Attending Doctor <span class="text-destructive">*</span>
+          </label>
+          <Input
+            id="modalDoctor"
+            type="text"
+            placeholder="e.g. Dr. Maria Cruz"
+            bind:value={doctorName}
+            aria-invalid={!!bookingErrors.doctor_name}
+            disabled={isSubmitting}
+            autofocus
+          />
+          {#if bookingErrors.doctor_name}
+            <p class="text-xs text-destructive mt-1">{bookingErrors.doctor_name.join(" ")}</p>
+          {/if}
+        </div>
+
+        <!-- Date -->
+        <div>
+          <label for="modalDate" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+            Consultation Date <span class="text-destructive">*</span>
+          </label>
+          <Input
+            id="modalDate"
+            type="date"
+            bind:value={appDate}
+            aria-invalid={!!bookingErrors.app_date}
+            disabled={isSubmitting}
+          />
+          {#if bookingErrors.app_date}
+            <p class="text-xs text-destructive mt-1">{bookingErrors.app_date.join(" ")}</p>
+          {/if}
+        </div>
+
+        {#if bookingErrors.general}
+          <div class="rounded-md bg-destructive/10 border border-destructive/20 p-3 text-xs text-destructive">
+            {bookingErrors.general.join(" ")}
+          </div>
+        {/if}
+
+        <Dialog.Footer class="pt-2">
+          <Button
+            type="button"
+            variant="outline"
+            onclick={() => (isBookingModalOpen = false)}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button type="submit" disabled={isSubmitting}>
+            {#if isSubmitting}
+              <Loader2 class="size-4 animate-spin" />
+            {/if}
+            Confirm Schedule
+          </Button>
+        </Dialog.Footer>
+      </form>
+    </Dialog.Content>
+  </Dialog.Root>
+
+  <!-- Edit Appointment Dialog -->
+  <EditAppointmentDialog
+    bind:open={isEditDialogOpen}
+    appointment={appointmentForEdit}
+    onSuccess={() => {
+      bannerNotice = `Appointment #${appointmentForEdit?.id} rescheduled successfully.`;
+      reloadAppointments();
+    }}
+  />
+
+  <!-- Delete Appointment Dialog -->
+  <DeleteAppointmentDialog
+    bind:open={isDeleteDialogOpen}
+    appointment={appointmentForDelete}
+    onSuccess={() => {
+      bannerNotice = `Appointment #${appointmentForDelete?.id} deleted successfully.`;
+      reloadAppointments();
+    }}
+  />
 </div>
