@@ -77,7 +77,7 @@ architecture for three specific operational reasons:
 
 ## 3. Legacy Data Migration
 
-For clinics transitioning from the previous Tkinter coursework implementation,
+For old databases from the previous Tkinter coursework implementation,
 the backend provides an automated, non-destructive importer
 (`backend.clinic.importer`).
 
