@@ -267,3 +267,45 @@ This verification script tests:
 5. Health endpoint response (`/api/health/`).
 6. Session token rejection (`403 Forbidden` on invalid tokens).
 7. Clean shutdown and zero process leakage.
+
+---
+
+## 6. Database Seeding
+
+The `seed` management command populates your local database with realistic
+sample patients and appointments so the application looks and behaves like a
+live clinic without manual data entry.
+
+> **Note:** The command writes to your real AppData database
+> (`%LOCALAPPDATA%\HospitalSystem\clinic.sqlite3` on Windows,
+> `~/Library/Application Support/HospitalSystem/clinic.sqlite3` on macOS).
+> Use `--clear` only when a fresh dataset is acceptable.
+
+### Add sample data (skips if records already exist)
+
+```powershell
+uv run python backend/manage.py seed
+```
+
+### Wipe all data and re-seed from scratch
+
+```powershell
+uv run python backend/manage.py seed --clear
+```
+
+### Control the number of patients (default is 15)
+
+```powershell
+uv run python backend/manage.py seed --clear --count 30
+```
+
+### What gets created
+
+| Detail              | Value                                              |
+| :------------------ | :------------------------------------------------- |
+| Patients            | 15 (default) with names, ages, and optional contacts |
+| Appointments        | 1 to 4 per patient, spread over -180 to +60 days  |
+| Past appointments   | Mostly `Completed`, occasionally `Cancelled`       |
+| Future appointments | Mostly `Scheduled`, occasionally `Cancelled`       |
+| Doctors             | 6 rotating sample doctors                          |
+| Reproducibility     | Fixed random seed -- same names every run          |
