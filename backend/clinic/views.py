@@ -603,8 +603,14 @@ def doctor_appointments(request: HttpRequest) -> JsonResponse:
 
 
 @require_GET
-def patient_medical_records(_request: HttpRequest, patient_id: int) -> JsonResponse:
+def patient_medical_records(request: HttpRequest, patient_id: int) -> JsonResponse:
     """Return all clinical medical records for a specific patient ID."""
+    user = get_authenticated_user(request)
+    if not user:
+        return JsonResponse(
+            format_error("UNAUTHENTICATED", "Active session required. Please sign in."),
+            status=401,
+        )
     records = services.get_patient_medical_history(patient_id=patient_id)
     return JsonResponse([serialize_medical_record(r) for r in records], safe=False, status=200)
 
@@ -674,15 +680,29 @@ def medical_records_collection(request: HttpRequest) -> JsonResponse:
         return validation_error_response(err, "Medical record creation failed validation.")
 
 
-@require_http_methods(["PUT"])
+@require_http_methods(["GET", "PUT"])
 def medical_record_detail(request: HttpRequest, record_id: int) -> JsonResponse:
-    """Update an existing clinical medical record (Authoring physician only)."""
+    """Retrieve or update an existing clinical medical record."""
     user = get_authenticated_user(request)
     if not user:
         return JsonResponse(
             format_error("UNAUTHENTICATED", "Active session required. Please sign in."),
             status=401,
         )
+
+    try:
+        record = MedicalRecord.objects.select_related("patient", "doctor", "appointment").get(
+            id=record_id
+        )
+    except MedicalRecord.DoesNotExist:
+        return JsonResponse(
+            format_error("NOT_FOUND", f"Medical record #{record_id} does not exist."),
+            status=404,
+        )
+
+    if request.method == "GET":
+        return JsonResponse(serialize_medical_record(record), status=200)
+
     if user.role != StaffRole.DOCTOR:
         return JsonResponse(
             format_error("FORBIDDEN", "Only physician accounts can edit medical records."),
@@ -696,7 +716,7 @@ def medical_record_detail(request: HttpRequest, record_id: int) -> JsonResponse:
         )
 
     try:
-        record = services.update_medical_record(
+        updated = services.update_medical_record(
             record_id=record_id,
             doctor_id=user.id,
             diagnosis=data.get("diagnosis", ""),
@@ -705,6 +725,6 @@ def medical_record_detail(request: HttpRequest, record_id: int) -> JsonResponse:
             prescription=data.get("prescription", ""),
             follow_up_advice=data.get("follow_up_advice", ""),
         )
-        return JsonResponse(serialize_medical_record(record), status=200)
+        return JsonResponse(serialize_medical_record(updated), status=200)
     except ValidationError as err:
         return validation_error_response(err, "Medical record update failed validation.")

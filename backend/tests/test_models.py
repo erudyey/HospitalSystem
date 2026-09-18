@@ -4,6 +4,7 @@ from datetime import date, time
 
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
+from django.db.models import ProtectedError
 from django.test import TestCase
 
 from backend.clinic.models import (
@@ -193,3 +194,37 @@ class MedicalRecordModelTests(TestCase):
         )
         with self.assertRaises(ValidationError):
             record.save()
+
+    def test_medical_record_protects_patient_and_doctor_from_deletion(self) -> None:
+        record = MedicalRecord.objects.create(
+            patient=self.patient,
+            doctor=self.doctor,
+            appointment=self.appointment,
+            diagnosis="Routine Checkup",
+        )
+        self.assertIsNotNone(record.id)
+
+        # Deleting patient must be blocked by models.PROTECT
+        with self.assertRaises(ProtectedError):
+            self.patient.delete()
+
+        # Deleting doctor must be blocked by models.PROTECT
+        with self.assertRaises(ProtectedError):
+            self.doctor.delete()
+
+    def test_unique_appointment_constraint_on_medical_record(self) -> None:
+        MedicalRecord.objects.create(
+            patient=self.patient,
+            doctor=self.doctor,
+            appointment=self.appointment,
+            diagnosis="Initial Consultation Note",
+        )
+
+        duplicate = MedicalRecord(
+            patient=self.patient,
+            doctor=self.doctor,
+            appointment=self.appointment,
+            diagnosis="Duplicate Consultation Note",
+        )
+        with self.assertRaises(ValidationError):
+            duplicate.save()

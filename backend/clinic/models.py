@@ -35,6 +35,7 @@ class StaffUser(models.Model):
     specialty = models.CharField(max_length=100, blank=True, default="")
     license_number = models.CharField(max_length=50, blank=True, default="")
     contact = models.CharField(max_length=100, blank=True, default="")
+    is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -172,6 +173,10 @@ class Appointment(models.Model):
     class Meta:
         db_table = "clinic_appointments"
         ordering = ["app_date", "app_time", "id"]
+        indexes = [
+            models.Index(fields=["doctor", "app_date", "status"]),
+            models.Index(fields=["app_date", "app_time"]),
+        ]
 
     def clean(self) -> None:
         if self.doctor_name is not None:
@@ -210,12 +215,12 @@ class MedicalRecord(models.Model):
     appointment_id: int | None
     patient = models.ForeignKey(
         Patient,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="medical_records",
     )
     doctor = models.ForeignKey(
         StaffUser,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name="doctor_records",
     )
     appointment = models.ForeignKey(
@@ -236,6 +241,13 @@ class MedicalRecord(models.Model):
     class Meta:
         db_table = "clinic_medical_records"
         ordering = ["-created_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["appointment"],
+                condition=models.Q(appointment__isnull=False),
+                name="unique_appointment_medical_record",
+            ),
+        ]
 
     def clean(self) -> None:
         if self.diagnosis is not None:

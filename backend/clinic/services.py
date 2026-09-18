@@ -306,8 +306,8 @@ def update_appointment_status(appointment_id: int, new_status: str) -> Appointme
     """Update an appointment status following the 5-state clinical lifecycle.
 
     State transitions:
-    - Scheduled -> Checked In, Cancelled
-    - Checked In -> In Consultation, Scheduled, Cancelled
+    - Scheduled -> Checked In, Cancelled, Completed
+    - Checked In -> In Consultation, Scheduled, Cancelled, Completed
     - In Consultation -> Completed, Checked In
     - Completed -> Immutable
     - Cancelled -> Scheduled
@@ -344,6 +344,16 @@ def update_appointment_status(appointment_id: int, new_status: str) -> Appointme
             raise ValidationError(
                 {
                     "status": f"In Consultation appointments can only transition to 'Completed' or 'Checked In', not '{clean_status}'."
+                }
+            )
+
+        if (
+            current == AppointmentStatus.SCHEDULED
+            and clean_status == AppointmentStatus.IN_CONSULTATION
+        ):
+            raise ValidationError(
+                {
+                    "status": "Scheduled appointments must be 'Checked In' before moving to 'In Consultation'."
                 }
             )
 
@@ -419,6 +429,13 @@ def authenticate_staff(username: str, password: str) -> tuple[StaffUser, UserSes
     if not staff.check_password(password):
         raise ValidationError({"auth": "Invalid username or password."})
 
+    if not staff.is_active:
+        raise ValidationError({"auth": "This staff account is inactive."})
+
+    # Prune expired sessions older than 24 hours
+    cutoff = timezone.now() - timedelta(hours=SESSION_MAX_INACTIVITY_HOURS)
+    UserSession.objects.filter(last_active__lt=cutoff).delete()
+
     # Generate a cryptographically secure 64-character URL-safe session token
     token = secrets.token_urlsafe(48)
 
@@ -441,6 +458,10 @@ def validate_session(token: str) -> StaffUser | None:
         session = UserSession.objects.select_related("user").get(token=clean_token)
         # Expire session if inactive for more than 24 hours
         if timezone.now() - session.last_active > timedelta(hours=SESSION_MAX_INACTIVITY_HOURS):
+            session.delete()
+            return None
+
+        if not session.user.is_active:
             session.delete()
             return None
 
@@ -481,23 +502,26 @@ def update_staff_profile(
     if not clean_name:
         errors["full_name"] = "Full name is required."
 
-    try:
-        staff = StaffUser.objects.get(id=user_id)
-    except StaffUser.DoesNotExist:
-        raise ValidationError({"user": f"Staff user #{user_id} does not exist."}) from None
-
-    if new_password:
-        if not current_password:
-            errors["current_password"] = "Current password is required to set a new password."
-        elif not staff.check_password(current_password):
-            errors["current_password"] = "Incorrect current password."
-        elif len(new_password) < 6:
-            errors["new_password"] = "New password must be at least 6 characters long."
-
     if errors:
         raise ValidationError(errors)
 
     with transaction.atomic():
+        try:
+            staff = StaffUser.objects.select_for_update().get(id=user_id)
+        except StaffUser.DoesNotExist:
+            raise ValidationError({"user": f"Staff user #{user_id} does not exist."}) from None
+
+        if new_password:
+            if not current_password:
+                errors["current_password"] = "Current password is required to set a new password."
+            elif not staff.check_password(current_password):
+                errors["current_password"] = "Incorrect current password."
+            elif len(new_password) < 6:
+                errors["new_password"] = "New password must be at least 6 characters long."
+
+        if errors:
+            raise ValidationError(errors)
+
         staff.full_name = clean_name
         staff.contact = clean_contact
         staff.specialty = clean_specialty
@@ -509,8 +533,10 @@ def update_staff_profile(
 
 
 def list_doctors() -> list[StaffUser]:
-    """Return all registered physician accounts ordered by full name."""
-    return list(StaffUser.objects.filter(role=StaffRole.DOCTOR).order_by("full_name"))
+    """Return all active registered physician accounts ordered by full name."""
+    return list(
+        StaffUser.objects.filter(role=StaffRole.DOCTOR, is_active=True).order_by("full_name")
+    )
 
 
 # Clinical Logic, Conflict Engine, and Medical Records
@@ -529,8 +555,13 @@ def check_schedule_conflict(
         AppointmentStatus.CHECKED_IN,
         AppointmentStatus.IN_CONSULTATION,
     ]
+    doc = StaffUser.objects.filter(id=doctor_id).first()
+    doctor_filter = Q(doctor_id=doctor_id)
+    if doc and doc.full_name:
+        doctor_filter |= Q(doctor_name__iexact=doc.full_name)
+
     qs = Appointment.objects.select_related("patient").filter(
-        doctor_id=doctor_id,
+        doctor_filter,
         app_date=app_date,
         status__in=active_statuses,
     )
@@ -569,6 +600,8 @@ def create_medical_record(
 
     try:
         doctor = StaffUser.objects.get(id=doctor_id)
+        if not doctor.is_active:
+            raise ValidationError({"doctor_id": "Inactive doctor cannot author medical records."})
         if doctor.role != StaffRole.DOCTOR:
             raise ValidationError(
                 {"doctor_id": "Only registered doctors can author medical records."}
@@ -584,6 +617,16 @@ def create_medical_record(
             raise ValidationError(
                 {"appointment_id": f"Appointment #{appointment_id} does not exist."}
             ) from None
+        if appointment.patient_id != patient.id:
+            raise ValidationError(
+                {"appointment_id": f"Appointment #{appointment_id} belongs to a different patient."}
+            )
+        if MedicalRecord.objects.filter(appointment_id=appointment_id).exists():
+            raise ValidationError(
+                {
+                    "appointment_id": f"A medical record already exists for appointment #{appointment_id}."
+                }
+            )
 
     with transaction.atomic():
         record = MedicalRecord(

@@ -166,6 +166,24 @@ class ScheduleConflictEngineTests(TestCase):
         )
         self.assertEqual(len(conflicts), 0)
 
+    def test_conflict_detected_with_doctor_name_fallback(self) -> None:
+        # Legacy appointment created without doctor foreign key
+        book_appointment(
+            patient_id=self.patient1.id,
+            doctor_name=self.doctor.full_name,
+            app_date_str="2026-10-01",
+            app_time_str="14:00",
+            doctor_id=None,
+        )
+
+        conflicts = check_schedule_conflict(
+            doctor_id=self.doctor.id,
+            app_date=date(2026, 10, 1),
+            app_time=time(14, 5),
+            slot_duration_minutes=15,
+        )
+        self.assertEqual(len(conflicts), 1)
+
 
 class ClinicalLifecycleAndQueueTests(TestCase):
     """Tests for 5-state lifecycle transitions and doctor queue triage."""
@@ -208,6 +226,17 @@ class ClinicalLifecycleAndQueueTests(TestCase):
 
         with self.assertRaises(ValidationError):
             update_appointment_status(appt.id, AppointmentStatus.SCHEDULED)
+
+    def test_scheduled_cannot_jump_to_in_consultation_directly(self) -> None:
+        appt = book_appointment(
+            patient_id=self.patient.id,
+            doctor_name=self.doctor.full_name,
+            app_date_str="2026-10-05",
+            app_time_str="11:00",
+            doctor_id=self.doctor.id,
+        )
+        with self.assertRaises(ValidationError):
+            update_appointment_status(appt.id, AppointmentStatus.IN_CONSULTATION)
 
     def test_checked_in_to_scheduled_reversion(self) -> None:
         # Patient checked in by mistake, front-desk reverts back to Scheduled
@@ -425,6 +454,41 @@ class MedicalRecordClinicalTests(TestCase):
         self.assertEqual(history[0].id, r2.id)
         self.assertEqual(history[1].id, r1.id)
 
+    def test_cannot_create_duplicate_medical_record_for_same_appointment(self) -> None:
+        create_medical_record(
+            patient_id=self.patient.id,
+            doctor_id=self.doctor.id,
+            diagnosis="Initial Diagnosis",
+            appointment_id=self.appt.id,
+        )
+        with self.assertRaises(ValidationError):
+            create_medical_record(
+                patient_id=self.patient.id,
+                doctor_id=self.doctor.id,
+                diagnosis="Second Diagnosis",
+                appointment_id=self.appt.id,
+            )
+
+    def test_cannot_create_medical_record_for_mismatched_patient_appointment(self) -> None:
+        other_patient = register_patient("John Doe", "09170000000", 25)
+        with self.assertRaises(ValidationError):
+            create_medical_record(
+                patient_id=other_patient.id,
+                doctor_id=self.doctor.id,
+                diagnosis="Mismatched Record",
+                appointment_id=self.appt.id,
+            )
+
+    def test_inactive_doctor_cannot_author_medical_record(self) -> None:
+        self.doctor.is_active = False
+        self.doctor.save()
+        with self.assertRaises(ValidationError):
+            create_medical_record(
+                patient_id=self.patient.id,
+                doctor_id=self.doctor.id,
+                diagnosis="Rejected Record",
+            )
+
 
 class ClinicalApiIntegrationTests(TestCase):
     """Integration tests for clinical REST API endpoints."""
@@ -550,11 +614,25 @@ class ClinicalApiIntegrationTests(TestCase):
             self.assertEqual(update_resp.status_code, 200)
             self.assertEqual(update_resp.json()["diagnosis"], "Essential Hypertension (Controlled)")
 
-            # Fetch patient medical records list
-            history_resp = self.auth_client.get(
+            # Fetch patient medical records without user token is rejected with 401
+            unauth_resp = self.auth_client.get(
+                reverse("api-patient-medical-records", kwargs={"patient_id": self.patient.id})
+            )
+            self.assertEqual(unauth_resp.status_code, 401)
+
+            # Fetch patient medical records list with authenticated staff session
+            history_resp = doc_client.get(
                 reverse("api-patient-medical-records", kwargs={"patient_id": self.patient.id})
             )
             self.assertEqual(history_resp.status_code, 200)
             history = history_resp.json()
             self.assertEqual(len(history), 1)
             self.assertEqual(history[0]["id"], record_id)
+
+            # Fetch single medical record detail via GET
+            detail_resp = doc_client.get(
+                reverse("api-medical-record-detail", kwargs={"record_id": record_id})
+            )
+            self.assertEqual(detail_resp.status_code, 200)
+            self.assertEqual(detail_resp.json()["id"], record_id)
+            self.assertEqual(detail_resp.json()["diagnosis"], "Essential Hypertension (Controlled)")

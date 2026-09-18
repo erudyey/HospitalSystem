@@ -162,6 +162,50 @@ class StaffAuthServiceTests(TestCase):
         self.assertIn("Dr. Beta", doctor_names)
         self.assertNotIn("Receptionist One", doctor_names)
 
+    def test_inactive_staff_cannot_authenticate(self) -> None:
+        user = register_staff(
+            username="inactive.staff",
+            password="password123",
+            full_name="Inactive Staff Member",
+            role=StaffRole.RECEPTIONIST,
+        )
+        user.is_active = False
+        user.save()
+
+        with self.assertRaises(ValidationError):
+            authenticate_staff("inactive.staff", "password123")
+
+    def test_validate_session_revokes_inactive_staff(self) -> None:
+        user = register_staff(
+            username="active.to.inactive",
+            password="password123",
+            full_name="Staff Soon Inactive",
+            role=StaffRole.RECEPTIONIST,
+        )
+        _, session = authenticate_staff("active.to.inactive", "password123")
+        self.assertIsNotNone(validate_session(session.token))
+
+        # Deactivate user
+        user.is_active = False
+        user.save()
+
+        # Next validation must reject and revoke the session
+        self.assertIsNone(validate_session(session.token))
+
+    def test_inactive_doctor_excluded_from_list_doctors(self) -> None:
+        doc = register_staff(
+            username="doc.inactive",
+            password="password123",
+            full_name="Dr. Retired",
+            role=StaffRole.DOCTOR,
+        )
+        self.assertTrue(any(d.id == doc.id for d in list_doctors()))
+
+        doc.is_active = False
+        doc.save()
+
+        self.assertFalse(any(d.id == doc.id for d in list_doctors()))
+
 
 class StaffAuthApiTests(TestCase):
     """Integration tests for authentication and profile REST endpoints."""
