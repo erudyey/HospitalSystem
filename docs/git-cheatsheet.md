@@ -1,7 +1,8 @@
 # Git Reference and Workflow Guide
 
 This document defines version control procedures, core Git operations, commit
-standards, and quality requirements for the HospitalSystem repository.
+standards, contribution and pull request workflows, and quality requirements for
+the HospitalSystem repository.
 
 ---
 
@@ -105,8 +106,12 @@ Rules:
 Publish local commits to GitHub:
 
 ```bash
-git push origin master
+git push origin <branch-name>
 ```
+
+> [!NOTE]
+> Direct pushes to `master` are restricted. All feature work and bug fixes
+> must be submitted via topic branches and Pull Requests (see Section 4).
 
 ---
 
@@ -130,7 +135,206 @@ git checkout master
 
 ---
 
-## 4. Reverting and Stashing
+## 4. Contributing and Pull Request Workflow
+
+HospitalSystem uses a feature branch and Pull Request (PR) model to maintain
+code quality, bisectability, and architectural consistency.
+
+### 4.1 Branch Naming Standards
+
+Always branch from an up-to-date `master`. Use a descriptive prefix that matches
+the purpose of the work:
+
+| Prefix       | Purpose                                      | Example                              |
+| :----------- | :------------------------------------------- | :----------------------------------- |
+| `feature/`   | New user-facing or architectural capability  | `feature/doctor-queue-ui`            |
+| `fix/`       | Bug fix or state machine correction          | `fix/conflict-overlap-detection`     |
+| `test/`      | New or improved automated test suites        | `test/appointment-state-machine`     |
+| `docs/`      | Documentation, runbooks, or specs            | `docs/pr-contribution-guidelines`    |
+| `refactor/`  | Code restructuring without behavioral change | `refactor/auth-token-validation`     |
+| `chore/`     | Tooling, dependencies, or formatting updates | `chore/update-deno-deps`             |
+
+### 4.2 End-to-End Contribution Lifecycle
+
+```
+[ master ] --(git checkout -b)--> [ feature branch ] --(code & commit)--> [ run quality gates ]
+                                                                                   |
+[ GitHub PR ] <--(git push -u origin)----------------------------------------------+
+      |
+[ Review & CI ] --(merge to master)--> [ git checkout master && git pull origin master ]
+                                                    |
+                                      (git branch -d feature/...)
+```
+
+#### Step 1: Synchronize Local Master
+
+Ensure your local `master` is clean and up to date before branching:
+
+```bash
+git checkout master
+git pull origin master
+```
+
+#### Step 2: Create a Dedicated Topic Branch
+
+Create and switch to your new branch:
+
+```bash
+git checkout -b feature/<feature-name>
+```
+
+#### Step 3: Implement Changes and Commit Atomically
+
+Commit logically isolated units following the Conventional Commits specification:
+
+```bash
+git commit -m "<type>(<scope>): <imperative subject>"
+```
+
+Follow these strict rules:
+- **One Logical Change Per Commit**: Separate refactoring, bug fixes, and
+  features into individual commits.
+- **No Mixed Formatting**: Never combine automated code reformatting with
+  business logic changes.
+- **Bisectable Commits**: Every commit must build and pass tests cleanly.
+- **Zero Em/En Dash Policy**: No em dashes (`\u2014`) or en dashes (`\u2013`)
+  in code, comments, docstrings, markdown files, or commit messages. Use `--`,
+  colons, or parentheses instead.
+
+#### Step 4: Run Mandatory Quality Gates Locally
+
+Before pushing or opening a PR, all quality gates must pass locally:
+
+Using the task runner:
+
+```powershell
+# Windows (PowerShell 7+):
+.\run.ps1 test
+.\run.ps1 format
+```
+
+```bash
+# macOS / Linux (Bash):
+./run.sh test
+./run.sh format
+```
+
+Or execute directly through the underlying toolchain:
+
+```bash
+# 1. Backend automated tests (100% pass rate required):
+uv run pytest backend/tests/ -v
+
+# 2. Strict Python type checking:
+.venv/Scripts/python.exe -m basedpyright    # Windows
+.venv/bin/python -m basedpyright           # macOS / Linux
+
+# 3. Python linting and formatting:
+uv run ruff check backend desktop package.py
+uv run ruff format --check backend desktop package.py
+
+# 4. Frontend compilation and formatting:
+cd frontend && deno task build && cd ..
+deno fmt --check .github/workflows/ frontend/src/
+```
+
+#### Step 5: Push Branch to Remote
+
+Push your topic branch to GitHub and set up remote tracking:
+
+```bash
+git push -u origin feature/<feature-name>
+```
+
+#### Step 6: Create the Pull Request
+
+Open a Pull Request targeting the `master` branch:
+
+- **Via GitHub Web UI**: Go to the repository page on GitHub and click
+  **Compare & pull request** on your recently pushed branch.
+- **Via GitHub CLI (`gh`)**:
+  ```bash
+  gh pr create --base master --head feature/<feature-name>
+  ```
+
+Set the PR title to follow Conventional Commits (e.g.,
+`feat(receptionist): add conflict warning banner to booking form`).
+
+#### Step 7: Complete the Pull Request Description
+
+Fill in the PR description following this standard template:
+
+```markdown
+## Summary of Changes
+- High-level overview of what this PR accomplishes.
+- List of key files and modules impacted.
+
+## Motivation & Context
+- Why is this change required? What issue or task does it address?
+- Reference issue: Fixes #<issue-id> or Addresses Slice <N>.
+
+## Technical Approach & Tradeoffs
+- Why this approach was chosen over alternatives.
+- Any non-obvious design decisions, constraints, or invariants accepted.
+
+## Verification & Testing Performed
+- [x] Backend tests passing (`uv run pytest backend/tests/ -v`)
+- [x] Strict type check passing (`basedpyright`)
+- [x] Ruff lint and format clean (`ruff check`, `ruff format`)
+- [x] Frontend build and format clean (`deno task build`, `deno fmt`)
+- [x] Manual verification steps executed:
+  1. Ran application (`.\run.ps1 dev` or `.\run.ps1 desktop`).
+  2. Tested user workflows and verified edge cases.
+
+## Breaking Changes / Migration Notes
+- **Database Migrations**: e.g., migration `0003_...` added, or None.
+- **API Changes**: None (or detail modified endpoints / schemas).
+- **Environment Variables**: None (or specify new variables).
+```
+
+#### Step 8: Address Review Feedback and Iterate
+
+When reviewers request adjustments or CI reports an issue:
+
+1. Make edits on the same local branch.
+2. Re-run quality gates (`.\run.ps1 test` and `.\run.ps1 format`).
+3. Record new atomic commits with appropriate types (`fix(...)`, `refactor(...)`).
+4. Push updates to GitHub:
+   ```bash
+   git push origin feature/<feature-name>
+   ```
+   The existing Pull Request updates automatically.
+
+If `master` has advanced since your branch was created, sync with upstream:
+
+```bash
+git fetch origin
+git merge origin/master
+# Or rebase if preferred by repository maintainers:
+# git rebase origin/master
+```
+
+Resolve any merge conflicts, re-verify tests, and push.
+
+#### Step 9: Post-Merge Cleanup
+
+Once your Pull Request has been approved and merged into `master`:
+
+```bash
+# Return to master and pull latest merged changes:
+git checkout master
+git pull origin master
+
+# Delete the local feature branch:
+git branch -d feature/<feature-name>
+
+# Prune stale remote tracking references:
+git remote prune origin
+```
+
+---
+
+## 5. Reverting and Stashing
 
 ### Discard Working Tree Modifications
 
@@ -162,7 +366,7 @@ git log --oneline -n 10
 
 ---
 
-## 5. Repository Policy
+## 6. Repository Policy
 
 1. **Zero Em/En Dash Policy**: No em dashes (`\u2014`) or en dashes (`\u2013`)
    in code, docstrings, markdown, or commit messages. Use `--`, `:`, or
@@ -173,23 +377,33 @@ git log --oneline -n 10
    (`deno.json`). Do not introduce Node.js or `npm`.
 4. **Mandatory Verification**: All commits pushed to remote must pass
    `uv run pytest backend/tests/ -v` and `basedpyright`.
+5. **Branch Protection & Pull Requests**: All changes to `master` must arrive
+   via Pull Requests with passing quality gates and peer review. Direct pushes
+   to `master` are strictly prohibited for normal feature development.
 
 ---
 
-## 6. Command Reference
+## 7. Command Reference
 
-| Action                        | Command                                      |
-| :---------------------------- | :------------------------------------------- |
-| Pull latest remote commits    | `git pull origin master`                     |
-| View status of modified files | `git status`                                 |
-| View unstaged line diffs      | `git diff`                                   |
-| Stage file for commit         | `git add <file>`                             |
-| Unstage file                  | `git restore --staged <file>`                |
-| Discard unstaged changes      | `git restore <file>`                         |
-| Commit staged changes         | `git commit -m "<type>(<scope>): <summary>"` |
-| Push commits to remote        | `git push origin <branch>`                   |
-| Create and switch branch      | `git checkout -b <branch>`                   |
-| Switch branch                 | `git checkout <branch>`                      |
-| View compact commit history   | `git log --oneline -n 10`                    |
-| Stash uncommitted changes     | `git stash`                                  |
-| Apply stashed changes         | `git stash pop`                              |
+| Action                        | Command                                             |
+| :---------------------------- | :-------------------------------------------------- |
+| Pull latest remote commits    | `git pull origin master`                            |
+| View status of modified files | `git status`                                        |
+| View unstaged line diffs      | `git diff`                                          |
+| Stage file for commit         | `git add <file>`                                    |
+| Unstage file                  | `git restore --staged <file>`                       |
+| Discard unstaged changes      | `git restore <file>`                                |
+| Commit staged changes         | `git commit -m "<type>(<scope>): <summary>"`        |
+| Push commits to remote branch | `git push origin <branch>`                          |
+| Push branch and set upstream  | `git push -u origin <branch>`                       |
+| Create and switch branch      | `git checkout -b <branch>`                          |
+| Switch branch                 | `git checkout <branch>`                             |
+| Delete local branch (merged)  | `git branch -d <branch>`                            |
+| Force delete local branch     | `git branch -D <branch>`                            |
+| Open PR via GitHub CLI        | `gh pr create --base master --head <branch>`        |
+| Check status of open PRs      | `gh pr status`                                      |
+| View PR in browser            | `gh pr view --web`                                  |
+| Prune deleted remote branches | `git remote prune origin`                           |
+| View compact commit history   | `git log --oneline -n 10`                           |
+| Stash uncommitted changes     | `git stash`                                         |
+| Apply stashed changes         | `git stash pop`                                     |
