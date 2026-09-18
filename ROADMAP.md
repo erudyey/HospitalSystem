@@ -106,23 +106,22 @@ _Scope: `backend/clinic/services.py`, `backend/clinic/views.py`,
 _Scope: `backend/clinic/services.py`, `backend/clinic/views.py`_ _Dependency:
 Slice 1_
 
-- [ ] Implement `check_schedule_conflict(doctor_id, app_date, app_time)` to
+- [x] Implement `check_schedule_conflict(doctor_id, app_date, app_time)` to
       detect slot overlaps.
-- [ ] Update `book_appointment()` to accept `app_time`, `doctor_id`, and
+- [x] Update `book_appointment()` to accept `app_time`, `doctor_id`, and
       `reason_for_visit`.
-- [ ] Implement `get_doctor_queue(doctor_id)` prioritizing `Checked In` waiting
+- [x] Implement `get_doctor_queue(doctor_id)` prioritizing `Checked In` waiting
       room patients.
-- [ ] Implement `create_medical_record()` with transaction safety.
-- [ ] Implement `get_patient_medical_history(patient_id)` returning
+- [x] Implement `create_medical_record()` with transaction safety.
+- [x] Implement `get_patient_medical_history(patient_id)` returning
       chronological records.
-- [ ] Expose REST endpoints:
+- [x] Expose REST endpoints:
   - `/api/doctor/appointments/`
   - `/api/doctor/patients/`
   - `/api/doctor/queue/`
   - `/api/medical-records/`
   - `/api/patients/<id>/medical-records/`
-- [ ] Write unit tests for clinical services in
-      `backend/tests/test_services.py`.
+- [x] Write unit and API integration tests in `backend/tests/test_clinical.py`.
 
 ### Slice 4: Receptionist Workspace UI
 

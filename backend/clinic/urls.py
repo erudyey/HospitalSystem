@@ -31,4 +31,32 @@ urlpatterns = [
     path("auth/logout/", views.auth_logout, name="api-auth-logout"),
     path("auth/profile/", views.auth_profile, name="api-auth-profile"),
     path("doctors/", views.doctors_collection, name="api-doctors"),
+    # Clinical Views, Conflict Engine, and Medical Records
+    path(
+        "appointments/conflict-check/",
+        views.check_conflict,
+        name="api-appointment-conflict-check",
+    ),
+    path("doctor/queue/", views.doctor_queue, name="api-doctor-queue"),
+    path("doctor/patients/", views.doctor_patients, name="api-doctor-patients"),
+    path(
+        "doctor/appointments/",
+        views.doctor_appointments,
+        name="api-doctor-appointments",
+    ),
+    path(
+        "patients/<int:patient_id>/medical-records/",
+        views.patient_medical_records,
+        name="api-patient-medical-records",
+    ),
+    path(
+        "medical-records/",
+        views.medical_records_collection,
+        name="api-medical-records",
+    ),
+    path(
+        "medical-records/<int:record_id>/",
+        views.medical_record_detail,
+        name="api-medical-record-detail",
+    ),
 ]
