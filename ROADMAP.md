@@ -72,20 +72,21 @@ flowchart TD
 _Scope: `backend/clinic/models.py`, `backend/clinic/migrations/`_ _Dependency:
 None (Foundation)_
 
-- [ ] Add `StaffRole` enum (`receptionist`, `doctor`).
-- [ ] Add `StaffUser` model (username, password_hash, full_name, role,
+- [x] Add `StaffRole` enum (`receptionist`, `doctor`).
+- [x] Add `StaffUser` model (username, password_hash, full_name, role,
       specialty, license, contact).
-- [ ] Add `UserSession` model (token, user FK, created_at, last_active).
-- [ ] Update `Appointment` model:
-  - [ ] Add `app_time` (`TimeField`, default `"09:00:00"`).
-  - [ ] Add `reason_for_visit` (`CharField(255)`, default `""`).
-  - [ ] Add `doctor` ForeignKey to `StaffUser` (nullable,
+- [x] Add `UserSession` model (token, user FK, created_at, last_active).
+- [x] Update `Appointment` model:
+  - [x] Add `app_time` (`TimeField`, default `"09:00:00"`).
+  - [x] Add `reason_for_visit` (`CharField(255)`, default `""`).
+  - [x] Add `doctor` ForeignKey to `StaffUser` (nullable,
         `on_delete=models.SET_NULL`).
-  - [ ] Expand `AppointmentStatus` with `"Checked In"` and `"In Consultation"`.
-- [ ] Add `MedicalRecord` model (patient FK, doctor FK, appointment FK,
+  - [x] Expand `AppointmentStatus` with `"Checked In"` and `"In Consultation"`.
+- [x] Add `MedicalRecord` model (patient FK, doctor FK, appointment FK,
       diagnosis, symptoms, clinical_notes, prescription, follow_up_advice).
-- [ ] Generate and apply Django migration (`0002_staff_medical_records.py`).
-- [ ] Write schema verification tests in `backend/tests/test_models.py`.
+- [x] Generate and apply Django migration
+      (`0002_staffuser_alter_appointment_options_and_more.py`).
+- [x] Write schema verification tests in `backend/tests/test_models.py`.
 
 ### Slice 2: Authentication & Staff Service Layer
 
