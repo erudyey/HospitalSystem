@@ -78,7 +78,7 @@ case "$COMMAND" in
         "$VENV_PYTHON" -m basedpyright
         echo ""
         echo "Running backend automated test suite..."
-        "$VENV_PYTEST" "$REPO_ROOT/backend/tests"
+        TESTING="True" "$VENV_PYTEST" "$REPO_ROOT/backend/tests"
         ;;
 
     format)

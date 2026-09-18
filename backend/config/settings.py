@@ -4,6 +4,8 @@ import os
 import sys
 from pathlib import Path
 
+from django.contrib.auth.hashers import PBKDF2PasswordHasher
+
 # Base directory: points to repository root
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -34,9 +36,27 @@ TEMPLATES = []
 
 WSGI_APPLICATION = "backend.config.wsgi.application"
 
-# Database resolution
-if os.environ.get("TESTING") == "True":
+
+# Fast password hasher for automated tests with single-round PBKDF2
+class FastPBKDF2PasswordHasher(PBKDF2PasswordHasher):
+    """Fast PBKDF2 hasher for test suites with single-round key derivation."""
+
+    iterations = 1
+
+
+# Database resolution and testing configuration
+IS_TESTING = (
+    os.environ.get("TESTING") == "True"
+    or "pytest" in sys.modules
+    or any("pytest" in arg for arg in sys.argv)
+    or any(arg.endswith("pytest") or arg.endswith("pytest.exe") for arg in sys.argv)
+)
+
+if IS_TESTING:
     DB_PATH = ":memory:"
+    PASSWORD_HASHERS = [
+        "backend.config.settings.FastPBKDF2PasswordHasher",
+    ]
 elif DEBUG:
     DB_PATH = str(BASE_DIR / "clinic_dev.sqlite3")
 else:

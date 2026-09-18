@@ -80,6 +80,7 @@ switch ($Command) {
         Write-Host "Running basedpyright strict type checks..." -ForegroundColor Cyan
         & $VenvPython -m basedpyright
         Write-Host "`nRunning backend automated test suite..." -ForegroundColor Cyan
+        $env:TESTING = "True"
         & $VenvPytest "$RepoRoot\backend\tests"
     }
 
