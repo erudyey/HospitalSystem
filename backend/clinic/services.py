@@ -5,7 +5,7 @@ and return strongly-typed model instances decoupled from HTTP requests.
 """
 
 import secrets
-from datetime import date, time
+from datetime import date, time, timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -205,6 +205,19 @@ def delete_patient(patient_id: int) -> tuple[int, dict[str, int]]:
     """Delete a patient record and cascade-delete associated appointments."""
     with transaction.atomic():
         patient = Patient.objects.select_for_update().get(id=patient_id)
+        has_completed = Appointment.objects.filter(
+            patient_id=patient_id, status=AppointmentStatus.COMPLETED
+        ).exists()
+        has_records = MedicalRecord.objects.filter(patient_id=patient_id).exists()
+        if has_completed or has_records:
+            raise ValidationError(
+                {
+                    "patient": (
+                        "Cannot delete patient with finalized clinical history "
+                        "(completed appointments or signed medical records exist)."
+                    )
+                }
+            )
         return patient.delete()
 
 
@@ -415,14 +428,22 @@ def authenticate_staff(username: str, password: str) -> tuple[StaffUser, UserSes
         return staff, session
 
 
+SESSION_MAX_INACTIVITY_HOURS = 24
+
+
 def validate_session(token: str) -> StaffUser | None:
-    """Validate a session token and update its last active timestamp."""
+    """Validate a session token and enforce inactivity expiry."""
     clean_token = (token or "").strip()
     if not clean_token:
         return None
 
     try:
         session = UserSession.objects.select_related("user").get(token=clean_token)
+        # Expire session if inactive for more than 24 hours
+        if timezone.now() - session.last_active > timedelta(hours=SESSION_MAX_INACTIVITY_HOURS):
+            session.delete()
+            return None
+
         session.last_active = timezone.now()
         session.save(update_fields=["last_active"])
         return session.user

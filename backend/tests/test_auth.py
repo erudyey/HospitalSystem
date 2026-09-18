@@ -2,11 +2,13 @@
 
 import json
 import os
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import Client, TestCase
 from django.urls import reverse
+from django.utils import timezone
 
 from backend.clinic.models import StaffRole, StaffUser
 from backend.clinic.services import (
@@ -92,6 +94,23 @@ class StaffAuthServiceTests(TestCase):
         logged_out = logout_staff(token)
         self.assertTrue(logged_out)
         self.assertIsNone(validate_session(token))
+
+    def test_validate_session_inactivity_timeout(self) -> None:
+        register_staff(
+            username="timed.out",
+            password="password123",
+            full_name="Timed Out User",
+            role=StaffRole.RECEPTIONIST,
+        )
+        _, session = authenticate_staff("timed.out", "password123")
+        # Artificially age session by 25 hours using QuerySet update (bypasses auto_now)
+        from backend.clinic.models import UserSession
+
+        UserSession.objects.filter(token=session.token).update(
+            last_active=timezone.now() - timedelta(hours=25)
+        )
+
+        self.assertIsNone(validate_session(session.token))
 
     def test_update_profile_and_change_password(self) -> None:
         user = register_staff(

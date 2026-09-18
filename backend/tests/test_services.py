@@ -126,6 +126,16 @@ class ClinicServicesTests(TestCase):
         self.assertNotIn(app1.id, app_ids)
         self.assertNotIn(app2.id, app_ids)
 
+    def test_delete_patient_with_completed_records_rejected(self) -> None:
+        patient = services.register_patient("Sam Protected", "09170000008", 45)
+        app = services.book_appointment(patient.id, "Dr. Stone", "2026-10-10")
+        services.update_appointment_status(app.id, AppointmentStatus.COMPLETED)
+
+        # Attempting to delete patient with completed appointment raises ValidationError
+        with self.assertRaises(ValidationError) as ctx:
+            services.delete_patient(patient.id)
+        self.assertIn("patient", ctx.exception.message_dict)
+
     def test_list_all_appointments(self) -> None:
         # Arrange
         p1 = services.register_patient("Patient One", "111", 20)
