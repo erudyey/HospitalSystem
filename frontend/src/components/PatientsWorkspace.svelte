@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { api, type Patient, type ApiError } from "$lib/api";
+  import { toast } from "$lib/toast.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Badge } from "$lib/components/ui/badge";
@@ -31,7 +32,12 @@
     ChevronRight,
     ChevronsLeft,
     ChevronsRight,
-    CheckCircle2,
+    ArrowUpDown,
+    ArrowUp,
+    ArrowDown,
+    Copy,
+    Check,
+    X,
     Loader2,
   } from "lucide-svelte";
 
@@ -50,7 +56,14 @@
   let searchQuery = $state("");
   let isLoading = $state(false);
   let errorMessage = $state<string | null>(null);
-  let bannerNotice = $state<string | null>(null);
+
+  // Sorting state
+  type PatientSortField = "id" | "full_name" | "contact" | "age" | "appointment_count";
+  let sortField = $state<PatientSortField>("id");
+  let sortDirection = $state<"asc" | "desc">("desc");
+
+  // Clipboard feedback state
+  let copiedText = $state<string | null>(null);
 
   // Pagination state
   let pageSize = $state(10);
@@ -62,7 +75,6 @@
   let age = $state<string | number>("");
   let isSubmitting = $state(false);
   let formErrors = $state<Record<string, string[]>>({});
-
 
   // Edit / Delete Dialog State
   let isEditDialogOpen = $state(false);
@@ -84,7 +96,7 @@
     }
   }
 
-  // Real Hospital Metrics
+  // Hospital Metrics
   let totalPatients = $derived(patients.length);
   let activeAppointmentsCount = $derived(
     patients.filter((p) => (p.appointment_count ?? 0) > 0).length
@@ -105,9 +117,39 @@
     );
   });
 
+  // Sorting Derivation
+  let sortedPatients = $derived.by(() => {
+    const list = [...filteredPatients];
+    return list.sort((a, b) => {
+      let cmp = 0;
+      if (sortField === "id") {
+        cmp = a.id - b.id;
+      } else if (sortField === "full_name") {
+        cmp = a.full_name.localeCompare(b.full_name);
+      } else if (sortField === "contact") {
+        cmp = (a.contact || "").localeCompare(b.contact || "");
+      } else if (sortField === "age") {
+        cmp = a.age - b.age;
+      } else if (sortField === "appointment_count") {
+        cmp = (a.appointment_count ?? 0) - (b.appointment_count ?? 0);
+      }
+      return sortDirection === "asc" ? cmp : -cmp;
+    });
+  });
+
+  function toggleSort(field: PatientSortField) {
+    if (sortField === field) {
+      sortDirection = sortDirection === "asc" ? "desc" : "asc";
+    } else {
+      sortField = field;
+      sortDirection = field === "full_name" ? "asc" : "desc";
+    }
+    currentPage = 1;
+  }
+
   // Pagination Derivations & Clamping
   let totalPages = $derived(
-    Math.max(1, Math.ceil(filteredPatients.length / pageSize))
+    Math.max(1, Math.ceil(sortedPatients.length / pageSize))
   );
 
   $effect(() => {
@@ -118,20 +160,38 @@
 
   let paginatedPatients = $derived.by(() => {
     const start = (currentPage - 1) * pageSize;
-    return filteredPatients.slice(start, start + pageSize);
+    return sortedPatients.slice(start, start + pageSize);
   });
 
   let startRecord = $derived(
-    filteredPatients.length === 0 ? 0 : (currentPage - 1) * pageSize + 1
+    sortedPatients.length === 0 ? 0 : (currentPage - 1) * pageSize + 1
   );
   let endRecord = $derived(
-    Math.min(currentPage * pageSize, filteredPatients.length)
+    Math.min(currentPage * pageSize, sortedPatients.length)
   );
 
   function handleSearchInput(e: Event) {
     const target = e.target as HTMLInputElement;
     searchQuery = target.value;
     currentPage = 1;
+  }
+
+  function clearSearch() {
+    searchQuery = "";
+    currentPage = 1;
+  }
+
+  async function copyToClipboard(text: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      copiedText = text;
+      toast.info(`Copied ${label} to clipboard.`);
+      setTimeout(() => {
+        if (copiedText === text) copiedText = null;
+      }, 1500);
+    } catch {
+      toast.error("Failed to copy to clipboard.");
+    }
   }
 
   function openRegisterDialog() {
@@ -169,7 +229,7 @@
       });
 
       isRegisterDialogOpen = false;
-      bannerNotice = `Patient ${newPatient.full_name} registered successfully with ID #${newPatient.id}.`;
+      toast.success(`Patient ${newPatient.full_name} registered with ID #${newPatient.id}.`);
       await loadPatients();
     } catch (err) {
       const e = err as ApiError;
@@ -199,19 +259,6 @@
 </script>
 
 <div class="flex flex-col gap-6">
-  <!-- Status Banner Notice -->
-  {#if bannerNotice}
-    <div class="rounded-xl bg-emerald-50 border border-emerald-200/80 p-4 text-sm text-emerald-900 flex items-center justify-between shadow-sm">
-      <div class="flex items-center gap-2">
-        <CheckCircle2 class="size-5 text-emerald-600 shrink-0" />
-        <span class="font-medium">{bannerNotice}</span>
-      </div>
-      <button onclick={() => (bannerNotice = null)} class="text-emerald-700 hover:text-emerald-900 text-xs font-semibold cursor-pointer">
-        Dismiss
-      </button>
-    </div>
-  {/if}
-
   <!-- Top Metrics Cards (Matching Reference Screenshot) -->
   <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
     <div class="rounded-xl border bg-card text-card-foreground p-6 shadow-sm">
@@ -252,8 +299,22 @@
           placeholder="Filter patients by name, ID, or phone..."
           value={searchQuery}
           oninput={handleSearchInput}
-          class="pl-9 h-9"
+          onkeydown={(e) => {
+            if (e.key === "Escape") clearSearch();
+          }}
+          data-search-input="true"
+          class="pl-9 pr-8 h-9"
         />
+        {#if searchQuery}
+          <button
+            type="button"
+            onclick={clearSearch}
+            class="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
+            title="Clear filter (Esc)"
+          >
+            <X class="size-4" />
+          </button>
+        {/if}
       </div>
     </div>
 
@@ -289,11 +350,76 @@
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead class="w-24">Patient ID</TableHead>
-            <TableHead>Full Name</TableHead>
-            <TableHead>Contact Number</TableHead>
-            <TableHead class="w-24 text-center">Age</TableHead>
-            <TableHead class="w-32 text-center">Consultations</TableHead>
+            <TableHead class="w-28">
+              <button
+                type="button"
+                onclick={() => toggleSort("id")}
+                class="inline-flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer font-semibold text-xs"
+              >
+                Patient ID
+                {#if sortField === "id"}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                {:else}
+                  <ArrowUpDown class="size-3 opacity-40" />
+                {/if}
+              </button>
+            </TableHead>
+            <TableHead>
+              <button
+                type="button"
+                onclick={() => toggleSort("full_name")}
+                class="inline-flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer font-semibold text-xs"
+              >
+                Full Name
+                {#if sortField === "full_name"}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                {:else}
+                  <ArrowUpDown class="size-3 opacity-40" />
+                {/if}
+              </button>
+            </TableHead>
+            <TableHead>
+              <button
+                type="button"
+                onclick={() => toggleSort("contact")}
+                class="inline-flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer font-semibold text-xs"
+              >
+                Contact Number
+                {#if sortField === "contact"}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                {:else}
+                  <ArrowUpDown class="size-3 opacity-40" />
+                {/if}
+              </button>
+            </TableHead>
+            <TableHead class="w-24 text-center">
+              <button
+                type="button"
+                onclick={() => toggleSort("age")}
+                class="inline-flex items-center justify-center gap-1.5 hover:text-foreground transition-colors cursor-pointer font-semibold text-xs w-full"
+              >
+                Age
+                {#if sortField === "age"}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                {:else}
+                  <ArrowUpDown class="size-3 opacity-40" />
+                {/if}
+              </button>
+            </TableHead>
+            <TableHead class="w-32 text-center">
+              <button
+                type="button"
+                onclick={() => toggleSort("appointment_count")}
+                class="inline-flex items-center justify-center gap-1.5 hover:text-foreground transition-colors cursor-pointer font-semibold text-xs w-full"
+              >
+                Consultations
+                {#if sortField === "appointment_count"}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                {:else}
+                  <ArrowUpDown class="size-3 opacity-40" />
+                {/if}
+              </button>
+            </TableHead>
             <TableHead class="w-16 text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -307,20 +433,46 @@
                 </div>
               </TableCell>
             </TableRow>
-          {:else if filteredPatients.length === 0}
+          {:else if sortedPatients.length === 0}
             <TableRow>
-              <TableCell colspan={6} class="h-32 text-center text-sm text-muted-foreground">
-                {searchQuery ? "No patients matching your filter query." : "No patients enrolled yet. Click 'Register Patient' to create the first record."}
+              <TableCell colspan={6} class="h-36 text-center text-sm text-muted-foreground">
+                {#if searchQuery}
+                  <div class="flex flex-col items-center justify-center gap-2 py-2">
+                    <p>No patients matching the filter "{searchQuery}".</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onclick={clearSearch}
+                      class="cursor-pointer"
+                    >
+                      Clear Search Filter
+                    </Button>
+                  </div>
+                {:else}
+                  No patients enrolled yet. Click 'Register Patient' to create the first record.
+                {/if}
               </TableCell>
             </TableRow>
           {:else}
             {#each paginatedPatients as patient (patient.id)}
               <TableRow>
-                <!-- Patient ID -->
+                <!-- Patient ID with copy -->
                 <TableCell>
-                  <Badge variant="outline" class="font-mono text-xs font-normal">
-                    #{patient.id}
-                  </Badge>
+                  <button
+                    type="button"
+                    onclick={() => copyToClipboard(String(patient.id), `ID #${patient.id}`)}
+                    class="group inline-flex items-center gap-1.5 cursor-pointer text-left"
+                    title="Click to copy patient ID"
+                  >
+                    <Badge variant="outline" class="font-mono text-xs font-normal group-hover:border-primary/50 transition-colors">
+                      #{patient.id}
+                    </Badge>
+                    {#if copiedText === String(patient.id)}
+                      <Check class="size-3 text-emerald-600 shrink-0" />
+                    {:else}
+                      <Copy class="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                    {/if}
+                  </button>
                 </TableCell>
 
                 <!-- Full Name -->
@@ -328,9 +480,25 @@
                   {patient.full_name}
                 </TableCell>
 
-                <!-- Contact -->
+                <!-- Contact with copy -->
                 <TableCell class="text-muted-foreground text-xs font-mono">
-                  {patient.contact || "None provided"}
+                  {#if patient.contact}
+                    <button
+                      type="button"
+                      onclick={() => copyToClipboard(patient.contact, "contact number")}
+                      class="group inline-flex items-center gap-1.5 hover:text-foreground cursor-pointer transition-colors"
+                      title="Click to copy contact"
+                    >
+                      <span>{patient.contact}</span>
+                      {#if copiedText === patient.contact}
+                        <Check class="size-3 text-emerald-600 shrink-0" />
+                      {:else}
+                        <Copy class="size-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      {/if}
+                    </button>
+                  {:else}
+                    <span class="text-muted-foreground/60 italic">None provided</span>
+                  {/if}
                 </TableCell>
 
                 <!-- Age -->
@@ -537,7 +705,7 @@
     bind:open={isEditDialogOpen}
     patient={patientForEdit}
     onSuccess={() => {
-      bannerNotice = `Patient details for ${patientForEdit?.full_name} updated successfully.`;
+      toast.success(`Patient details for ${patientForEdit?.full_name} updated.`);
       loadPatients();
     }}
   />
@@ -547,7 +715,7 @@
     bind:open={isDeleteDialogOpen}
     patient={patientForDelete}
     onSuccess={() => {
-      bannerNotice = `Patient record #${patientForDelete?.id} deleted successfully.`;
+      toast.success(`Patient record #${patientForDelete?.id} deleted.`);
       loadPatients();
     }}
   />

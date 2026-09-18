@@ -30,6 +30,12 @@
     }
   });
 
+  function setQuickDate(daysOffset: number) {
+    const d = new Date();
+    d.setDate(d.getDate() + daysOffset);
+    appDate = d.toISOString().split("T")[0];
+  }
+
   async function handleSave(e: SubmitEvent) {
     e.preventDefault();
     if (!appointment) return;
@@ -94,9 +100,40 @@
 
       <!-- Consultation Date -->
       <div>
-        <label for="editDate" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-          Consultation Date <span class="text-destructive">*</span>
-        </label>
+        <div class="flex items-center justify-between mb-1.5">
+          <label for="editDate" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Consultation Date <span class="text-destructive">*</span>
+          </label>
+          <div class="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              class="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
+              onclick={() => setQuickDate(0)}
+            >
+              Today
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              class="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
+              onclick={() => setQuickDate(1)}
+            >
+              Tomorrow
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              class="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
+              onclick={() => setQuickDate(7)}
+            >
+              Next Week
+            </Button>
+          </div>
+        </div>
         <Input
           id="editDate"
           type="date"

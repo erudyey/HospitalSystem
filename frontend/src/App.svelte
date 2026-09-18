@@ -4,6 +4,7 @@
   import { cn } from "$lib/utils";
   import PatientsWorkspace from "./components/PatientsWorkspace.svelte";
   import AppointmentsWorkspace from "./components/AppointmentsWorkspace.svelte";
+  import ToastContainer from "$lib/components/ToastContainer.svelte";
   import {
     Users,
     Calendar,
@@ -59,6 +60,33 @@
     window.addEventListener("unhandledrejection", (event) => {
       globalError = event.reason?.message || "An unhandled promise rejection occurred.";
     });
+
+    // Global keyboard shortcuts
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Alt+1: Patients, Alt+2: Appointments
+      if (e.altKey && e.key === "1") {
+        e.preventDefault();
+        activeWorkspace = "patients";
+      } else if (e.altKey && e.key === "2") {
+        e.preventDefault();
+        activeWorkspace = "appointments";
+      } else if (
+        ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") ||
+        (e.key === "/" && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement))
+      ) {
+        e.preventDefault();
+        const searchEl = document.querySelector<HTMLInputElement>('input[data-search-input="true"]');
+        if (searchEl) {
+          searchEl.focus();
+          searchEl.select();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   });
 </script>
 
@@ -178,4 +206,6 @@
       {/if}
     </main>
   </div>
+
+  <ToastContainer />
 </div>

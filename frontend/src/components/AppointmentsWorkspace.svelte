@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { api, type Patient, type Appointment, type ApiError } from "$lib/api";
+  import { toast } from "$lib/toast.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Badge } from "$lib/components/ui/badge";
@@ -32,6 +33,10 @@
     ChevronRight,
     ChevronsLeft,
     ChevronsRight,
+    ArrowUpDown,
+    ArrowUp,
+    ArrowDown,
+    X,
     Loader2,
   } from "lucide-svelte";
 
@@ -52,12 +57,16 @@
   let allAppointments = $state<Appointment[]>([]);
   let isLoading = $state(false);
   let errorMessage = $state<string | null>(null);
-  let bannerNotice = $state<string | null>(null);
 
   // Filters
   type StatusFilter = "ALL" | "Scheduled" | "Completed" | "Cancelled";
   let activeFilter = $state<StatusFilter>("ALL");
   let searchQuery = $state("");
+
+  // Sorting state (default: chronological appointment date)
+  type AppointmentSortField = "id" | "patient_name" | "doctor_name" | "app_date" | "status";
+  let sortField = $state<AppointmentSortField>("app_date");
+  let sortDirection = $state<"asc" | "desc">("asc");
 
   // Pagination
   let pageSize = $state(10);
@@ -102,6 +111,7 @@
     } catch (err) {
       const e = err as ApiError;
       errorMessage = e.message || "Failed to refresh appointments.";
+      toast.error(errorMessage);
     } finally {
       isLoading = false;
     }
@@ -141,9 +151,39 @@
     return list;
   });
 
+  // Sorting derivation
+  let sortedAppointments = $derived.by(() => {
+    const list = [...filteredAppointments];
+    return list.sort((a, b) => {
+      let cmp = 0;
+      if (sortField === "id") {
+        cmp = a.id - b.id;
+      } else if (sortField === "patient_name") {
+        cmp = a.patient_name.localeCompare(b.patient_name);
+      } else if (sortField === "doctor_name") {
+        cmp = a.doctor_name.localeCompare(b.doctor_name);
+      } else if (sortField === "app_date") {
+        cmp = a.app_date.localeCompare(b.app_date);
+      } else if (sortField === "status") {
+        cmp = a.status.localeCompare(b.status);
+      }
+      return sortDirection === "asc" ? cmp : -cmp;
+    });
+  });
+
+  function toggleSort(field: AppointmentSortField) {
+    if (sortField === field) {
+      sortDirection = sortDirection === "asc" ? "desc" : "asc";
+    } else {
+      sortField = field;
+      sortDirection = field === "app_date" || field === "patient_name" || field === "doctor_name" ? "asc" : "desc";
+    }
+    currentPage = 1;
+  }
+
   // Pagination Derivations & Clamping
   let totalPages = $derived(
-    Math.max(1, Math.ceil(filteredAppointments.length / pageSize))
+    Math.max(1, Math.ceil(sortedAppointments.length / pageSize))
   );
 
   $effect(() => {
@@ -154,14 +194,14 @@
 
   let paginatedAppointments = $derived.by(() => {
     const start = (currentPage - 1) * pageSize;
-    return filteredAppointments.slice(start, start + pageSize);
+    return sortedAppointments.slice(start, start + pageSize);
   });
 
   let startRecord = $derived(
-    filteredAppointments.length === 0 ? 0 : (currentPage - 1) * pageSize + 1
+    sortedAppointments.length === 0 ? 0 : (currentPage - 1) * pageSize + 1
   );
   let endRecord = $derived(
-    Math.min(currentPage * pageSize, filteredAppointments.length)
+    Math.min(currentPage * pageSize, sortedAppointments.length)
   );
 
   function handleFilterChange(filter: StatusFilter) {
@@ -173,6 +213,17 @@
     const target = e.target as HTMLInputElement;
     searchQuery = target.value;
     currentPage = 1;
+  }
+
+  function clearSearch() {
+    searchQuery = "";
+    currentPage = 1;
+  }
+
+  function setQuickDate(daysOffset: number) {
+    const d = new Date();
+    d.setDate(d.getDate() + daysOffset);
+    appDate = d.toISOString().split("T")[0];
   }
 
   function openBookingModal(patientId?: number) {
@@ -217,7 +268,7 @@
       });
 
       isBookingModalOpen = false;
-      bannerNotice = `Appointment #${newApp.id} booked with ${newApp.doctor_name} for ${newApp.app_date}.`;
+      toast.success(`Appointment #${newApp.id} booked with ${newApp.doctor_name} for ${newApp.app_date}.`);
       await reloadAppointments();
     } catch (err) {
       const e = err as ApiError;
@@ -231,14 +282,13 @@
     appointmentId: number,
     status: "Scheduled" | "Completed" | "Cancelled"
   ) {
-    bannerNotice = null;
     try {
       const updated = await api.updateAppointmentStatus(appointmentId, status);
-      bannerNotice = `Appointment #${updated.id} status updated to ${updated.status}.`;
+      toast.success(`Appointment #${updated.id} marked as ${updated.status}.`);
       await reloadAppointments();
     } catch (err) {
       const e = err as ApiError;
-      errorMessage = `Status update failed: ${e.message}`;
+      toast.error(`Status update failed: ${e.message}`);
     }
   }
 
@@ -265,19 +315,6 @@
 </script>
 
 <div class="flex flex-col gap-6">
-  <!-- Banner Notice -->
-  {#if bannerNotice}
-    <div class="rounded-xl bg-emerald-50 border border-emerald-200/80 p-4 text-sm text-emerald-900 flex items-center justify-between shadow-sm">
-      <div class="flex items-center gap-2">
-        <CheckCircle2 class="size-5 text-emerald-600 shrink-0" />
-        <span class="font-medium">{bannerNotice}</span>
-      </div>
-      <button onclick={() => (bannerNotice = null)} class="text-emerald-700 hover:text-emerald-900 text-xs font-semibold cursor-pointer">
-        Dismiss
-      </button>
-    </div>
-  {/if}
-
   <!-- Top Metrics Cards (Matching Reference Screenshot) -->
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
     <div class="rounded-xl border bg-card text-card-foreground p-6 shadow-sm">
@@ -339,8 +376,22 @@
           placeholder="Filter doctor, patient, ID..."
           value={searchQuery}
           oninput={handleSearchInput}
-          class="pl-9 h-9"
+          onkeydown={(e) => {
+            if (e.key === "Escape") clearSearch();
+          }}
+          data-search-input="true"
+          class="pl-9 pr-8 h-9"
         />
+        {#if searchQuery}
+          <button
+            type="button"
+            onclick={clearSearch}
+            class="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
+            title="Clear filter (Esc)"
+          >
+            <X class="size-4" />
+          </button>
+        {/if}
       </div>
       <Button
         variant="outline"
@@ -373,11 +424,76 @@
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead class="w-20">Appt #</TableHead>
-            <TableHead>Patient</TableHead>
-            <TableHead>Doctor</TableHead>
-            <TableHead class="w-32">Date</TableHead>
-            <TableHead class="w-28 text-center">Status</TableHead>
+            <TableHead class="w-24">
+              <button
+                type="button"
+                onclick={() => toggleSort("id")}
+                class="inline-flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer font-semibold text-xs"
+              >
+                Appt #
+                {#if sortField === "id"}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                {:else}
+                  <ArrowUpDown class="size-3 opacity-40" />
+                {/if}
+              </button>
+            </TableHead>
+            <TableHead>
+              <button
+                type="button"
+                onclick={() => toggleSort("patient_name")}
+                class="inline-flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer font-semibold text-xs"
+              >
+                Patient
+                {#if sortField === "patient_name"}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                {:else}
+                  <ArrowUpDown class="size-3 opacity-40" />
+                {/if}
+              </button>
+            </TableHead>
+            <TableHead>
+              <button
+                type="button"
+                onclick={() => toggleSort("doctor_name")}
+                class="inline-flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer font-semibold text-xs"
+              >
+                Doctor
+                {#if sortField === "doctor_name"}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                {:else}
+                  <ArrowUpDown class="size-3 opacity-40" />
+                {/if}
+              </button>
+            </TableHead>
+            <TableHead class="w-36">
+              <button
+                type="button"
+                onclick={() => toggleSort("app_date")}
+                class="inline-flex items-center gap-1.5 hover:text-foreground transition-colors cursor-pointer font-semibold text-xs"
+              >
+                Date
+                {#if sortField === "app_date"}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                {:else}
+                  <ArrowUpDown class="size-3 opacity-40" />
+                {/if}
+              </button>
+            </TableHead>
+            <TableHead class="w-32 text-center">
+              <button
+                type="button"
+                onclick={() => toggleSort("status")}
+                class="inline-flex items-center justify-center gap-1.5 hover:text-foreground transition-colors cursor-pointer font-semibold text-xs w-full"
+              >
+                Status
+                {#if sortField === "status"}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                {:else}
+                  <ArrowUpDown class="size-3 opacity-40" />
+                {/if}
+              </button>
+            </TableHead>
             <TableHead class="w-16 text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -391,12 +507,28 @@
                 </div>
               </TableCell>
             </TableRow>
-          {:else if filteredAppointments.length === 0}
+          {:else if sortedAppointments.length === 0}
             <TableRow>
-              <TableCell colspan={6} class="h-32 text-center text-sm text-muted-foreground">
-                {searchQuery || activeFilter !== "ALL"
-                  ? "No appointments match your active filter or search query."
-                  : "No appointments have been booked yet. Click 'New Appointment' to schedule a consultation."}
+              <TableCell colspan={6} class="h-36 text-center text-sm text-muted-foreground">
+                {#if searchQuery || activeFilter !== "ALL"}
+                  <div class="flex flex-col items-center justify-center gap-2 py-2">
+                    <p>No appointments match your active filter or search query.</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onclick={() => {
+                        searchQuery = "";
+                        activeFilter = "ALL";
+                        currentPage = 1;
+                      }}
+                      class="cursor-pointer"
+                    >
+                      Reset All Filters
+                    </Button>
+                  </div>
+                {:else}
+                  No appointments have been booked yet. Click 'New Appointment' to schedule a consultation.
+                {/if}
               </TableCell>
             </TableRow>
           {:else}
@@ -404,7 +536,9 @@
               <TableRow>
                 <!-- Appt ID -->
                 <TableCell class="font-mono text-xs text-muted-foreground">
-                  #{app.id}
+                  <Badge variant="outline" class="font-mono text-xs font-normal">
+                    #{app.id}
+                  </Badge>
                 </TableCell>
 
                 <!-- Patient -->
@@ -419,27 +553,27 @@
                 </TableCell>
 
                 <!-- Date -->
-                <TableCell class="tabular-nums text-xs text-muted-foreground">
+                <TableCell class="tabular-nums text-xs text-muted-foreground font-mono">
                   {app.app_date}
                 </TableCell>
 
-                <!-- Status Indicator Badge -->
+                <!-- Status Indicator Badge (Standard shadcn Badge) -->
                 <TableCell class="text-center">
                   {#if app.status === "Scheduled"}
-                    <span class="inline-flex items-center gap-1.5 text-xs text-sky-700 font-medium">
-                      <Clock class="size-3.5 text-sky-600 shrink-0" />
+                    <Badge variant="outline" class="border-sky-200 bg-sky-50 text-sky-700 gap-1 font-medium text-xs">
+                      <Clock class="size-3 text-sky-600 shrink-0" />
                       Scheduled
-                    </span>
+                    </Badge>
                   {:else if app.status === "Completed"}
-                    <span class="inline-flex items-center gap-1.5 text-xs text-emerald-700 font-medium">
-                      <CheckCircle2 class="size-3.5 text-emerald-600 shrink-0" />
+                    <Badge variant="outline" class="border-emerald-200 bg-emerald-50 text-emerald-700 gap-1 font-medium text-xs">
+                      <CheckCircle2 class="size-3 text-emerald-600 shrink-0" />
                       Completed
-                    </span>
+                    </Badge>
                   {:else if app.status === "Cancelled"}
-                    <span class="inline-flex items-center gap-1.5 text-xs text-muted-foreground font-medium">
-                      <XCircle class="size-3.5 text-muted-foreground shrink-0" />
+                    <Badge variant="outline" class="border-zinc-200 bg-zinc-50 text-zinc-600 gap-1 font-medium text-xs">
+                      <XCircle class="size-3 text-zinc-500 shrink-0" />
                       Cancelled
-                    </span>
+                    </Badge>
                   {/if}
                 </TableCell>
 
@@ -588,23 +722,30 @@
       </Dialog.Header>
 
       <form onsubmit={handleCreateBooking} class="flex flex-col gap-4 py-2">
-        <!-- Patient Selector -->
+        <!-- Patient Selector with Empty State Guard -->
         <div>
           <label for="modalPatientSelect" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
             Patient <span class="text-destructive">*</span>
           </label>
-          <select
-            id="modalPatientSelect"
-            class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm w-full focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
-            bind:value={selectedPatientId}
-            disabled={isSubmitting}
-          >
-            {#each patientList as p (p.id)}
-              <option value={p.id}>
-                #{p.id} &bull; {p.full_name} (Age {p.age})
-              </option>
-            {/each}
-          </select>
+          {#if patientList.length === 0}
+            <div class="rounded-lg border border-amber-200/80 bg-amber-50/70 p-3 text-xs text-amber-900 flex flex-col gap-1.5">
+              <p class="font-semibold">No Registered Patients</p>
+              <p>You must register a patient record before scheduling an appointment.</p>
+            </div>
+          {:else}
+            <select
+              id="modalPatientSelect"
+              class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm w-full focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+              bind:value={selectedPatientId}
+              disabled={isSubmitting}
+            >
+              {#each patientList as p (p.id)}
+                <option value={p.id}>
+                  #{p.id} &bull; {p.full_name} (Age {p.age})
+                </option>
+              {/each}
+            </select>
+          {/if}
         </div>
 
         <!-- Doctor Name -->
@@ -618,7 +759,7 @@
             placeholder="e.g. Dr. Maria Cruz"
             bind:value={doctorName}
             aria-invalid={!!bookingErrors.doctor_name}
-            disabled={isSubmitting}
+            disabled={isSubmitting || patientList.length === 0}
             autofocus
           />
           {#if bookingErrors.doctor_name}
@@ -626,17 +767,48 @@
           {/if}
         </div>
 
-        <!-- Date -->
+        <!-- Date with Quick Chips -->
         <div>
-          <label for="modalDate" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-            Consultation Date <span class="text-destructive">*</span>
-          </label>
+          <div class="flex items-center justify-between mb-1.5">
+            <label for="modalDate" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Consultation Date <span class="text-destructive">*</span>
+            </label>
+            <div class="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                class="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                onclick={() => setQuickDate(0)}
+              >
+                Today
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                class="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                onclick={() => setQuickDate(1)}
+              >
+                Tomorrow
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                class="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                onclick={() => setQuickDate(7)}
+              >
+                Next Week
+              </Button>
+            </div>
+          </div>
           <Input
             id="modalDate"
             type="date"
             bind:value={appDate}
             aria-invalid={!!bookingErrors.app_date}
-            disabled={isSubmitting}
+            disabled={isSubmitting || patientList.length === 0}
           />
           {#if bookingErrors.app_date}
             <p class="text-xs text-destructive mt-1">{bookingErrors.app_date.join(" ")}</p>
@@ -658,7 +830,7 @@
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={isSubmitting}>
+          <Button type="submit" disabled={isSubmitting || patientList.length === 0}>
             {#if isSubmitting}
               <Loader2 class="size-4 animate-spin" />
             {/if}
@@ -674,7 +846,7 @@
     bind:open={isEditDialogOpen}
     appointment={appointmentForEdit}
     onSuccess={() => {
-      bannerNotice = `Appointment #${appointmentForEdit?.id} rescheduled successfully.`;
+      toast.success(`Appointment #${appointmentForEdit?.id} updated.`);
       reloadAppointments();
     }}
   />
@@ -684,7 +856,7 @@
     bind:open={isDeleteDialogOpen}
     appointment={appointmentForDelete}
     onSuccess={() => {
-      bannerNotice = `Appointment #${appointmentForDelete?.id} deleted successfully.`;
+      toast.success(`Appointment #${appointmentForDelete?.id} deleted.`);
       reloadAppointments();
     }}
   />
