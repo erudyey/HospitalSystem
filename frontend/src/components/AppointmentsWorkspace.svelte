@@ -1,6 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api, type Patient, type Appointment, type ApiError } from "$lib/api";
+  import {
+    api,
+    type Patient,
+    type Appointment,
+    type StaffUser,
+    type AppointmentStatus,
+    type ApiError,
+  } from "$lib/api";
   import { toast } from "$lib/toast.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -38,6 +45,10 @@
     ArrowDown,
     X,
     Loader2,
+    AlertTriangle,
+    UserCheck,
+    Stethoscope,
+    Activity,
   } from "lucide-svelte";
 
   interface Props {
@@ -52,16 +63,23 @@
     onClearPreselectedPatient,
   }: Props = $props();
 
-  // Patients for dropdown selection
+  // Patients & Doctors for dropdown selection
   let patientList = $state<Patient[]>([]);
+  let doctorList = $state<StaffUser[]>([]);
 
   // Appointments master collection
   let allAppointments = $state<Appointment[]>([]);
   let isLoading = $state(false);
   let errorMessage = $state<string | null>(null);
 
-  // Filters
-  type StatusFilter = "ALL" | "Scheduled" | "Completed" | "Cancelled";
+  // Filters (5-State Clinical Lifecycle + ALL)
+  type StatusFilter =
+    | "ALL"
+    | "Checked In"
+    | "Scheduled"
+    | "In Consultation"
+    | "Completed"
+    | "Cancelled";
   let activeFilter = $state<StatusFilter>("ALL");
   let searchQuery = $state("");
 
@@ -76,8 +94,15 @@
 
   // Booking Modal State
   let selectedPatientId = $state<number | null>(null);
+  let selectedDoctorId = $state<number | null>(null);
   let doctorName = $state("");
   let appDate = $state(new Date().toISOString().split("T")[0]);
+  let appTime = $state("09:00");
+  let reasonForVisit = $state("");
+  let conflictWarning = $state<string | null>(null);
+  let isCheckingConflict = $state(false);
+  let overrideConflict = $state(false);
+  let conflictCheckTimer: ReturnType<typeof setTimeout> | null = null;
   let isSubmitting = $state(false);
   let bookingErrors = $state<Record<string, string[]>>({});
 
@@ -88,16 +113,31 @@
   let isDeleteDialogOpen = $state(false);
   let appointmentForDelete = $state<Appointment | null>(null);
 
+  function formatTime(timeStr?: string): string {
+    if (!timeStr) return "--:--";
+    const parts = timeStr.split(":");
+    if (parts.length < 2) return timeStr;
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    if (isNaN(h) || isNaN(m)) return timeStr;
+    const ampm = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 || 12;
+    const mm = m.toString().padStart(2, "0");
+    return `${h12}:${mm} ${ampm}`;
+  }
+
   async function loadInitialData() {
     isLoading = true;
     errorMessage = null;
     try {
-      const [patients, appointments] = await Promise.all([
+      const [patients, appointments, doctors] = await Promise.all([
         api.listPatients(),
         api.listAllAppointments(),
+        api.auth.listDoctors(),
       ]);
       patientList = patients;
       allAppointments = appointments;
+      doctorList = doctors;
     } catch (err) {
       const e = err as ApiError;
       errorMessage = e.message || "Failed to load clinic records.";
@@ -121,8 +161,14 @@
 
   // Filter count counters
   let countAll = $derived(allAppointments.length);
+  let countCheckedIn = $derived(
+    allAppointments.filter((a) => a.status === "Checked In").length
+  );
   let countScheduled = $derived(
     allAppointments.filter((a) => a.status === "Scheduled").length
+  );
+  let countInConsultation = $derived(
+    allAppointments.filter((a) => a.status === "In Consultation").length
   );
   let countCompleted = $derived(
     allAppointments.filter((a) => a.status === "Completed").length
@@ -228,6 +274,47 @@
     appDate = d.toISOString().split("T")[0];
   }
 
+  function runConflictCheck() {
+    if (conflictCheckTimer) clearTimeout(conflictCheckTimer);
+    conflictWarning = null;
+    if (!selectedDoctorId || selectedDoctorId <= 0 || !appDate || !appTime) {
+      isCheckingConflict = false;
+      return;
+    }
+
+    isCheckingConflict = true;
+    conflictCheckTimer = setTimeout(async () => {
+      try {
+        if (!selectedDoctorId || selectedDoctorId <= 0) return;
+        const res = await api.clinical.checkScheduleConflict(
+          selectedDoctorId,
+          appDate,
+          appTime
+        );
+        if (res.has_conflict && res.conflicts.length > 0) {
+          const first = res.conflicts[0];
+          const doc = doctorList.find((d) => d.id === selectedDoctorId);
+          const docDisplayName = doc ? doc.full_name : doctorName || "Doctor";
+          const formattedConflictTime = formatTime(first.app_time);
+          conflictWarning = `${docDisplayName} already has an appointment scheduled (#${first.id} with ${first.patient_name} at ${formattedConflictTime}) within the +/- 15 minute window.`;
+        } else {
+          conflictWarning = null;
+          overrideConflict = false;
+        }
+      } catch {
+        // Non-blocking conflict check failure
+      } finally {
+        isCheckingConflict = false;
+      }
+    }, 250);
+  }
+
+  $effect(() => {
+    if (isBookingModalOpen && selectedDoctorId && appDate && appTime) {
+      runConflictCheck();
+    }
+  });
+
   function openBookingModal(patientId?: number) {
     if (patientId) {
       selectedPatientId = patientId;
@@ -236,13 +323,21 @@
     } else if (patientList.length > 0) {
       selectedPatientId = patientList[0].id;
     }
-    doctorName = "";
+    selectedDoctorId = doctorList.length > 0 ? doctorList[0].id : null;
+    doctorName = doctorList.length > 0 ? doctorList[0].full_name : "";
     appDate = new Date().toISOString().split("T")[0];
+    appTime = "09:00";
+    reasonForVisit = "";
+    conflictWarning = null;
+    overrideConflict = false;
     bookingErrors = {};
     isBookingModalOpen = true;
   }
 
-  async function handleCreateBooking(e: SubmitEvent) {
+  async function handleCreateBooking(
+    e: SubmitEvent,
+    initialStatus: AppointmentStatus = "Scheduled"
+  ) {
     e.preventDefault();
     if (!selectedPatientId) {
       bookingErrors = { general: ["Please select a patient."] };
@@ -251,8 +346,17 @@
 
     const trimmedDoctor = doctorName.trim();
     const localErrors: Record<string, string[]> = {};
-    if (!trimmedDoctor) localErrors.doctor_name = ["Doctor name is required."];
+    if (!trimmedDoctor && (!selectedDoctorId || selectedDoctorId <= 0)) {
+      localErrors.doctor_name = ["Doctor selection or doctor name is required."];
+    }
     if (!appDate) localErrors.app_date = ["Appointment date is required."];
+    if (!appTime) localErrors.app_time = ["Appointment time is required."];
+
+    if (conflictWarning && !overrideConflict) {
+      localErrors.general = [
+        "A schedule conflict was detected. Check 'Emergency / Walk-in Override' to proceed.",
+      ];
+    }
 
     if (Object.keys(localErrors).length > 0) {
       bookingErrors = localErrors;
@@ -265,12 +369,23 @@
     try {
       const newApp = await api.bookAppointment({
         patient_id: selectedPatientId,
-        doctor_name: trimmedDoctor,
+        doctor_name:
+          trimmedDoctor ||
+          (doctorList.find((d) => d.id === selectedDoctorId)?.full_name ??
+            "Attending Physician"),
+        doctor_id: selectedDoctorId && selectedDoctorId > 0 ? selectedDoctorId : null,
         app_date: appDate,
+        app_time: appTime,
+        reason_for_visit: reasonForVisit.trim(),
+        initial_status: initialStatus,
       });
 
       isBookingModalOpen = false;
-      toast.success(`Appointment #${newApp.id} booked with ${newApp.doctor_name} for ${newApp.app_date}.`);
+      const statusNote =
+        newApp.status === "Checked In" ? " (Checked in to Waiting Room)" : "";
+      toast.success(
+        `Appointment #${newApp.id} booked with ${newApp.doctor_name} for ${newApp.app_date} at ${formatTime(newApp.app_time)}${statusNote}.`
+      );
       await reloadAppointments();
     } catch (err) {
       const e = err as ApiError;
@@ -282,7 +397,7 @@
 
   async function handleStatusChange(
     appointmentId: number,
-    status: "Scheduled" | "Completed" | "Cancelled"
+    status: AppointmentStatus
   ) {
     try {
       const updated = await api.updateAppointmentStatus(appointmentId, status);
@@ -318,31 +433,36 @@
 </script>
 
 <div class="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
-  <!-- Top Metrics Cards (Matching Reference Screenshot) -->
-  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 shrink-0">
+  <!-- Top Metrics Cards (5-State Clinical Lifecycle) -->
+  <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 shrink-0">
     <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <p class="text-[11px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Consultations</p>
+      <p class="text-[11px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Visits</p>
       <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countAll}</p>
       <p class="text-[11px] text-muted-foreground mt-0.5">Master schedule count</p>
+    </div>
+    <div class="rounded-xl border border-amber-200/80 bg-amber-50/40 text-card-foreground p-3.5 sm:p-4 shadow-sm">
+      <p class="text-[11px] sm:text-xs font-semibold text-amber-800 uppercase tracking-wider">Waiting Room</p>
+      <p class="text-xl sm:text-2xl font-bold tracking-tight text-amber-900 mt-1.5">{countCheckedIn}</p>
+      <p class="text-[11px] text-amber-700/80 mt-0.5">Checked in at clinic</p>
     </div>
     <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
       <p class="text-[11px] sm:text-xs font-medium text-sky-700 uppercase tracking-wider">Scheduled</p>
       <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countScheduled}</p>
       <p class="text-[11px] text-muted-foreground mt-0.5">Pending clinical visits</p>
     </div>
+    <div class="rounded-xl border border-purple-200/80 bg-purple-50/40 text-card-foreground p-3.5 sm:p-4 shadow-sm">
+      <p class="text-[11px] sm:text-xs font-semibold text-purple-800 uppercase tracking-wider">Consulting</p>
+      <p class="text-xl sm:text-2xl font-bold tracking-tight text-purple-900 mt-1.5">{countInConsultation}</p>
+      <p class="text-[11px] text-purple-700/80 mt-0.5">Currently with physician</p>
+    </div>
     <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
       <p class="text-[11px] sm:text-xs font-medium text-emerald-700 uppercase tracking-wider">Completed</p>
       <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countCompleted}</p>
       <p class="text-[11px] text-muted-foreground mt-0.5">Discharged records</p>
     </div>
-    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <p class="text-[11px] sm:text-xs font-medium text-zinc-600 uppercase tracking-wider">Cancelled</p>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countCancelled}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Deferred or withdrawn</p>
-    </div>
   </div>
 
-  <!-- Segmented Tabs & Toolbar Bar (Matching Reference Screenshot) -->
+  <!-- Segmented Tabs & Toolbar Bar -->
   <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 shrink-0">
     <!-- Status Filter Tabs -->
     <Tabs.Root
@@ -354,17 +474,23 @@
         }
       }}
     >
-      <Tabs.List>
-        <Tabs.Trigger value="ALL" class="min-w-[72px]">
+      <Tabs.List class="flex flex-wrap h-auto p-1">
+        <Tabs.Trigger value="ALL" class="min-w-[64px]">
           All <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countAll})</span>
         </Tabs.Trigger>
-        <Tabs.Trigger value="Scheduled" class="min-w-[110px]">
+        <Tabs.Trigger value="Checked In" class="min-w-[110px] text-amber-800 data-[state=active]:text-amber-900">
+          Waiting Room <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countCheckedIn})</span>
+        </Tabs.Trigger>
+        <Tabs.Trigger value="Scheduled" class="min-w-[95px]">
           Scheduled <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countScheduled})</span>
         </Tabs.Trigger>
-        <Tabs.Trigger value="Completed" class="min-w-[110px]">
+        <Tabs.Trigger value="In Consultation" class="min-w-[110px]">
+          Consulting <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countInConsultation})</span>
+        </Tabs.Trigger>
+        <Tabs.Trigger value="Completed" class="min-w-[95px]">
           Completed <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countCompleted})</span>
         </Tabs.Trigger>
-        <Tabs.Trigger value="Cancelled" class="min-w-[104px]">
+        <Tabs.Trigger value="Cancelled" class="min-w-[90px]">
           Cancelled <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countCancelled})</span>
         </Tabs.Trigger>
       </Tabs.List>
@@ -571,9 +697,18 @@
                 </TableCell>
 
                 <!-- Patient -->
-                <TableCell class="font-medium text-foreground">
-                  {app.patient_name}
-                  <span class="text-xs text-muted-foreground ml-1 font-normal">(ID #{app.patient_id})</span>
+                <TableCell>
+                  <div class="flex flex-col">
+                    <span class="font-medium text-foreground">
+                      {app.patient_name}
+                      <span class="text-xs text-muted-foreground ml-1 font-normal">(ID #{app.patient_id})</span>
+                    </span>
+                    {#if app.reason_for_visit}
+                      <span class="text-[11px] text-muted-foreground line-clamp-1 italic">
+                        Reason: {app.reason_for_visit}
+                      </span>
+                    {/if}
+                  </div>
                 </TableCell>
 
                 <!-- Doctor -->
@@ -581,17 +716,33 @@
                   {app.doctor_name}
                 </TableCell>
 
-                <!-- Date -->
-                <TableCell class="tabular-nums text-xs text-muted-foreground font-mono">
-                  {app.app_date}
+                <!-- Schedule Date & Time -->
+                <TableCell>
+                  <div class="flex flex-col">
+                    <span class="text-xs font-medium text-foreground">{app.app_date}</span>
+                    <span class="text-[11px] text-muted-foreground font-mono flex items-center gap-1">
+                      <Clock class="size-3 text-muted-foreground shrink-0" />
+                      {formatTime(app.app_time)}
+                    </span>
+                  </div>
                 </TableCell>
 
-                <!-- Status Indicator Badge (Standard shadcn Badge) -->
+                <!-- Status Indicator Badge (5 Clinical States) -->
                 <TableCell class="text-center">
                   {#if app.status === "Scheduled"}
                     <Badge variant="outline" class="border-sky-200 bg-sky-50 text-sky-700 gap-1 font-medium text-xs">
                       <Clock class="size-3 text-sky-600 shrink-0" />
                       Scheduled
+                    </Badge>
+                  {:else if app.status === "Checked In"}
+                    <Badge variant="outline" class="border-amber-300 bg-amber-50 text-amber-800 gap-1 font-medium text-xs">
+                      <UserCheck class="size-3 text-amber-600 shrink-0" />
+                      Checked In
+                    </Badge>
+                  {:else if app.status === "In Consultation"}
+                    <Badge variant="outline" class="border-purple-300 bg-purple-50 text-purple-800 gap-1 font-medium text-xs">
+                      <Stethoscope class="size-3 text-purple-600 shrink-0" />
+                      Consulting
                     </Badge>
                   {:else if app.status === "Completed"}
                     <Badge variant="outline" class="border-emerald-200 bg-emerald-50 text-emerald-700 gap-1 font-medium text-xs">
@@ -606,72 +757,119 @@
                   {/if}
                 </TableCell>
 
-                <!-- Dropdown Menu Actions -->
+                <!-- Actions: Quick Check In + Dropdown Menu -->
                 <TableCell class="text-right">
-                  <DropdownMenu.Root>
-                    <DropdownMenu.Trigger class="inline-flex items-center justify-center rounded-md size-8 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                      <MoreHorizontal class="size-4" />
-                      <span class="sr-only">Open menu</span>
-                    </DropdownMenu.Trigger>
-                    <DropdownMenu.Content align="end">
-                      {#if app.status === "Scheduled"}
-                        <DropdownMenu.Item
-                          onclick={() => handleStatusChange(app.id, "Completed")}
-                          class="text-emerald-700 focus:bg-emerald-50 focus:text-emerald-800 cursor-pointer"
-                        >
-                          <CheckCircle2 class="size-4 mr-2" />
-                          <span>Mark Completed</span>
-                        </DropdownMenu.Item>
-                        <DropdownMenu.Item
-                          onclick={() => openEditAppointment(app)}
-                          class="cursor-pointer"
-                        >
-                          <Calendar class="size-4 mr-2" />
-                          <span>Reschedule / Edit</span>
-                        </DropdownMenu.Item>
-                        <DropdownMenu.Separator />
-                        <DropdownMenu.Item
-                          onclick={() => handleStatusChange(app.id, "Cancelled")}
-                          class="text-amber-700 focus:bg-amber-50 focus:text-amber-800 cursor-pointer"
-                        >
-                          <XCircle class="size-4 mr-2" />
-                          <span>Cancel Appointment</span>
-                        </DropdownMenu.Item>
-                        <DropdownMenu.Item
-                          onclick={() => openDeleteAppointment(app)}
-                          class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
-                        >
-                          <Trash2 class="size-4 mr-2" />
-                          <span>Delete</span>
-                        </DropdownMenu.Item>
-                      {:else if app.status === "Cancelled"}
-                        <DropdownMenu.Item
-                          onclick={() => handleStatusChange(app.id, "Scheduled")}
-                          class="text-sky-700 focus:bg-sky-50 focus:text-sky-800 cursor-pointer"
-                        >
-                          <RotateCcw class="size-4 mr-2" />
-                          <span>Restore to Scheduled</span>
-                        </DropdownMenu.Item>
-                        <DropdownMenu.Separator />
-                        <DropdownMenu.Item
-                          onclick={() => openDeleteAppointment(app)}
-                          class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
-                        >
-                          <Trash2 class="size-4 mr-2" />
-                          <span>Delete</span>
-                        </DropdownMenu.Item>
-                      {:else if app.status === "Completed"}
-                        <!-- Completed records are immutable: only deletion is permissible -->
-                        <DropdownMenu.Item
-                          onclick={() => openDeleteAppointment(app)}
-                          class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
-                        >
-                          <Trash2 class="size-4 mr-2" />
-                          <span>Delete</span>
-                        </DropdownMenu.Item>
-                      {/if}
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Root>
+                  <div class="inline-flex items-center justify-end gap-1.5">
+                    {#if app.status === "Scheduled"}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        class="h-7 text-xs px-2 border-amber-300 bg-amber-50/70 text-amber-900 hover:bg-amber-100 hover:text-amber-950 cursor-pointer inline-flex items-center gap-1 font-medium"
+                        onclick={() => handleStatusChange(app.id, "Checked In")}
+                        title="Check in patient to Waiting Room"
+                      >
+                        <UserCheck class="size-3 text-amber-600" />
+                        Check In
+                      </Button>
+                    {/if}
+
+                    <DropdownMenu.Root>
+                      <DropdownMenu.Trigger class="inline-flex items-center justify-center rounded-md size-8 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <MoreHorizontal class="size-4" />
+                        <span class="sr-only">Open menu</span>
+                      </DropdownMenu.Trigger>
+                      <DropdownMenu.Content align="end">
+                        {#if app.status === "Scheduled"}
+                          <DropdownMenu.Item
+                            onclick={() => handleStatusChange(app.id, "Checked In")}
+                            class="text-amber-800 focus:bg-amber-50 focus:text-amber-900 cursor-pointer"
+                          >
+                            <UserCheck class="size-4 mr-2" />
+                            <span>Check In (Waiting Room)</span>
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Item
+                            onclick={() => openEditAppointment(app)}
+                            class="cursor-pointer"
+                          >
+                            <Calendar class="size-4 mr-2" />
+                            <span>Reschedule Visit</span>
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Item
+                            onclick={() => handleStatusChange(app.id, "Cancelled")}
+                            class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
+                          >
+                            <XCircle class="size-4 mr-2" />
+                            <span>Cancel Appointment</span>
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Separator />
+                          <DropdownMenu.Item
+                            onclick={() => openDeleteAppointment(app)}
+                            class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
+                          >
+                            <Trash2 class="size-4 mr-2" />
+                            <span>Delete Record</span>
+                          </DropdownMenu.Item>
+                        {:else if app.status === "Checked In"}
+                          <DropdownMenu.Item
+                            onclick={() => handleStatusChange(app.id, "In Consultation")}
+                            class="text-purple-800 focus:bg-purple-50 focus:text-purple-900 cursor-pointer"
+                          >
+                            <Stethoscope class="size-4 mr-2" />
+                            <span>Send to Consultation</span>
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Item
+                            onclick={() => handleStatusChange(app.id, "Scheduled")}
+                            class="cursor-pointer"
+                          >
+                            <RotateCcw class="size-4 mr-2" />
+                            <span>Return to Scheduled</span>
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Item
+                            onclick={() => handleStatusChange(app.id, "Cancelled")}
+                            class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
+                          >
+                            <XCircle class="size-4 mr-2" />
+                            <span>Cancel Appointment</span>
+                          </DropdownMenu.Item>
+                        {:else if app.status === "In Consultation"}
+                          <DropdownMenu.Item
+                            onclick={() => handleStatusChange(app.id, "Completed")}
+                            class="text-emerald-700 focus:bg-emerald-50 focus:text-emerald-800 cursor-pointer"
+                          >
+                            <CheckCircle2 class="size-4 mr-2" />
+                            <span>Mark Completed</span>
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Item
+                            onclick={() => handleStatusChange(app.id, "Cancelled")}
+                            class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
+                          >
+                            <XCircle class="size-4 mr-2" />
+                            <span>Cancel Appointment</span>
+                          </DropdownMenu.Item>
+                        {:else if app.status === "Completed"}
+                          <div class="px-2 py-1.5 text-xs text-muted-foreground italic">
+                            Finalized clinical visit
+                          </div>
+                        {:else if app.status === "Cancelled"}
+                          <DropdownMenu.Item
+                            onclick={() => handleStatusChange(app.id, "Scheduled")}
+                            class="text-sky-700 focus:bg-sky-50 focus:text-sky-800 cursor-pointer"
+                          >
+                            <RotateCcw class="size-4 mr-2" />
+                            <span>Reopen as Scheduled</span>
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Separator />
+                          <DropdownMenu.Item
+                            onclick={() => openDeleteAppointment(app)}
+                            class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
+                          >
+                            <Trash2 class="size-4 mr-2" />
+                            <span>Delete Record</span>
+                          </DropdownMenu.Item>
+                        {/if}
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Root>
+                  </div>
                 </TableCell>
               </TableRow>
             {/each}
@@ -777,72 +975,168 @@
           {/if}
         </div>
 
-        <!-- Doctor Name -->
+        <!-- Attending Physician Selector -->
         <div>
-          <label for="modalDoctor" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-            Attending Doctor <span class="text-destructive">*</span>
+          <label for="modalDoctorSelect" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+            Attending Physician <span class="text-destructive">*</span>
           </label>
-          <Input
-            id="modalDoctor"
-            type="text"
-            placeholder="e.g. Dr. Maria Cruz"
-            bind:value={doctorName}
-            aria-invalid={!!bookingErrors.doctor_name}
-            disabled={isSubmitting || patientList.length === 0}
-            autofocus
-          />
+          <select
+            id="modalDoctorSelect"
+            class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm w-full focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+            bind:value={selectedDoctorId}
+            onchange={(e) => {
+              const val = Number((e.target as HTMLSelectElement).value);
+              selectedDoctorId = val > 0 ? val : null;
+              if (val > 0) {
+                const doc = doctorList.find((d) => d.id === val);
+                if (doc) doctorName = doc.full_name;
+              } else if (val === -1) {
+                doctorName = "";
+              }
+            }}
+            disabled={isSubmitting}
+          >
+            {#if doctorList.length > 0}
+              <option value={null}>-- Select Attending Physician --</option>
+              {#each doctorList as doc (doc.id)}
+                <option value={doc.id}>
+                  Dr. {doc.full_name.replace(/^Dr\.\s*/i, "")} ({doc.specialty || "General Medicine"})
+                </option>
+              {/each}
+              <option value={-1}>Other / Visiting Physician...</option>
+            {:else}
+              <option value={null}>No registered physicians found</option>
+              <option value={-1}>Custom Physician Name...</option>
+            {/if}
+          </select>
+
+          {#if selectedDoctorId === -1 || doctorList.length === 0}
+            <div class="mt-2">
+              <Input
+                id="modalCustomDoctor"
+                type="text"
+                placeholder="e.g. Dr. Maria Cruz"
+                bind:value={doctorName}
+                aria-invalid={!!bookingErrors.doctor_name}
+                disabled={isSubmitting}
+              />
+            </div>
+          {/if}
+
           {#if bookingErrors.doctor_name}
             <p class="text-xs text-destructive mt-1">{bookingErrors.doctor_name.join(" ")}</p>
           {/if}
         </div>
 
-        <!-- Date with Quick Chips -->
+        <!-- Date & Time Row -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <!-- Date with Quick Chips -->
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <label for="modalDate" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Date <span class="text-destructive">*</span>
+              </label>
+              <div class="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  class="h-6 text-[11px] px-1 text-muted-foreground hover:text-foreground cursor-pointer"
+                  onclick={() => setQuickDate(0)}
+                >
+                  Today
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  class="h-6 text-[11px] px-1 text-muted-foreground hover:text-foreground cursor-pointer"
+                  onclick={() => setQuickDate(1)}
+                >
+                  Tomorrow
+                </Button>
+              </div>
+            </div>
+            <Input
+              id="modalDate"
+              type="date"
+              bind:value={appDate}
+              aria-invalid={!!bookingErrors.app_date}
+              disabled={isSubmitting || patientList.length === 0}
+            />
+            {#if bookingErrors.app_date}
+              <p class="text-xs text-destructive mt-1">{bookingErrors.app_date.join(" ")}</p>
+            {/if}
+          </div>
+
+          <!-- Time Slot -->
+          <div>
+            <label for="modalTime" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+              Time Slot <span class="text-destructive">*</span>
+            </label>
+            <Input
+              id="modalTime"
+              type="time"
+              bind:value={appTime}
+              aria-invalid={!!bookingErrors.app_time}
+              disabled={isSubmitting || patientList.length === 0}
+            />
+            {#if bookingErrors.app_time}
+              <p class="text-xs text-destructive mt-1">{bookingErrors.app_time.join(" ")}</p>
+            {/if}
+          </div>
+        </div>
+
+        <!-- Reason for Visit & Quick Chips -->
         <div>
           <div class="flex items-center justify-between mb-1.5">
-            <label for="modalDate" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Consultation Date <span class="text-destructive">*</span>
+            <label for="modalReason" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Reason for Visit
             </label>
-            <div class="flex items-center gap-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                class="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
-                onclick={() => setQuickDate(0)}
-              >
-                Today
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                class="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
-                onclick={() => setQuickDate(1)}
-              >
-                Tomorrow
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                class="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
-                onclick={() => setQuickDate(7)}
-              >
-                Next Week
-              </Button>
+            <div class="flex items-center gap-1 flex-wrap">
+              {#each ["Checkup", "Follow-up", "Fever", "Rx Refill"] as reasonChip}
+                <button
+                  type="button"
+                  class="text-[10px] bg-muted/70 hover:bg-muted text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                  onclick={() => (reasonForVisit = reasonChip)}
+                >
+                  {reasonChip}
+                </button>
+              {/each}
             </div>
           </div>
           <Input
-            id="modalDate"
-            type="date"
-            bind:value={appDate}
-            aria-invalid={!!bookingErrors.app_date}
+            id="modalReason"
+            type="text"
+            placeholder="e.g. Routine checkup, throat pain, prescription renewal"
+            bind:value={reasonForVisit}
             disabled={isSubmitting || patientList.length === 0}
           />
-          {#if bookingErrors.app_date}
-            <p class="text-xs text-destructive mt-1">{bookingErrors.app_date.join(" ")}</p>
-          {/if}
         </div>
+
+        <!-- Reactive Conflict Check Warning Banner -->
+        {#if isCheckingConflict}
+          <div class="flex items-center gap-2 text-xs text-muted-foreground py-1">
+            <Loader2 class="size-3 animate-spin text-primary" />
+            <span>Checking doctor schedule availability...</span>
+          </div>
+        {:else if conflictWarning}
+          <div class="rounded-lg border border-amber-300 bg-amber-50/90 p-3 text-xs text-amber-900 flex flex-col gap-2">
+            <div class="flex items-center gap-2 font-semibold text-amber-800">
+              <AlertTriangle class="size-4 text-amber-600 shrink-0" />
+              <span>Schedule Conflict Warning</span>
+            </div>
+            <p>{conflictWarning}</p>
+            <label class="flex items-center gap-2 font-medium cursor-pointer text-amber-950 mt-1 select-none">
+              <input
+                type="checkbox"
+                bind:checked={overrideConflict}
+                class="rounded border-amber-400 text-amber-600 focus:ring-amber-500 cursor-pointer"
+              />
+              <span>Emergency / Walk-in Override (Book Anyway)</span>
+            </label>
+          </div>
+        {/if}
 
         {#if bookingErrors.general}
           <div class="rounded-md bg-destructive/10 border border-destructive/20 p-3 text-xs text-destructive">
@@ -850,7 +1144,7 @@
           </div>
         {/if}
 
-        <Dialog.Footer class="pt-2">
+        <Dialog.Footer class="pt-2 flex flex-col sm:flex-row gap-2">
           <Button
             type="button"
             variant="outline"
@@ -859,11 +1153,29 @@
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={isSubmitting || patientList.length === 0}>
+          <Button
+            type="button"
+            variant="secondary"
+            onclick={(e) => handleCreateBooking(e, "Checked In")}
+            disabled={isSubmitting || patientList.length === 0 || (!!conflictWarning && !overrideConflict)}
+            class="cursor-pointer border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+          >
             {#if isSubmitting}
-              <Loader2 class="size-4 animate-spin" />
+              <Loader2 class="size-4 animate-spin mr-1" />
+            {:else}
+              <UserCheck class="size-4 mr-1 text-amber-700" />
             {/if}
-            Confirm Schedule
+            Book & Check In
+          </Button>
+          <Button
+            type="submit"
+            disabled={isSubmitting || patientList.length === 0 || (!!conflictWarning && !overrideConflict)}
+            class="cursor-pointer"
+          >
+            {#if isSubmitting}
+              <Loader2 class="size-4 animate-spin mr-1" />
+            {/if}
+            Book Appointment
           </Button>
         </Dialog.Footer>
       </form>
@@ -874,6 +1186,7 @@
   <EditAppointmentDialog
     bind:open={isEditDialogOpen}
     appointment={appointmentForEdit}
+    doctorList={doctorList}
     onSuccess={() => {
       toast.success(`Appointment #${appointmentForEdit?.id} updated.`);
       reloadAppointments();
