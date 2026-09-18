@@ -53,6 +53,7 @@ detail you need:
 | [System Architecture](docs/system-architecture.md) | System Level   | Process lifecycle, loopback isolation, single-instance protection, and persistence |
 | [API Contracts](docs/api-contracts.md)             | Technical Spec | REST endpoints, payload schemas, and appointment state machine                     |
 | [Developer Runbook](docs/development.md)           | Implementation | Local environment setup, quality checks, and standalone packaging                  |
+| [Git Cheatsheet](docs/git-cheatsheet.md)           | Workflow       | Team version control guide, conventional commits, and safety rules                 |
 
 ---
 

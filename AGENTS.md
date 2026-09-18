@@ -26,6 +26,8 @@ contributors working on the HospitalSystem codebase.
    and workflow runbooks.
 9. Read [ROADMAP.md](ROADMAP.md) (or [TODO.md](TODO.md)) for decoupled task
    slices, progress tracking, and active implementation status.
+10. Read [docs/git-cheatsheet.md](docs/git-cheatsheet.md) for team Git workflow,
+    atomic commit rules, and safe collaboration practices.
 
 ---
 
@@ -97,17 +99,57 @@ execute and pass the following quality gates:
 
 ## 5. Current Active Milestone: Role-Based Clinical Hospital System
 
-The project is actively expanding from the baseline desktop app into a dual-role
-hospital management system:
+The system is transitioning from a single-window desktop baseline into a dual-role
+hospital management application with separate workspaces for **Receptionists** and
+**Doctors**.
 
-- **Receptionist Workspace**: Patient registration, queue triage (`Checked In`
-  status), appointment booking with date/time granularity, and doctor schedule
-  conflict warnings.
-- **Doctor Workspace**: Live waiting room queue, doctor-specific schedules,
-  assigned patient roster, and structured SOAP clinical diagnoses and
-  prescriptions.
-- **Authentication & Staff Management**: Password hashing (PBKDF2-SHA256),
-  session tokens, staff registration, and profile management.
+### What Has Been Completed (Slices 1 to 3 -- 100% Backend Complete)
+
+- **Slice 1: Database Schema & Migrations**:
+  - Models: `StaffRole`, `StaffUser` (PBKDF2 passwords), `UserSession` (URL tokens),
+    `MedicalRecord` (SOAP notes).
+  - Enriched `Appointment`: added `app_time` (`TimeField`), `reason_for_visit`,
+    `doctor` FK, and 5-state lifecycle (`Scheduled`, `Checked In`,
+    `In Consultation`, `Completed`, `Cancelled`).
+  - Migration `0002` applied and verified.
+- **Slice 2: Authentication & Staff Service Layer**:
+  - Services: `register_staff()`, `authenticate_staff()`, `validate_session()`,
+    `logout_staff()`, `update_staff_profile()`, `list_doctors()`.
+  - Endpoints: `/api/auth/register/`, `/api/auth/login/`, `/api/auth/me/`,
+    `/api/auth/logout/`, `/api/auth/profile/`, `/api/doctors/`.
+- **Slice 3: Clinical Logic & Schedule Conflict Engine**:
+  - Services: `check_schedule_conflict()` (+/- 15 min overlap detection),
+    `update_appointment_status()` (5-state lifecycle matrix, immutable completed
+    records, protected deletion), `get_doctor_queue()`, `get_doctor_patients()`,
+    `create_medical_record()`, `update_medical_record()`.
+  - Endpoints: `/api/appointments/conflict-check/`, `/api/doctor/queue/`,
+    `/api/doctor/patients/`, `/api/doctor/appointments/`, `/api/medical-records/`,
+    `/api/patients/<id>/medical-records/`.
+  - Test Suite: **64 passing tests** in `backend/tests/` (100% pass rate).
+
+### What Is In Progress and Yet to Be Done (Slices 4 to 7)
+
+1. **Slice 4: Receptionist Workspace UI**:
+   - Files: `frontend/src/components/AppointmentsWorkspace.svelte`,
+     `EditAppointmentDialog.svelte`, `frontend/src/lib/api.ts`.
+   - Tasks: Doctor dropdown from `/api/doctors/`, time input `<Input type="time">`,
+     real-time schedule conflict warning banner, "Book & Check In" triage action,
+     and waiting room "Check In" table action button.
+2. **Slice 5: Doctor Workspace UI**:
+   - Files: `frontend/src/components/DoctorWorkspace.svelte`,
+     `ConsultationDialog.svelte`, `PatientChartDialog.svelte`.
+   - Tasks: Tabbed physician dashboard (Waiting Room queue, today's schedule,
+     my patients roster, clinical notes log), SOAP consultation dialog
+     (Diagnosis, Symptoms, Notes, Prescription, Follow-up), and patient chart.
+3. **Slice 6: Auth Gateway & Settings Suite**:
+   - Files: `frontend/src/components/AuthModal.svelte`, `SettingsDialog.svelte`,
+     `frontend/src/App.svelte`.
+   - Tasks: Sign In / Register staff modal with demo quick-fill buttons, unified
+     Settings dialog with Demo Mode toggle, and role-based workspace mounting.
+4. **Slice 7: Seed Data & Final Packaging Proof**:
+   - Files: `backend/clinic/management/commands/seed.py`, `docs/`, `package.py`.
+   - Tasks: Multi-role seed data fixtures, documentation sync, and standalone
+     `.exe` bundle verification.
 
 ---
 
