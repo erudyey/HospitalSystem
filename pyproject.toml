@@ -32,6 +32,11 @@ target-version = "py312"
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 ignore = ["E501"]
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*", "desktop*"]
+exclude = ["frontend*"]
+
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "backend.config.settings"
 pythonpath = ["."]
