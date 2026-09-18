@@ -1,159 +1,128 @@
-# Specialized Git Cheatsheet & Team Workflow Guide
+# Git Reference and Workflow Guide
 
-Welcome to the HospitalSystem team! This guide explains how Git works in plain
-English, breaks down the day-to-day commands you need, and covers our team's
-essential rules so you can contribute confidently without fear of breaking
-anything.
+This document defines version control procedures, core Git operations, commit
+standards, and quality requirements for the HospitalSystem repository.
 
 ---
 
-## 1. How Git Works: The 4 Zones
+## 1. Git Architecture
 
-Git tracks changes across four main areas:
+Git tracks files across four discrete working areas:
 
 ```
-[ Working Tree ]  --(git add)-->  [ Staging Area ]  --(git commit)-->  [ Local Repo ]  --(git push)-->  [ Remote Repo (GitHub) ]
-  (Your files)                     (Index / Staged)                      (.git history)                   (origin/master)
+[ Working Tree ]  --(git add)-->  [ Staging Area ]  --(git commit)-->  [ Local Repo ]  --(git push)-->  [ Remote Repo ]
+  (Edited files)                   (Index)                               (.git history)                   (origin/master)
 ```
 
-1. **Working Tree**: The actual files you see and edit in VS Code, Antigravity,
-   or Cursor.
-2. **Staging Area (Index)**: A preparation area where you select which modified
-   files are ready to be packaged into your next commit.
-3. **Local Repository**: Saved snapshots (commits) recorded permanently on your
-   machine's local `.git` history.
-4. **Remote Repository (`origin`)**: The shared GitHub repository where your team
-   collaborates.
+1. **Working Tree**: Files currently checked out and edited on disk.
+2. **Staging Area (Index)**: Files marked for inclusion in the next commit.
+3. **Local Repository**: Permanent commit snapshots stored locally in `.git`.
+4. **Remote Repository**: Shared repository on GitHub (`origin`).
 
 ---
 
-## 2. Daily Routine: Step-by-Step
+## 2. Standard Development Flow
 
-### Step 1: Start Your Day by Pulling Latest Changes
+### Fetch Latest Remote Changes
 
-Before making any changes, always fetch and merge what your teammates have
-pushed:
+Synchronize local `master` with remote before starting edits:
 
 ```bash
 git pull origin master
 ```
 
-> **Why?** This prevents merge conflicts by making sure your code starts from the
-> latest shared code.
+### Inspect Modifications
 
----
-
-### Step 2: Check What Changed
-
-Whenever you edit files, check which files Git sees as modified or untracked:
+Review modified and untracked files:
 
 ```bash
 git status
 ```
 
-To see the exact line-by-line differences before staging:
+Inspect exact line diffs in the working tree:
 
 ```bash
 git diff
 ```
 
----
+### Run Quality Gates
 
-### Step 3: Run Verification Before Staging
-
-In HospitalSystem, never commit broken code. Always run the fast test suite:
+Verify tests and formatting before staging changes:
 
 ```powershell
-# In PowerShell:
 .\run.ps1 test
-
-# Or directly via uv:
-uv run pytest backend/tests/ -v
-```
-
-And run the code style linter and formatter:
-
-```powershell
 .\run.ps1 format
 ```
 
----
-
-### Step 4: Stage Your Changes
-
-Select the files you want to include in your next commit:
+Or directly via Python toolchain:
 
 ```bash
-# Stage a specific file:
-git add backend/clinic/services.py
-
-# Stage multiple specific files:
-git add backend/clinic/views.py backend/clinic/urls.py
-
-# Stage everything you modified (use carefully, check git status first!):
-git add .
+uv run pytest backend/tests/ -v
+uv run ruff check backend desktop package.py
+.venv/Scripts/python.exe -m basedpyright
 ```
 
-To unstage a file if you added it by mistake:
+### Stage Changes
+
+Add specific files to the staging index:
+
+```bash
+git add backend/clinic/services.py
+git add backend/clinic/views.py backend/clinic/urls.py
+```
+
+Remove a file from the staging index without discarding disk edits:
 
 ```bash
 git restore --staged <file-path>
 ```
 
----
+### Commit Changes
 
-### Step 5: Create a Commit (Atomic & Descriptive)
-
-A commit is a permanent snapshot with an explanatory message. We follow the
-**Conventional Commits** standard:
+Record an atomic commit following Conventional Commits format:
 
 ```bash
-git commit -m "type(scope): short description in present tense"
+git commit -m "<type>(<scope>): <summary in present tense>"
 ```
 
-#### Allowed Commit Types:
+#### Commit Types
 
-| Type       | When to Use                                      | Example                                                                          |
+| Type       | Purpose                                          | Example                                                                          |
 | :--------- | :----------------------------------------------- | :------------------------------------------------------------------------------- |
-| `feat`     | Adding a new feature or endpoint                 | `git commit -m "feat(receptionist): add conflict warning banner to booking form"`|
-| `fix`      | Fixing a bug or unexpected behavior              | `git commit -m "fix(services): prevent deletion of completed appointments"`       |
-| `test`     | Adding or updating tests                         | `git commit -m "test(clinical): add test cases for 15-minute slot overlap"`     |
-| `docs`     | Documentation updates                            | `git commit -m "docs(api): document doctor queue request schemas"`              |
-| `refactor` | Code restructuring without behavior change       | `git commit -m "refactor(views): extract reusable token parser"`                 |
-| `chore`    | Build tooling, dependencies, or formatting       | `git commit -m "chore(format): run ruff format across backend"`                 |
+| `feat`     | New user-facing or API feature                   | `git commit -m "feat(receptionist): add conflict warning banner to booking form"`|
+| `fix`      | Bug fix or correction                            | `git commit -m "fix(services): prevent deletion of completed appointments"`       |
+| `test`     | Add, update, or refactor tests                   | `git commit -m "test(clinical): add test cases for 15-minute slot overlap"`     |
+| `docs`     | Documentation changes only                       | `git commit -m "docs(api): document doctor queue request schemas"`              |
+| `refactor` | Code change without behavioral alteration        | `git commit -m "refactor(views): extract reusable token parser"`                 |
+| `chore`    | Tooling, dependencies, or formatting adjustments | `git commit -m "chore(format): run ruff format across backend"`                 |
 
-> **Rule of Thumb (Atomic Commits)**: One logical change per commit. Do not mix
-> fixing a bug, reformatting unrelated files, and adding a new feature in a
-> single commit.
+Rules:
+- Keep commits atomic: one logical change per commit.
+- Never mix formatting changes with feature implementations.
 
----
+### Push to Remote
 
-### Step 6: Push to GitHub
-
-Once your local commit is saved and tests pass, send it to the shared remote:
+Publish local commits to GitHub:
 
 ```bash
 git push origin master
 ```
 
-*(If you are working on a feature branch: `git push origin <branch-name>`)*
-
 ---
 
-## 3. Working with Branches (Feature Slices)
+## 3. Branch Operations
 
-When working on a separate feature slice, use a branch to avoid interfering with
-other teammates:
+For isolated feature development:
 
 ```bash
-# Create and switch to a new branch:
-git checkout -b feature/doctor-workspace
+# Create and check out a feature branch:
+git checkout -b feature/<feature-name>
 
-# Verify which branch you are on:
+# Verify active branch:
 git branch
 
-# Push your branch to GitHub for the first time:
-git push -u origin feature/doctor-workspace
+# Push new branch to remote and set upstream:
+git push -u origin feature/<feature-name>
 
 # Switch back to master:
 git checkout master
@@ -161,75 +130,66 @@ git checkout master
 
 ---
 
-## 4. Helpful Safety Nets (When Things Go Wrong)
+## 4. Reverting and Stashing
 
-### "I made changes to a file and want to throw them away"
-To discard uncommitted changes in your working tree:
+### Discard Working Tree Modifications
+
+Discard unstaged edits to a file:
+
 ```bash
-git restore path/to/file.py
+git restore <file-path>
 ```
 
-### "I want to temporarily stash my work so I can pull latest changes"
+### Stash Uncommitted Changes
+
+Temporarily shelve uncommitted work to pull or switch branches:
+
 ```bash
-# Save your uncommitted work to a temporary shelf:
+# Save uncommitted edits:
 git stash
 
-# Pull the latest changes:
-git pull origin master
-
-# Reapply your saved work:
+# Restore stashed edits:
 git stash pop
 ```
 
-### "I want to see the last few commits"
+### Inspect Commit History
+
+View recent concise commit log:
+
 ```bash
 git log --oneline -n 10
 ```
 
-### "How do I check what commit remote is currently on?"
-```bash
-git status -v
-```
+---
+
+## 5. Repository Policy
+
+1. **Zero Em/En Dash Policy**: No em dashes (`\u2014`) or en dashes (`\u2013`)
+   in code, docstrings, markdown, or commit messages. Use `--`, `:`, or
+   parentheses.
+2. **Protected Storage**: Never commit `*.sqlite3` or `.env` files. Production
+   database located in OS AppData / Library is protected user data.
+3. **Deno Frontend Build**: Manage frontend dependencies through Deno
+   (`deno.json`). Do not introduce Node.js or `npm`.
+4. **Mandatory Verification**: All commits pushed to remote must pass
+   `uv run pytest backend/tests/ -v` and `basedpyright`.
 
 ---
 
-## 5. Non-Negotiable HospitalSystem Repository Rules
+## 6. Command Reference
 
-### 1. The Zero Em/En Dash Rule
-* Strictly **zero** em dashes (`\u2014`) and en dashes (`\u2013`) are permitted
-  in any file, comment, docstring, markdown, or commit message.
-* Always use standard double hyphens (`--`), colons (`:`), or parentheses.
-
-### 2. Never Commit User Data or Secrets
-* Never stage `%LOCALAPPDATA%\HospitalSystem\clinic.sqlite3`, `*.sqlite3`,
-  or `.env` files.
-* Test databases exist in memory only (`TESTING=True`).
-
-### 3. No npm or Node.js in the Frontend
-* The frontend uses **Deno 2**. Run `deno task build` inside `frontend/` instead
-  of `npm run build`.
-
-### 4. Run Verification Before Pushing
-Before any `git push`, run:
-1. `uv run pytest backend/tests/ -v` (All tests must pass).
-2. `uv run ruff check backend desktop package.py` (Zero linter errors).
-3. `.venv/Scripts/python.exe -m basedpyright` (Zero type errors).
-
----
-
-## 6. Quick Cheat Sheet Table
-
-| Task                             | Command                                       |
-| :------------------------------- | :-------------------------------------------- |
-| Update from GitHub               | `git pull origin master`                      |
-| Check modified files             | `git status`                                  |
-| View unstaged line diffs         | `git diff`                                    |
-| Stage a file                     | `git add <file>`                              |
-| Unstage a file                   | `git restore --staged <file>`                 |
-| Discard uncommitted edits        | `git restore <file>`                          |
-| Commit changes                   | `git commit -m "type(scope): description"`    |
-| Push commits to GitHub           | `git push origin master`                      |
-| Create and switch branch         | `git checkout -b <branch-name>`               |
-| View commit history              | `git log --oneline -n 10`                     |
-| Temporarily stash work           | `git stash`                                   |
-| Restore stashed work             | `git stash pop`                               |
+| Action                        | Command                                      |
+| :---------------------------- | :------------------------------------------- |
+| Pull latest remote commits    | `git pull origin master`                     |
+| View status of modified files | `git status`                                 |
+| View unstaged line diffs      | `git diff`                                   |
+| Stage file for commit         | `git add <file>`                             |
+| Unstage file                  | `git restore --staged <file>`                |
+| Discard unstaged changes      | `git restore <file>`                         |
+| Commit staged changes         | `git commit -m "<type>(<scope>): <summary>"` |
+| Push commits to remote        | `git push origin <branch>`                   |
+| Create and switch branch      | `git checkout -b <branch>`                   |
+| Switch branch                 | `git checkout <branch>`                      |
+| View compact commit history   | `git log --oneline -n 10`                    |
+| Stash uncommitted changes     | `git stash`                                  |
+| Apply stashed changes         | `git stash pop`                              |

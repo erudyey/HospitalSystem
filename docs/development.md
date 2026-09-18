@@ -73,7 +73,7 @@ cd frontend; deno install; cd ..
 
 ---
 
-## 3. Daily Development Workflows
+## 3. Development Execution Modes
 
 ### Concurrent Development (Vite HMR + Django API)
 
