@@ -41,7 +41,13 @@ def register_patient(full_name: str, contact: str = "", age: int = 0) -> Patient
 
 def list_patients(query: str | None = None) -> list[Patient]:
     """Return patients ordered by ID with precalculated appointment counts."""
-    queryset = Patient.objects.annotate(appointment_count=Count("appointments")).order_by("id")
+    queryset = Patient.objects.annotate(
+        appointment_count=Count("appointments"),
+        active_appointment_count=Count(
+            "appointments",
+            filter=Q(appointments__status=AppointmentStatus.SCHEDULED),
+        ),
+    ).order_by("id")
     if query:
         clean_query = query.strip()
         if clean_query.isdigit():
@@ -53,7 +59,13 @@ def list_patients(query: str | None = None) -> list[Patient]:
 
 def get_patient(patient_id: int) -> Patient:
     """Retrieve a single patient by ID with appointment count or raise Patient.DoesNotExist."""
-    return Patient.objects.annotate(appointment_count=Count("appointments")).get(id=patient_id)
+    return Patient.objects.annotate(
+        appointment_count=Count("appointments"),
+        active_appointment_count=Count(
+            "appointments",
+            filter=Q(appointments__status=AppointmentStatus.SCHEDULED),
+        ),
+    ).get(id=patient_id)
 
 
 def book_appointment(patient_id: int, doctor_name: str, app_date_str: str) -> Appointment:

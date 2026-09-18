@@ -205,3 +205,19 @@ class ClinicServicesTests(TestCase):
         # 6. Cancelled -> Scheduled is ALLOWED (restoration)
         restored = services.update_appointment_status(app2.id, "Scheduled")
         self.assertEqual(restored.status, AppointmentStatus.SCHEDULED)
+
+    def test_patient_active_appointment_count_annotation(self) -> None:
+        # Arrange
+        patient = services.register_patient("Alex Morgan", "09171234567", 30)
+        app = services.book_appointment(patient.id, "Dr. Grey", "2026-11-10")
+
+        # Act 1: Initial state is Scheduled
+        fetched = services.get_patient(patient.id)
+        self.assertEqual(getattr(fetched, "appointment_count", 0), 1)
+        self.assertEqual(getattr(fetched, "active_appointment_count", 0), 1)
+
+        # Act 2: Mark appointment as Completed -> active count drops to 0 while total remains 1
+        services.update_appointment_status(app.id, "Completed")
+        fetched_after = services.get_patient(patient.id)
+        self.assertEqual(getattr(fetched_after, "appointment_count", 0), 1)
+        self.assertEqual(getattr(fetched_after, "active_appointment_count", 0), 0)

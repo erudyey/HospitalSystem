@@ -9,6 +9,7 @@ export interface Patient {
   contact: string;
   age: number;
   appointment_count?: number;
+  active_appointment_count?: number;
 }
 
 export interface Appointment {

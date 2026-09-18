@@ -63,6 +63,7 @@ def serialize_patient(patient: Patient) -> dict[str, Any]:
         "contact": patient.contact,
         "age": patient.age,
         "appointment_count": getattr(patient, "appointment_count", 0),
+        "active_appointment_count": getattr(patient, "active_appointment_count", 0),
     }
 
 

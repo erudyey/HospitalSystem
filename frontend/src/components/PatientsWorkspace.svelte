@@ -99,7 +99,7 @@
   // Hospital Metrics
   let totalPatients = $derived(patients.length);
   let activeAppointmentsCount = $derived(
-    patients.filter((p) => (p.appointment_count ?? 0) > 0).length
+    patients.filter((p) => (p.active_appointment_count ?? 0) > 0).length
   );
   let totalConsultationsScheduled = $derived(
     patients.reduce((sum, p) => sum + (p.appointment_count ?? 0), 0)
@@ -508,9 +508,14 @@
 
                 <!-- Consultation count -->
                 <TableCell class="text-center">
-                  <Badge variant="secondary" class="text-xs font-mono">
-                    {patient.appointment_count ?? 0}
-                  </Badge>
+                  <div class="inline-flex items-center justify-center gap-1.5 w-full">
+                    <Badge variant="secondary" class="text-xs font-mono">
+                      {patient.appointment_count ?? 0}
+                    </Badge>
+                    {#if (patient.active_appointment_count ?? 0) > 0}
+                      <span class="size-1.5 rounded-full bg-sky-500 shrink-0" title="{patient.active_appointment_count} active scheduled visit(s)"></span>
+                    {/if}
+                  </div>
                 </TableCell>
 
                 <!-- Three-Dots Dropdown Menu -->

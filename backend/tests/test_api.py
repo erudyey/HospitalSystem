@@ -119,6 +119,7 @@ class ClinicAPITests(TestCase):
         data = get_resp.json()
         self.assertEqual(data["full_name"], "Rachel Green")
         self.assertEqual(data["appointment_count"], 1)
+        self.assertEqual(data["active_appointment_count"], 1)
 
         # Act 2: PUT update patient
         put_payload = {"full_name": "Rachel Geller-Green", "contact": "09179990011", "age": 29}
