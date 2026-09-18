@@ -1,12 +1,14 @@
 """Unit tests for backend.clinic.services."""
 
 from datetime import date
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from backend.clinic import services
 from backend.clinic.models import AppointmentStatus
+from desktop.launcher import get_app_dir
 
 
 class ClinicServicesTests(TestCase):
@@ -221,3 +223,14 @@ class ClinicServicesTests(TestCase):
         fetched_after = services.get_patient(patient.id)
         self.assertEqual(getattr(fetched_after, "appointment_count", 0), 1)
         self.assertEqual(getattr(fetched_after, "active_appointment_count", 0), 0)
+
+    def test_cross_platform_app_dir_resolution(self):
+        """Verify get_app_dir resolves correct paths across operating systems."""
+        with patch("sys.platform", "darwin"):
+            darwin_dir = get_app_dir()
+            self.assertTrue(str(darwin_dir).endswith("HospitalSystem"))
+            self.assertIn("Library", str(darwin_dir))
+
+        with patch("sys.platform", "win32"):
+            win_dir = get_app_dir()
+            self.assertTrue(str(win_dir).endswith("HospitalSystem"))

@@ -9,9 +9,34 @@ import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-EXE_PATH = REPO_ROOT / "dist" / "HospitalSystem.exe"
-LOCAL_APPDATA = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-APP_DIR = Path(LOCAL_APPDATA) / "HospitalSystem"
+def get_app_dir() -> Path:
+    if sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    elif sys.platform == "win32":
+        local_appdata = os.environ.get("LOCALAPPDATA")
+        base = Path(local_appdata) if local_appdata else (Path.home() / "AppData" / "Local")
+    else:
+        xdg_data = os.environ.get("XDG_DATA_HOME")
+        base = Path(xdg_data) if xdg_data else (Path.home() / ".local" / "share")
+    app_dir = base / "HospitalSystem"
+    app_dir.mkdir(parents=True, exist_ok=True)
+    return app_dir
+
+
+def get_executable_path() -> Path:
+    if sys.platform == "win32":
+        return REPO_ROOT / "dist" / "HospitalSystem.exe"
+    if sys.platform == "darwin":
+        app_bin = (
+            REPO_ROOT / "dist" / "HospitalSystem.app" / "Contents" / "MacOS" / "HospitalSystem"
+        )
+        if app_bin.exists():
+            return app_bin
+    return REPO_ROOT / "dist" / "HospitalSystem"
+
+
+EXE_PATH = get_executable_path()
+APP_DIR = get_app_dir()
 STATE_FILE = APP_DIR / "app_state.json"
 LOG_FILE = APP_DIR / "launcher.log"
 DB_FILE = APP_DIR / "clinic.sqlite3"

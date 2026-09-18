@@ -25,6 +25,7 @@ class ClinicAPITests(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["status"], "ok")
+        self.assertEqual(data["version"], "0.0.1")
 
     @patch.dict(os.environ, {"HOSPITAL_SESSION_TOKEN": "test-secret-session-token-32-chars-long"})
     def test_endpoints_reject_requests_without_session_token(self) -> None:

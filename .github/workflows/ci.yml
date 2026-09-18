@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ master, migrate/*, feature/* ]
+    branches: [master, modern, feature/*]
   pull_request:
-    branches: [ master ]
+    branches: [master]
 
 jobs:
   test:
@@ -28,7 +28,7 @@ jobs:
       - name: Install Python Dependencies
         run: |
           uv venv .venv
-          uv pip install --python .venv\Scripts\python.exe django waitress pywebview whitenoise pytest pytest-django ruff django-stubs pyinstaller basedpyright
+          uv pip install --python .venv\Scripts\python.exe -e ".[dev]"
 
       - name: Check Formatting & Linting
         run: |

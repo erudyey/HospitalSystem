@@ -83,7 +83,7 @@ def serialize_appointment(appointment: Appointment) -> dict[str, Any]:
 @require_GET
 def health_check(_request: HttpRequest) -> JsonResponse:
     """Readiness probe and CSRF cookie setter."""
-    return JsonResponse({"status": "ok", "version": "0.0.0-alpha"})
+    return JsonResponse({"status": "ok", "version": "0.0.1"})
 
 
 @require_http_methods(["GET", "POST"])

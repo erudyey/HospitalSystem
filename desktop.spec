@@ -17,6 +17,20 @@ datas = [
 ]
 datas += collect_data_files('webview')
 
+platform_imports = []
+if sys.platform == "win32":
+    platform_imports = [
+        'clr',
+        'pythonnet',
+    ]
+elif sys.platform == "darwin":
+    platform_imports = (
+        collect_submodules('objc')
+        + collect_submodules('WebKit')
+        + collect_submodules('Foundation')
+        + collect_submodules('AppKit')
+    )
+
 hiddenimports = (
     collect_submodules('whitenoise')
     + collect_submodules('backend')
@@ -27,10 +41,7 @@ hiddenimports = (
     + collect_submodules('django.core.management')
     + collect_submodules('waitress')
     + collect_submodules('webview')
-    + [
-        'clr',
-        'pythonnet',
-    ]
+    + platform_imports
 )
 
 a = Analysis(
@@ -71,3 +82,14 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
 )
+if sys.platform == 'darwin':
+    app = BUNDLE(
+        exe,
+        name='HospitalSystem.app',
+        icon=None,
+        bundle_identifier='com.hospitalsystem.clinic',
+        info_plist={
+            'NSHighResolutionCapable': 'True',
+            'LSBackgroundOnly': 'False',
+        },
+    )

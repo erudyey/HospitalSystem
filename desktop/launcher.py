@@ -46,10 +46,23 @@ else:
 if str(BUNDLE_ROOT) not in sys.path:
     sys.path.insert(0, str(BUNDLE_ROOT))
 
-# Diagnostic File Logger in %LOCALAPPDATA%\HospitalSystem\launcher.log
-local_appdata = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-APP_DIR = Path(local_appdata) / "HospitalSystem"
-APP_DIR.mkdir(parents=True, exist_ok=True)
+# Diagnostic File Logger in OS-specific app directory
+def get_app_dir() -> Path:
+    """Resolve application data directory based on operating system."""
+    if sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    elif sys.platform == "win32":
+        local_appdata = os.environ.get("LOCALAPPDATA")
+        base = Path(local_appdata) if local_appdata else (Path.home() / "AppData" / "Local")
+    else:
+        xdg_data = os.environ.get("XDG_DATA_HOME")
+        base = Path(xdg_data) if xdg_data else (Path.home() / ".local" / "share")
+    app_dir = base / "HospitalSystem"
+    app_dir.mkdir(parents=True, exist_ok=True)
+    return app_dir
+
+
+APP_DIR = get_app_dir()
 LOG_FILE = APP_DIR / "launcher.log"
 STATE_FILE = APP_DIR / "app_state.json"
 
@@ -61,32 +74,82 @@ logging.basicConfig(
 logger = logging.getLogger("HospitalLauncher")
 logger.info("Initializing HospitalSystem launcher (PID: %d)...", os.getpid())
 
-# Single Instance Check on Windows (bypassed if running verification mode)
+# Single Instance Check (bypassed if running verification mode)
 IS_VERIFY_MODE = "--verify" in sys.argv
+_INSTANCE_LOCK_HANDLE = None
 
 
 def show_error_dialog(title: str, message: str) -> None:
-    """Display a native Windows error dialog."""
+    """Display a native platform error dialog."""
     logger.error("Error dialog presented [%s]: %s", title, message)
-    if not IS_VERIFY_MODE:
+    if IS_VERIFY_MODE:
+        sys.stderr.write(f"[{title}] {message}\n")
+        return
+
+    if sys.platform == "win32" and hasattr(ctypes, "windll"):
         ctypes.windll.user32.MessageBoxW(0, message, title, 0x10 | 0x0)  # MB_ICONERROR | MB_OK
+    elif sys.platform == "darwin":
+        try:
+            clean_title = title.replace('"', '\\"')
+            clean_msg = message.replace('"', '\\"')
+            import subprocess
+
+            subprocess.run(
+                [
+                    "osascript",
+                    "-e",
+                    f'display alert "{clean_title}" message "{clean_msg}" as critical',
+                ],
+                check=False,
+                timeout=5,
+            )
+        except Exception:
+            sys.stderr.write(f"[{title}] {message}\n")
     else:
         sys.stderr.write(f"[{title}] {message}\n")
 
 
 if not IS_VERIFY_MODE:
-    MUTEX_NAME = "Local\\HospitalSystem_AppMutex"
-    kernel32 = ctypes.windll.kernel32
-    mutex = kernel32.CreateMutexW(None, False, MUTEX_NAME)
-    if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
-        logger.warning("Application already running; secondary instance exited.")
-        ctypes.windll.user32.MessageBoxW(
-            0,
-            "Hospital Management System is already running.\n\nPlease check your taskbar.",
-            "HospitalSystem - Already Running",
-            0x40 | 0x1,  # MB_ICONINFORMATION | MB_OK
-        )
-        sys.exit(0)
+    if sys.platform == "win32" and hasattr(ctypes, "windll"):
+        MUTEX_NAME = "Local\\HospitalSystem_AppMutex"
+        kernel32 = ctypes.windll.kernel32
+        mutex = kernel32.CreateMutexW(None, False, MUTEX_NAME)
+        if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+            logger.warning("Application already running; secondary instance exited.")
+            ctypes.windll.user32.MessageBoxW(
+                0,
+                "Hospital Management System is already running.\n\nPlease check your taskbar.",
+                "HospitalSystem - Already Running",
+                0x40 | 0x1,  # MB_ICONINFORMATION | MB_OK
+            )
+            sys.exit(0)
+    else:
+        # POSIX file locking via fcntl for macOS and Linux
+        try:
+            import fcntl
+
+            lock_file_path = APP_DIR / "app.lock"
+            _INSTANCE_LOCK_HANDLE = open(lock_file_path, "w")  # noqa: SIM115
+            try:
+                fcntl.flock(_INSTANCE_LOCK_HANDLE.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except (BlockingIOError, OSError):
+                logger.warning("Application already running on POSIX/macOS; secondary instance exited.")
+                if sys.platform == "darwin":
+                    with contextlib.suppress(Exception):
+                        import subprocess
+
+                        subprocess.run(
+                            [
+                                "osascript",
+                                "-e",
+                                'display alert "Hospital Management System" message "The application is already running." as informational',
+                            ],
+                            check=False,
+                            timeout=5,
+                        )
+                sys.exit(0)
+        except Exception as exc:
+            logger.warning("Could not acquire POSIX instance lock: %s", exc)
 
 
 def find_available_port() -> int:

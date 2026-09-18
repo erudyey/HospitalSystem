@@ -1,6 +1,6 @@
 [project]
 name = "hospitalsystem"
-version = "0.0.0-alpha"
+version = "0.0.1"
 description = "Modern Hospital Management Desktop Application"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -9,6 +9,19 @@ dependencies = [
     "waitress>=3.0.0",
     "pywebview>=6.0.0",
     "whitenoise>=6.8.0",
+    "pyobjc-core>=10.0; sys_platform == 'darwin'",
+    "pyobjc-framework-Cocoa>=10.0; sys_platform == 'darwin'",
+    "pyobjc-framework-WebKit>=10.0; sys_platform == 'darwin'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-django>=4.9.0",
+    "ruff>=0.8.0",
+    "django-stubs>=5.1.0",
+    "pyinstaller>=6.10.0",
+    "basedpyright>=1.20.0",
 ]
 
 [tool.ruff]

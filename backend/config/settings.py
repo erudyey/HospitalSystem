@@ -40,12 +40,23 @@ if os.environ.get("TESTING") == "True":
 elif DEBUG:
     DB_PATH = str(BASE_DIR / "clinic_dev.sqlite3")
 else:
-    # Desktop / Packaged production mode: %LOCALAPPDATA%\HospitalSystem\clinic.sqlite3
-    local_appdata = os.environ.get("LOCALAPPDATA")
-    if local_appdata:
-        app_dir = Path(local_appdata) / "HospitalSystem"
+    # Desktop / Packaged production mode
+    if sys.platform == "darwin":
+        app_dir = Path.home() / "Library" / "Application Support" / "HospitalSystem"
+    elif sys.platform == "win32":
+        local_appdata = os.environ.get("LOCALAPPDATA")
+        app_dir = (
+            Path(local_appdata) / "HospitalSystem"
+            if local_appdata
+            else Path.home() / "AppData" / "Local" / "HospitalSystem"
+        )
     else:
-        app_dir = Path.home() / "AppData" / "Local" / "HospitalSystem"
+        xdg_data = os.environ.get("XDG_DATA_HOME")
+        app_dir = (
+            Path(xdg_data) / "HospitalSystem"
+            if xdg_data
+            else Path.home() / ".local" / "share" / "HospitalSystem"
+        )
     app_dir.mkdir(parents=True, exist_ok=True)
     DB_PATH = str(app_dir / "clinic.sqlite3")
 

@@ -1,96 +1,269 @@
-# Developer guide and local workflow
+# Developer Guide and Local Workflow Runbook
 
-This guide covers setting up your local environment, running development servers, executing automated tests, and packaging the standalone Windows executable.
-
----
-
-## 1. Prerequisites
-
-Before starting, install the following tools:
-- **Windows 10 or 11 (64-bit)** with Microsoft Edge WebView2 runtime (pre-installed on modern Windows).
-- **Python 3.12+** with `uv` for package management.
-- **Deno 2+** (`scoop install deno`) for Svelte compilation and frontend tooling.
+This runbook covers setting up your local Windows or macOS environment,
+executing development servers, running quality checks, and packaging the
+standalone desktop application.
 
 ---
 
-## 2. Quick setup
+## 1. Prerequisites and Toolchain
 
-From the repository root, run the setup task in PowerShell:
+| Tool                        | Minimum Version                           | Installation / Management                           |
+| :-------------------------- | :---------------------------------------- | :-------------------------------------------------- |
+| **Windows OS**              | Windows 10 (1809+) or Windows 11 (64-bit) | Pre-installed                                       |
+| **Microsoft Edge WebView2** | Evergreen Runtime                         | Included in Windows 10/11                           |
+| **macOS**                   | macOS 13 or newer (Ventura, Sonoma, ...)  | Pre-installed with native Apple WebKit              |
+| **Python**                  | 3.12 or newer                             | Managed via `uv` or system installer                |
+| **uv**                      | 0.4 or newer                              | `scoop install uv` (Win) or `brew install uv` (Mac) |
+| **Deno**                    | 2.0 or newer                              | `scoop install deno` (Win) or `brew install deno`   |
+
+---
+
+## 2. Automated Setup
+
+On Windows (PowerShell):
 
 ```powershell
-# Creates .venv, installs Python dependencies, and installs frontend packages
 .\run.ps1 setup
 ```
 
-Alternatively, set up the layers manually:
+On macOS / Linux (Terminal):
+
+```bash
+./run.sh setup
+```
+
+This task:
+
+1. Creates a Python virtual environment at `.venv` using `uv`.
+2. Installs required Python dependencies (`django`, `waitress`, `pywebview`,
+   `whitenoise`, `pytest`, `pytest-django`, `ruff`, `pyinstaller`,
+   `basedpyright`, and macOS `pyobjc` WebKit packages when on Darwin).
+3. Installs frontend packages in `frontend/` using `deno install`.
+
+### Manual Setup Alternative
+
+If you prefer to configure each layer manually:
+
+Create the Python virtual environment:
+
+```bash
+uv venv .venv
+```
+
+Install Python packages into `.venv` using the dev extras:
+
+On Windows:
 
 ```powershell
-# 1. Python virtual environment
-uv venv .venv
-uv pip install --python .venv\Scripts\python.exe django waitress pywebview whitenoise pytest pytest-django ruff django-stubs pyinstaller basedpyright
+uv pip install --python .venv\Scripts\python.exe -e ".[dev]"
+```
 
-# 2. Frontend dependencies
-cd frontend
-deno install
-cd ..
+On macOS / Linux:
+
+```bash
+uv pip install --python .venv/bin/python -e ".[dev]"
+```
+
+Install frontend packages:
+
+```bash
+cd frontend; deno install; cd ..
 ```
 
 ---
 
-## 3. Developer task runner (`run.ps1`)
+## 3. Daily Development Workflows
 
-The PowerShell script `run.ps1` standardizes everyday development workflows:
+### Concurrent Development (Vite HMR + Django API)
 
-| Command | Action |
-|---|---|
-| `.\run.ps1 dev` | Starts Vite HMR on port 5173 and Django development server on port 8000 concurrently. |
-| `.\run.ps1 desktop` | Builds production frontend assets and launches the live `pywebview` desktop window. |
-| `.\run.ps1 test` | Runs the basedpyright strict type checker and the pytest backend test suite. |
-| `.\run.ps1 format` | Formats and lints Python code (Ruff) and frontend code (Deno fmt). |
-| `.\run.ps1 package` | Compiles frontend, packages dependencies, and creates `dist/HospitalSystem.exe` via PyInstaller. |
+Starts Vite Hot Module Replacement on port 5173 and the Django API server on
+port 8000 simultaneously:
+
+On Windows:
+
+```powershell
+.\run.ps1 dev
+```
+
+On macOS / Linux:
+
+```bash
+./run.sh dev
+```
+
+### Live Desktop Shell
+
+Compiles the frontend assets to `backend/config/static_dist/` and opens the
+native `pywebview` window pointing to an embedded Waitress instance:
+
+On Windows:
+
+```powershell
+.\run.ps1 desktop
+```
+
+On macOS / Linux:
+
+```bash
+./run.sh desktop
+```
 
 ---
 
-## 4. Testing and quality checks
+## 4. Testing and Quality Verification
 
-### Automated tests
-Run the complete automated test suite:
+### Run Complete Test Suite and Strict Type Checker
+
+Executes both `pytest` and `basedpyright`:
+
+On Windows:
+
 ```powershell
 .\run.ps1 test
 ```
 
-Or run pytest directly:
+On macOS / Linux:
+
+```bash
+./run.sh test
+```
+
+### Run Python Unit Tests Only
+
+Run pytest directly against the backend test suite:
+
+On Windows:
+
 ```powershell
 .venv\Scripts\pytest.exe backend/tests/ -v
 ```
 
-### Type checking
-Run basedpyright across all Python files:
+On macOS / Linux:
+
+```bash
+.venv/bin/pytest backend/tests/ -v
+```
+
+### Run Strict Python Type Checking
+
+Execute basedpyright across all backend and desktop Python modules:
+
+On Windows:
+
 ```powershell
 .venv\Scripts\python.exe -m basedpyright
 ```
 
-Check frontend TypeScript files:
-```powershell
-cd frontend
-deno check src/main.ts
-cd ..
+On macOS / Linux:
+
+```bash
+.venv/bin/python -m basedpyright
 ```
 
-### Formatting and linting
-Check Python formatting and linting:
+### Check Frontend TypeScript Types
+
+Type-check Svelte and TypeScript files with Deno:
+
+```bash
+cd frontend; deno check src/main.ts; cd ..
+```
+
+### Code Formatting and Linting
+
+Format Python files with Ruff and frontend files with Deno:
+
+On Windows:
+
+```powershell
+.\run.ps1 format
+```
+
+On macOS / Linux:
+
+```bash
+./run.sh format
+```
+
+Verify Python formatting without modifying files:
+
+On Windows:
+
+```powershell
+.venv\Scripts\ruff.exe format --check
+```
+
+On macOS / Linux:
+
+```bash
+.venv/bin/ruff format --check
+```
+
+Verify Python lint rules without modifying files:
+
+On Windows:
+
 ```powershell
 .venv\Scripts\ruff.exe check
-.venv\Scripts\ruff.exe format --check
+```
+
+On macOS / Linux:
+
+```bash
+.venv/bin/ruff check
 ```
 
 ---
 
-## 5. Standalone desktop packaging
+## 5. Standalone Executable Packaging
 
-To create a self-contained Windows executable:
+To compile frontend assets and generate the standalone desktop distribution:
+
+On Windows (generates `dist/HospitalSystem.exe`):
+
 ```powershell
 .\run.ps1 package
 ```
 
-This generates `dist/HospitalSystem.exe`. The executable runs completely offline and writes its SQLite database to `%LOCALAPPDATA%\HospitalSystem\clinic.sqlite3`. It does not require Python, Deno, or external development tools to be installed on target machines.
+On macOS (generates `dist/HospitalSystem.app` and `dist/HospitalSystem`):
+
+```bash
+./run.sh package
+```
+
+### Build Pipeline Stages
+
+1. **Frontend Compilation**: Deno executes `deno task build` in `frontend/`,
+   writing production HTML, CSS, and JS bundles to
+   `backend/config/static_dist/`.
+2. **Collect Static**: Django gathers static files into the configured
+   distribution path.
+3. **PyInstaller Freeze**: PyInstaller processes `desktop.spec`, bundling the
+   Python interpreter, Django framework, Waitress server, WhiteNoise middleware,
+   and frontend assets into an executable or macOS `.app` bundle.
+
+### Automated Bundle Verification
+
+Verify the compiled bundle by running the automated runtime check suite:
+
+On Windows:
+
+```powershell
+.venv\Scripts\python.exe desktop/verify_bundle.py
+```
+
+On macOS / Linux:
+
+```bash
+.venv/bin/python desktop/verify_bundle.py
+```
+
+This verification script tests:
+
+1. Executable or application bundle presence in `dist/`.
+2. Executable architecture and format integrity.
+3. Digital bundle integrity and internal manifest.
+4. Clean launch and loopback socket binding on `127.0.0.1`.
+5. Health endpoint response (`/api/health/`).
+6. Session token rejection (`403 Forbidden` on invalid tokens).
+7. Clean shutdown and zero process leakage.

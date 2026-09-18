@@ -1,0 +1,149 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Release tag (e.g. v0.0.1)"
+        required: true
+        default: "v0.0.1"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows Executable
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install dependencies
+        run: |
+          uv venv .venv
+          uv pip install --python .venv\Scripts\python.exe -e ".[dev]"
+
+      - name: Build frontend
+        working-directory: ./frontend
+        run: |
+          deno install
+          deno task build
+
+      - name: Freeze standalone executable
+        run: |
+          .venv\Scripts\python.exe package.py
+
+      - name: Verify standalone bundle
+        run: |
+          .venv\Scripts\python.exe desktop/verify_bundle.py
+
+      - name: Prepare artifact
+        run: |
+          Move-Item dist/HospitalSystem.exe dist/HospitalSystem-Windows-x64.exe
+
+      - name: Upload Windows binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: HospitalSystem-Windows-x64.exe
+          path: dist/HospitalSystem-Windows-x64.exe
+          if-no-files-found: error
+
+  build-macos:
+    name: Build macOS Bundle
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install dependencies
+        run: |
+          uv venv .venv
+          uv pip install --python .venv/bin/python -e ".[dev]"
+
+      - name: Build frontend
+        working-directory: ./frontend
+        run: |
+          deno install
+          deno task build
+
+      - name: Freeze standalone application
+        run: |
+          .venv/bin/python package.py
+
+      - name: Compress macOS application bundle
+        run: |
+          cd dist
+          zip -r -y HospitalSystem-macOS.zip HospitalSystem.app
+          cd ..
+
+      - name: Upload macOS archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: HospitalSystem-macOS.zip
+          path: dist/HospitalSystem-macOS.zip
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: release_assets
+          merge-multiple: true
+
+      - name: Determine tag name
+        id: tag
+        run: |
+          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            echo "name=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: Hospital Management System ${{ steps.tag.outputs.name }}
+          files: release_assets/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
