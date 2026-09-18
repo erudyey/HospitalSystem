@@ -20,6 +20,10 @@ contributors working on the HospitalSystem codebase.
    specifications, error formats, and validation rules.
 6. Read [docs/development.md](docs/development.md) for the local development
    runbook, testing commands, and database seeding procedures.
+7. Read [DATA.md](DATA.md) for database schema, SQLite WAL engine settings, and
+   storage boundary rules.
+8. Read [SKILLS.md](SKILLS.md) for the repository's bundled agent skills catalog
+   and workflow runbooks.
 
 ---
 
@@ -102,3 +106,27 @@ hospital management system:
   prescriptions.
 - **Authentication & Staff Management**: Password hashing (PBKDF2-SHA256),
   session tokens, staff registration, and profile management.
+
+---
+
+## 6. Bundled Skills and Agent Workflows
+
+The repository bundles core engineering skills under `.agents/skills/`:
+
+- **ponytail**: Enforces code minimalism and YAGNI. Reject premature
+  abstractions.
+- **git-maestro**: Standards for atomic commits and Conventional Commits
+  formatting.
+- **shadcn-svelte**: Best practices for Svelte 5 runes, bits-ui, and Tailwind
+  styling.
+- **test-master**: Guidelines for high-coverage, deterministic pytest fixtures.
+- **surgical-patch**: Narrow bug fixes and behavioral changes at the responsible
+  layer.
+- **verify-and-stop**: Rigorous proof across quality gates without expanding
+  scope.
+- **security-reviewer**: Security auditing for authentication, tokens, and data
+  access.
+- **investigate-first**: Diagnostic root-cause investigation prior to code
+  edits.
+
+Consult [SKILLS.md](SKILLS.md) for full descriptions and usage patterns.
