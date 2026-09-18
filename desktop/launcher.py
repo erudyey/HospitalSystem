@@ -1,12 +1,15 @@
 """Desktop application launcher for HospitalSystem.
 
 Manages process lifecycle, ephemeral socket pre-binding, Waitress daemon thread,
-in-memory session token injection, WebView2 runtime detection, and clean shutdown.
+in-memory session token injection, WebView2 runtime detection, diagnostic logging,
+and clean shutdown.
 """
 
 import atexit
 import contextlib
 import ctypes
+import json
+import logging
 import os
 import secrets
 import socket
@@ -33,28 +36,57 @@ if sys.stdout is None:
 if sys.stderr is None:
     sys.stderr = _NullWriter()  # type: ignore[assignment]
 
-# Ensure repository root is on sys.path
-REPO_ROOT = Path(__file__).resolve().parent.parent
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+# Ensure bundle / repository root is on sys.path
+meipass = getattr(sys, "_MEIPASS", None)
+if getattr(sys, "frozen", False) and meipass:
+    BUNDLE_ROOT = Path(str(meipass))
+else:
+    BUNDLE_ROOT = Path(__file__).resolve().parent.parent
 
-# Single Instance Check on Windows
-MUTEX_NAME = "Local\\HospitalSystem_AppMutex"
-kernel32 = ctypes.windll.kernel32
-mutex = kernel32.CreateMutexW(None, False, MUTEX_NAME)
-if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
-    ctypes.windll.user32.MessageBoxW(
-        0,
-        "Hospital Management System is already running.\n\nPlease check your taskbar.",
-        "HospitalSystem - Already Running",
-        0x40 | 0x1,  # MB_ICONINFORMATION | MB_OK
-    )
-    sys.exit(0)
+if str(BUNDLE_ROOT) not in sys.path:
+    sys.path.insert(0, str(BUNDLE_ROOT))
+
+# Diagnostic File Logger in %LOCALAPPDATA%\HospitalSystem\launcher.log
+local_appdata = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+APP_DIR = Path(local_appdata) / "HospitalSystem"
+APP_DIR.mkdir(parents=True, exist_ok=True)
+LOG_FILE = APP_DIR / "launcher.log"
+STATE_FILE = APP_DIR / "app_state.json"
+
+logging.basicConfig(
+    filename=str(LOG_FILE),
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("HospitalLauncher")
+logger.info("Initializing HospitalSystem launcher (PID: %d)...", os.getpid())
+
+# Single Instance Check on Windows (bypassed if running verification mode)
+IS_VERIFY_MODE = "--verify" in sys.argv
 
 
 def show_error_dialog(title: str, message: str) -> None:
     """Display a native Windows error dialog."""
-    ctypes.windll.user32.MessageBoxW(0, message, title, 0x10 | 0x0)  # MB_ICONERROR | MB_OK
+    logger.error("Error dialog presented [%s]: %s", title, message)
+    if not IS_VERIFY_MODE:
+        ctypes.windll.user32.MessageBoxW(0, message, title, 0x10 | 0x0)  # MB_ICONERROR | MB_OK
+    else:
+        sys.stderr.write(f"[{title}] {message}\n")
+
+
+if not IS_VERIFY_MODE:
+    MUTEX_NAME = "Local\\HospitalSystem_AppMutex"
+    kernel32 = ctypes.windll.kernel32
+    mutex = kernel32.CreateMutexW(None, False, MUTEX_NAME)
+    if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        logger.warning("Application already running; secondary instance exited.")
+        ctypes.windll.user32.MessageBoxW(
+            0,
+            "Hospital Management System is already running.\n\nPlease check your taskbar.",
+            "HospitalSystem - Already Running",
+            0x40 | 0x1,  # MB_ICONINFORMATION | MB_OK
+        )
+        sys.exit(0)
 
 
 def find_available_port() -> int:
@@ -70,7 +102,9 @@ def wait_for_server(url: str, timeout_sec: float = 10.0) -> bool:
     while time.time() < deadline:
         try:
             with urlopen(url, timeout=0.5) as resp:
+                resp.read()
                 if resp.status == 200:
+                    time.sleep(0.05)
                     return True
         except Exception:
             time.sleep(0.1)
@@ -85,6 +119,7 @@ def main() -> None:
 
     # 2. Allocate loopback port
     port = find_available_port()
+    logger.info("Allocated ephemeral loopback port: %d", port)
 
     # 3. Initialize Django and Waitress WSGI server
     try:
@@ -93,39 +128,73 @@ def main() -> None:
         django.setup()
         from django.core.management import call_command
 
+        logger.info("Executing database migrations...")
         call_command("migrate", interactive=False)
 
         from waitress.server import create_server
 
         from backend.config.wsgi import application
     except Exception as exc:
+        logger.exception("Failed to initialize server components: %s", exc)
         show_error_dialog("Startup Error", f"Failed to initialize server components:\n\n{exc}")
         sys.exit(1)
 
-    server = create_server(application, host="127.0.0.1", port=port, threads=4)
-    server_thread = threading.Thread(target=server.run, daemon=True)
-    server_thread.start()
+    try:
+        server = create_server(application, host="127.0.0.1", port=port, threads=4)
+        server_thread = threading.Thread(target=server.run, daemon=True)
+        server_thread.start()
+        logger.info("Waitress WSGI server started on 127.0.0.1:%d", port)
+    except Exception as exc:
+        logger.exception("Failed to start Waitress server: %s", exc)
+        show_error_dialog(
+            "Server Socket Error", f"Could not bind server to 127.0.0.1:{port}:\n\n{exc}"
+        )
+        sys.exit(1)
+
+    # Write state file for verification discovery
+    state_data = {
+        "port": port,
+        "pid": os.getpid(),
+        "started_at": time.time(),
+        "token": session_token,
+    }
+    with contextlib.suppress(Exception):
+        STATE_FILE.write_text(json.dumps(state_data), encoding="utf-8")
 
     # Clean shutdown hook
     def cleanup_server():
+        logger.info("Executing server cleanup...")
         with contextlib.suppress(Exception):
             server.close()
+        with contextlib.suppress(Exception):
+            if STATE_FILE.exists():
+                STATE_FILE.unlink()
 
     atexit.register(cleanup_server)
 
     # 4. Wait for readiness probe
     health_url = f"http://127.0.0.1:{port}/api/health/"
     if not wait_for_server(health_url, timeout_sec=8.0):
+        logger.error("Readiness probe timed out at %s", health_url)
         show_error_dialog(
             "Connection Timeout",
             f"The local backend server failed to respond within 8 seconds at {health_url}.\nShutting down.",
         )
         sys.exit(1)
 
+    logger.info("Backend readiness verified successfully.")
+
+    # Headless verification mode exits cleanly here without opening GUI
+    if IS_VERIFY_MODE:
+        logger.info("Verification check completed successfully. Exiting cleanly.")
+        time.sleep(0.05)
+        sys.exit(0)
+
     # 5. Import and verify pywebview / WebView2
     try:
         import webview
     except ImportError as exc:
+        logger.exception("Could not import pywebview: %s", exc)
         show_error_dialog(
             "Missing Dependencies",
             f"Could not load desktop webview module:\n\n{exc}\n\nPlease install pywebview.",
@@ -140,30 +209,40 @@ def main() -> None:
 
     api = DesktopHostApi()
 
-    window = webview.create_window(
-        title="Hospital Management System",
-        url=f"http://127.0.0.1:{port}/?token={session_token}",
-        width=1100,
-        height=740,
-        min_size=(920, 600),
-        js_api=api,
-    )
-    assert window is not None
+    try:
+        window = webview.create_window(
+            title="Hospital Management System",
+            url=f"http://127.0.0.1:{port}/?token={session_token}",
+            width=1320,
+            height=840,
+            min_size=(1024, 700),
+            js_api=api,
+        )
+        assert window is not None
 
-    def on_window_loaded():
-        """Inject session token into window memory after load."""
-        window.evaluate_js(f"window.__SESSION_TOKEN__ = '{session_token}';")
+        def on_window_loaded():
+            """Inject session token into window memory after load."""
+            with contextlib.suppress(Exception):
+                window.evaluate_js(f"window.__SESSION_TOKEN__ = '{session_token}';")
 
-    def on_window_closing():
-        """Cleanly close server socket when the user closes the window."""
-        cleanup_server()
+        def on_window_closing():
+            """Cleanly close server socket when the user closes the window."""
+            cleanup_server()
 
-    window.events.loaded += on_window_loaded
-    window.events.closing += on_window_closing
+        window.events.loaded += on_window_loaded
+        window.events.closing += on_window_closing
 
-    # 6. Start the desktop event loop on the main thread
-    webview.start(debug=False)
+        logger.info("Starting pywebview desktop event loop...")
+        webview.start(debug=False)
+        logger.info("pywebview event loop finished cleanly.")
+    except Exception as exc:
+        logger.exception("Fatal error during desktop window lifecycle: %s", exc)
+        show_error_dialog("Desktop Window Error", f"Fatal error during desktop execution:\n\n{exc}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
+    import multiprocessing
+
+    multiprocessing.freeze_support()
     main()

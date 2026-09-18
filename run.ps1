@@ -10,7 +10,7 @@
 #>
 param (
     [Parameter(Position = 0, Mandatory = $true)]
-    [ValidateSet("dev", "desktop", "test", "format", "package", "setup")]
+    [ValidateSet("dev", "desktop", "test", "format", "package", "setup", "test-package")]
     [string]$Command
 )
 
@@ -83,6 +83,11 @@ switch ($Command) {
         & $VenvPytest "$RepoRoot\backend\tests"
     }
 
+    "test-package" {
+        Write-Host "Running automated standalone bundle verification..." -ForegroundColor Cyan
+        & $VenvPython "$RepoRoot\desktop\verify_bundle.py"
+    }
+
     "format" {
         Write-Host "Running Ruff linter and formatter..." -ForegroundColor Cyan
         & $VenvRuff check --fix "$RepoRoot\backend" "$RepoRoot\desktop"
@@ -98,5 +103,7 @@ switch ($Command) {
     "package" {
         Write-Host "Packaging HospitalSystem as Windows .exe..." -ForegroundColor Cyan
         & $VenvPython "$RepoRoot\package.py"
+        Write-Host "`nRunning automated standalone verification..." -ForegroundColor Cyan
+        & $VenvPython "$RepoRoot\desktop\verify_bundle.py"
     }
 }

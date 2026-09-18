@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """One-command standalone executable packaging script."""
 
+import contextlib
 import subprocess
 import sys
 from pathlib import Path
@@ -16,6 +17,19 @@ def run_command(cmd: list[str], cwd: Path) -> None:
         sys.exit(result.returncode)
 
 
+def ensure_executable_unlocked(exe_path: Path) -> None:
+    """Ensure previous running instances of the executable are terminated before packaging."""
+    if not exe_path.exists() or sys.platform != "win32":
+        return
+    with contextlib.suppress(Exception):
+        subprocess.run(
+            ["taskkill", "/F", "/IM", exe_path.name],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+
+
 def main() -> None:
     print("=== Packaging HospitalSystem for Windows Desktop ===")
 
@@ -25,6 +39,9 @@ def main() -> None:
     run_command(["deno", "task", "build"], cwd=frontend_dir)
 
     # 2. Run PyInstaller
+    exe_path = REPO_ROOT / "dist" / "HospitalSystem.exe"
+    ensure_executable_unlocked(exe_path)
+
     venv_pyinstaller = REPO_ROOT / ".venv" / "Scripts" / "pyinstaller.exe"
     if not venv_pyinstaller.exists():
         venv_pyinstaller = "pyinstaller"

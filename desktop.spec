@@ -5,12 +5,15 @@ from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
 block_cipher = None
 
-REPO_ROOT = Path('.').resolve()
+REPO_ROOT = Path(__file__).resolve().parent if '__file__' in locals() else Path('.').resolve()
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 FRONTEND_DIST = REPO_ROOT / 'frontend' / 'dist'
 
 datas = [
     (str(FRONTEND_DIST), 'frontend/dist'),
-    ('backend/clinic/migrations', 'backend/clinic/migrations'),
+    ('backend', 'backend'),
 ]
 datas += collect_data_files('webview')
 

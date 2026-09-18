@@ -12,7 +12,7 @@
 
 - **Desktop Shell (`desktop/`)**: Native Windows desktop window powered by Microsoft Edge WebView2 and `pywebview`. Pre-binds ephemeral loopback sockets, guarantees single-instance execution via Win32 named mutex (`CreateMutexW`), and manages server lifecycle cleanly with zero orphan processes.
 - **Backend Service Layer (`backend/`)**: Django with pure Python services, atomic database transactions (`transaction.atomic()`), strict model validation (`full_clean()`), and loopback session token security (`hmac.compare_digest`).
-- **Frontend Workspaces (`frontend/`)**: Modern Svelte 5 single-page application built on the official community port of `shadcn-svelte` (`bits-ui`), styled with a Warm Clinical palette and an Inter 16px base with Golden Ratio ($\phi \approx 1.618$) line-heights and Fibonacci spatial rhythm.
+- **Frontend Workspaces (`frontend/`)**: Modern Svelte 5 single-page application built on `shadcn-svelte` (`bits-ui`), styled with the Swiss Medical Red & Pure White / Zinc palette, left sidebar navigation, and progressive disclosure data tables.
 - **Zero-Node Runtime**: Built and bundled using **Deno 2** for fast, zero-overhead frontend compilation without a Node.js installation.
 - **Local Persistence**: Production database automatically maintained at `%LOCALAPPDATA%\HospitalSystem\clinic.sqlite3` with SQLite Write-Ahead Logging (`WAL` mode).
 
@@ -61,12 +61,13 @@ HospitalSystem/
 │   ├── clinic/               # Domain models, services, views, loopback middleware, importer
 │   └── tests/                # Automated pytest suite (services, API, legacy importer)
 ├── desktop/                  # Desktop launcher & Windows runtime hardening
-│   └── launcher.py           # Single-instance mutex, ephemeral socket, Waitress thread
+│   ├── launcher.py           # Single-instance mutex, ephemeral socket, Waitress thread
+│   └── verify_bundle.py      # Automated bundle and runtime verification
 ├── frontend/                 # Svelte 5 SPA
 │   ├── src/
 │   │   ├── components/       # PatientsWorkspace & AppointmentsWorkspace
 │   │   ├── lib/              # shadcn-svelte UI components, API client, utils
-│   │   ├── app.css           # Inter 16px typography & Warm Clinical CSS tokens
+│   │   ├── app.css           # Inter 16px typography & Swiss Medical Red tokens
 │   │   └── App.svelte        # Application shell & global error boundary
 │   ├── deno.json             # Deno tasks & compiler options
 │   ├── tsconfig.json         # TypeScript configuration for editor LSP
