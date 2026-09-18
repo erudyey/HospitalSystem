@@ -24,6 +24,8 @@ contributors working on the HospitalSystem codebase.
    storage boundary rules.
 8. Read [SKILLS.md](SKILLS.md) for the repository's bundled agent skills catalog
    and workflow runbooks.
+9. Read [ROADMAP.md](ROADMAP.md) (or [TODO.md](TODO.md)) for decoupled task
+   slices, progress tracking, and active implementation status.
 
 ---
 
