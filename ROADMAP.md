@@ -128,17 +128,17 @@ Slice 1_
 _Scope: `frontend/src/components/AppointmentsWorkspace.svelte`,
 `frontend/src/lib/api.ts`_ _Dependency: Slice 2, Slice 3_
 
-- [ ] Add time input (`<Input type="time" ... />`) to appointment booking
+- [x] Add time input (`<Input type="time" ... />`) to appointment booking
       dialog.
-- [ ] Add doctor dropdown selector populated from `/api/doctors/`.
-- [ ] Add real-time conflict warning banner when selecting conflicting time
+- [x] Add doctor dropdown selector populated from `/api/doctors/`.
+- [x] Add real-time conflict warning banner when selecting conflicting time
       slots.
-- [ ] Add `reason_for_visit` input field.
-- [ ] Add dual submit actions in booking dialog: **"Book Appointment"** and
+- [x] Add `reason_for_visit` input field.
+- [x] Add dual submit actions in booking dialog: **"Book Appointment"** and
       **"Book & Check In"** (walk-in triage).
-- [ ] Add **"Check In Patient"** quick-action button in appointment list.
-- [ ] Display formatted date and time in appointment rows (e.g.,
-      `2026-09-18 • 09:30 AM`).
+- [x] Add **"Check In Patient"** quick-action button in appointment list.
+- [x] Display formatted date and time in appointment rows (e.g.,
+      `2026-09-18 09:30 AM`).
 
 ### Slice 5: Doctor Workspace UI
 
@@ -146,18 +146,18 @@ _Scope: `frontend/src/components/DoctorWorkspace.svelte`,
 `ConsultationDialog.svelte`, `PatientChartDialog.svelte`_ _Dependency: Slice 2,
 Slice 3_
 
-- [ ] Create `DoctorWorkspace.svelte` with tabbed views:
-  - [ ] **Tab 1**: Live Waiting Room queue (`Checked In` patients) and today's
+- [x] Create `DoctorWorkspace.svelte` with tabbed views:
+  - [x] **Tab 1**: Live Waiting Room queue (`Checked In` patients) and today's
         schedule.
-  - [ ] **Tab 2**: My Patients roster with visit counters.
-  - [ ] **Tab 3**: Clinical diagnoses and consultation history log.
-- [ ] Create `ConsultationDialog.svelte`:
-  - [ ] Display patient demographic banner and chief complaint.
-  - [ ] Collapsible past medical history review.
-  - [ ] Structured SOAP inputs: Diagnosis, Symptoms, Clinical Notes,
+  - [x] **Tab 2**: My Patients roster with visit counters.
+  - [x] **Tab 3**: Clinical diagnoses and consultation history log.
+- [x] Create `ConsultationDialog.svelte`:
+  - [x] Display patient demographic banner and chief complaint.
+  - [x] Collapsible past medical history review.
+  - [x] Structured SOAP inputs: Diagnosis, Symptoms, Clinical Notes,
         Prescription, Follow-up.
-  - [ ] One-click "Complete Consultation & Save Record" action.
-- [ ] Create `PatientChartDialog.svelte` displaying complete patient clinical
+  - [x] One-click "Complete Consultation & Save Record" action.
+- [x] Create `PatientChartDialog.svelte` displaying complete patient clinical
       timeline.
 
 ### Slice 6: Auth Gateway & Settings Suite
@@ -165,33 +165,33 @@ Slice 3_
 _Scope: `frontend/src/components/AuthModal.svelte`, `SettingsDialog.svelte`,
 `frontend/src/App.svelte`_ _Dependency: Slice 2, Slice 4, Slice 5_
 
-- [ ] Create `AuthModal.svelte` with Sign In and Register Staff tabs.
-- [ ] Add conditional demo quick-fill buttons for instant testing
+- [x] Create `AuthModal.svelte` with Sign In and Register Staff tabs.
+- [x] Add conditional demo quick-fill buttons for instant testing
       (`Receptionist`, `Dr. Reyes`, `Dr. Santos`, `Dr. Tan`).
-- [ ] Create `SettingsDialog.svelte` with tabbed architecture:
-  - [ ] **Tab 1: Profile & Security**: Name, contact, doctor specialty, license,
+- [x] Create `SettingsDialog.svelte` with tabbed architecture:
+  - [x] **Tab 1: Profile & Security**: Name, contact, doctor specialty, license,
         and password update.
-  - [ ] **Tab 2: Clinic Preferences**: Demo Mode toggle (On/Off) and default
+  - [x] **Tab 2: Clinic Preferences**: Demo Mode toggle (On/Off) and default
         appointment slot duration.
-  - [ ] **Tab 3: System & Storage**: Physical database path, record statistics,
+  - [x] **Tab 3: System & Storage**: Physical database path, record statistics,
         and SQLite WAL engine status.
-  - [ ] **Log Out Action**: Invalidate session in database, clear state, and
+  - [x] **Log Out Action**: Invalidate session in database, clear state, and
         open login gateway.
-- [ ] Update `App.svelte` navigation header with user card, role badge, settings
+- [x] Update `App.svelte` navigation header with user card, role badge, settings
       trigger, and conditional quick-switcher.
-- [ ] Implement conditional workspace mounting based on active user role.
+- [x] Implement conditional workspace mounting based on active user role.
 
 ### Slice 7: Seed Data & End-to-End Quality Gates
 
 _Scope: `backend/clinic/management/commands/seed.py`, `docs/`, test runbooks_
 _Dependency: Slices 1 through 6_
 
-- [ ] Update `seed.py` to generate standard staff accounts, realistic
+- [x] Update `seed.py` to generate standard staff accounts, realistic
       appointment times, and clinical diagnoses.
-- [ ] Update `docs/api-contracts.md` with new endpoint schemas.
-- [ ] Update `docs/overview.md` with receptionist triage and doctor waiting room
+- [x] Update `docs/api-contracts.md` with new endpoint schemas.
+- [x] Update `docs/overview.md` with receptionist triage and doctor waiting room
       flows.
-- [ ] Pass full test suite:
+- [x] Pass full test suite:
   ```bash
   uv run pytest backend/tests/ -v
   uv run ruff check backend desktop package.py
