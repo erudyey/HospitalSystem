@@ -52,7 +52,14 @@ def main() -> None:
     ensure_executable_unlocked()
 
     print("\n[Step 2/3] Freezing desktop bundle with PyInstaller...")
-    pyinstaller_cmd = [sys.executable, "-m", "PyInstaller", "desktop.spec", "--noconfirm", "--clean"]
+    pyinstaller_cmd = [
+        sys.executable,
+        "-m",
+        "PyInstaller",
+        "desktop.spec",
+        "--noconfirm",
+        "--clean",
+    ]
     run_command(pyinstaller_cmd, cwd=REPO_ROOT)
 
     # 3. Report generated output
@@ -63,7 +70,9 @@ def main() -> None:
             print(f"\n[Step 3/3] Success! macOS Application bundle generated at:\n  {app_path}")
         elif bin_path.exists():
             size_mb = bin_path.stat().st_size / (1024 * 1024)
-            print(f"\n[Step 3/3] Success! Standalone executable generated at:\n  {bin_path} ({size_mb:.1f} MB)")
+            print(
+                f"\n[Step 3/3] Success! Standalone executable generated at:\n  {bin_path} ({size_mb:.1f} MB)"
+            )
         else:
             print("\nWarning: Execution finished but output bundle was not found.")
     else:

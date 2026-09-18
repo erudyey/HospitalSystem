@@ -46,6 +46,7 @@ else:
 if str(BUNDLE_ROOT) not in sys.path:
     sys.path.insert(0, str(BUNDLE_ROOT))
 
+
 # Diagnostic File Logger in OS-specific app directory
 def get_app_dir() -> Path:
     """Resolve application data directory based on operating system."""
@@ -133,7 +134,9 @@ if not IS_VERIFY_MODE:
             try:
                 fcntl.flock(_INSTANCE_LOCK_HANDLE.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
             except (BlockingIOError, OSError):
-                logger.warning("Application already running on POSIX/macOS; secondary instance exited.")
+                logger.warning(
+                    "Application already running on POSIX/macOS; secondary instance exited."
+                )
                 if sys.platform == "darwin":
                     with contextlib.suppress(Exception):
                         import subprocess

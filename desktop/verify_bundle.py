@@ -9,6 +9,8 @@ import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
 def get_app_dir() -> Path:
     if sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support"
