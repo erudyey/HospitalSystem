@@ -436,27 +436,46 @@
   <!-- Top Metrics Cards (5-State Clinical Lifecycle) -->
   <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 shrink-0">
     <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <p class="text-[11px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Visits</p>
+      <div class="flex items-center justify-between">
+        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Total Visits</p>
+        <Calendar class="size-4 text-muted-foreground" />
+      </div>
       <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countAll}</p>
       <p class="text-[11px] text-muted-foreground mt-0.5">Master schedule count</p>
     </div>
-    <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <p class="text-[11px] sm:text-xs font-semibold text-amber-700 uppercase tracking-wider">Waiting Room</p>
+
+    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
+      <div class="flex items-center justify-between">
+        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Waiting Room</p>
+        <UserCheck class="size-4 text-muted-foreground" />
+      </div>
       <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countCheckedIn}</p>
       <p class="text-[11px] text-muted-foreground mt-0.5">Checked in at clinic</p>
     </div>
+
     <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <p class="text-[11px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">Scheduled</p>
+      <div class="flex items-center justify-between">
+        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Scheduled</p>
+        <Clock class="size-4 text-muted-foreground" />
+      </div>
       <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countScheduled}</p>
       <p class="text-[11px] text-muted-foreground mt-0.5">Pending clinical visits</p>
     </div>
-    <div class="rounded-xl border border-primary/30 bg-primary/5 text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <p class="text-[11px] sm:text-xs font-semibold text-primary uppercase tracking-wider">Consulting</p>
+
+    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
+      <div class="flex items-center justify-between">
+        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Consulting</p>
+        <Stethoscope class="size-4 text-muted-foreground" />
+      </div>
       <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countInConsultation}</p>
       <p class="text-[11px] text-muted-foreground mt-0.5">Currently with physician</p>
     </div>
+
     <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <p class="text-[11px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">Completed</p>
+      <div class="flex items-center justify-between">
+        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Completed</p>
+        <CheckCircle2 class="size-4 text-muted-foreground" />
+      </div>
       <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countCompleted}</p>
       <p class="text-[11px] text-muted-foreground mt-0.5">Discharged records</p>
     </div>
@@ -744,7 +763,7 @@
                       Checked In
                     </Badge>
                   {:else if app.status === "In Consultation"}
-                    <Badge variant="default" class="gap-1 font-medium text-xs">
+                    <Badge variant="secondary" class="gap-1 font-medium text-xs border border-border/80">
                       <Stethoscope class="size-3 shrink-0" />
                       Consulting
                     </Badge>
