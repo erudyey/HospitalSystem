@@ -258,39 +258,39 @@
   });
 </script>
 
-<div class="flex flex-col gap-6">
+<div class="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
   <!-- Top Metrics Cards (Matching Reference Screenshot) -->
-  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-    <div class="rounded-xl border bg-card text-card-foreground p-6 shadow-sm">
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 shrink-0">
+    <div class="rounded-xl border bg-card text-card-foreground p-4 sm:p-5 shadow-sm">
       <div class="flex items-center justify-between">
-        <p class="text-sm font-medium text-muted-foreground">Total Enrolled Patients</p>
+        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Total Enrolled Patients</p>
         <Users class="size-4 text-muted-foreground" />
       </div>
-      <p class="text-2xl font-bold tracking-tight text-foreground mt-2">{totalPatients}</p>
-      <p class="text-xs text-muted-foreground mt-1">Active primary directory records</p>
+      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{totalPatients}</p>
+      <p class="text-[11px] text-muted-foreground mt-0.5">Active primary directory records</p>
     </div>
 
-    <div class="rounded-xl border bg-card text-card-foreground p-6 shadow-sm">
+    <div class="rounded-xl border bg-card text-card-foreground p-4 sm:p-5 shadow-sm">
       <div class="flex items-center justify-between">
-        <p class="text-sm font-medium text-muted-foreground">Patients with Active Schedules</p>
+        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Patients with Active Schedules</p>
         <CalendarCheck class="size-4 text-primary" />
       </div>
-      <p class="text-2xl font-bold tracking-tight text-foreground mt-2">{activeAppointmentsCount}</p>
-      <p class="text-xs text-muted-foreground mt-1">Patients with scheduled visits</p>
+      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{activeAppointmentsCount}</p>
+      <p class="text-[11px] text-muted-foreground mt-0.5">Patients with scheduled visits</p>
     </div>
 
-    <div class="rounded-xl border bg-card text-card-foreground p-6 shadow-sm">
+    <div class="rounded-xl border bg-card text-card-foreground p-4 sm:p-5 shadow-sm">
       <div class="flex items-center justify-between">
-        <p class="text-sm font-medium text-muted-foreground">Total Consultations</p>
+        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Total Consultations</p>
         <ClipboardList class="size-4 text-muted-foreground" />
       </div>
-      <p class="text-2xl font-bold tracking-tight text-foreground mt-2">{totalConsultationsScheduled}</p>
-      <p class="text-xs text-muted-foreground mt-1">Lifetime appointment bookings</p>
+      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{totalConsultationsScheduled}</p>
+      <p class="text-[11px] text-muted-foreground mt-0.5">Lifetime appointment bookings</p>
     </div>
   </div>
 
   <!-- Table Toolbar Bar (Matching Reference Screenshot) -->
-  <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+  <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
     <div class="flex items-center gap-2">
       <div class="relative w-full sm:w-72">
         <Search class="absolute left-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
@@ -368,12 +368,12 @@
 
   <!-- Table Container (Matching Reference Screenshot) -->
   {#if errorMessage}
-    <div class="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
+    <div class="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive shrink-0">
       {errorMessage}
     </div>
   {:else}
-    <div class="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col">
-      <Table containerClass="max-h-[calc(100vh-340px)] min-h-[240px]">
+    <div class="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
+      <Table containerClass="flex-1 min-h-0 overflow-y-auto">
         <TableHeader class="sticky top-0 bg-card z-10 shadow-xs border-b [&_tr]:bg-card">
           <TableRow>
             <TableHead class="w-28">

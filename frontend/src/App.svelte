@@ -94,9 +94,9 @@
   });
 </script>
 
-<div class="min-h-screen bg-background text-foreground flex flex-row selection:bg-primary/10 selection:text-primary antialiased">
+<div class="h-screen bg-background text-foreground flex flex-row selection:bg-primary/10 selection:text-primary antialiased overflow-hidden">
   <!-- Left Sidebar Navigation -->
-  <aside class="w-64 border-r border-border bg-card flex flex-col shrink-0 h-screen sticky top-0 select-none">
+  <aside class="w-64 border-r border-border bg-card flex flex-col shrink-0 h-screen select-none">
     <!-- Clinic Brand Header (Cross in a Box Icon) -->
     <div class="px-4 h-14 border-b border-border flex items-center gap-2.5">
       <div class="size-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shrink-0 shadow-xs">
@@ -164,9 +164,9 @@
   </aside>
 
   <!-- Right Main Area -->
-  <div class="flex-1 flex flex-col min-h-screen overflow-x-hidden">
+  <div class="flex-1 flex flex-col h-screen overflow-hidden min-h-0">
     <!-- Top Bar Header -->
-    <header class="border-b border-border bg-card/95 backdrop-blur sticky top-0 z-40 h-14 flex items-center justify-between px-6 shadow-xs">
+    <header class="border-b border-border bg-card/95 backdrop-blur shrink-0 z-40 h-14 flex items-center justify-between px-6 shadow-xs">
       <!-- Breadcrumb / Active Workspace Title -->
       <div class="flex items-center gap-2 text-xs">
         <span class="text-muted-foreground font-normal">Hospital System</span>
@@ -187,7 +187,7 @@
 
     <!-- Global Error Banner if caught -->
     {#if globalError}
-      <div class="bg-destructive/10 border-b border-destructive/20 text-destructive px-6 py-2.5 text-xs flex items-center justify-between">
+      <div class="bg-destructive/10 border-b border-destructive/20 text-destructive px-6 py-2.5 text-xs flex items-center justify-between shrink-0">
         <span><strong>System Alert:</strong> {globalError}</span>
         <button onclick={() => (globalError = null)} class="text-destructive font-bold underline ml-4 cursor-pointer">
           Dismiss
@@ -196,7 +196,7 @@
     {/if}
 
     <!-- Main Workspace Content Canvas -->
-    <main class="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto flex flex-col gap-6">
+    <main class="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto flex flex-col overflow-hidden min-h-0">
       {#if activeWorkspace === "patients"}
         <PatientsWorkspace
           bind:isRegisterDialogOpen={triggerPatientRegister}

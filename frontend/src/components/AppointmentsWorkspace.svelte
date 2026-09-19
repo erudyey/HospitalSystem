@@ -317,33 +317,33 @@
   });
 </script>
 
-<div class="flex flex-col gap-6">
+<div class="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
   <!-- Top Metrics Cards (Matching Reference Screenshot) -->
-  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-    <div class="rounded-xl border bg-card text-card-foreground p-6 shadow-sm">
-      <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Consultations</p>
-      <p class="text-2xl font-bold tracking-tight text-foreground mt-2">{countAll}</p>
-      <p class="text-[11px] text-muted-foreground mt-1">Master schedule count</p>
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 shrink-0">
+    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
+      <p class="text-[11px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Consultations</p>
+      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countAll}</p>
+      <p class="text-[11px] text-muted-foreground mt-0.5">Master schedule count</p>
     </div>
-    <div class="rounded-xl border bg-card text-card-foreground p-6 shadow-sm">
-      <p class="text-xs font-medium text-sky-700 uppercase tracking-wider">Scheduled</p>
-      <p class="text-2xl font-bold tracking-tight text-foreground mt-2">{countScheduled}</p>
-      <p class="text-[11px] text-muted-foreground mt-1">Pending clinical visits</p>
+    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
+      <p class="text-[11px] sm:text-xs font-medium text-sky-700 uppercase tracking-wider">Scheduled</p>
+      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countScheduled}</p>
+      <p class="text-[11px] text-muted-foreground mt-0.5">Pending clinical visits</p>
     </div>
-    <div class="rounded-xl border bg-card text-card-foreground p-6 shadow-sm">
-      <p class="text-xs font-medium text-emerald-700 uppercase tracking-wider">Completed</p>
-      <p class="text-2xl font-bold tracking-tight text-foreground mt-2">{countCompleted}</p>
-      <p class="text-[11px] text-muted-foreground mt-1">Discharged records</p>
+    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
+      <p class="text-[11px] sm:text-xs font-medium text-emerald-700 uppercase tracking-wider">Completed</p>
+      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countCompleted}</p>
+      <p class="text-[11px] text-muted-foreground mt-0.5">Discharged records</p>
     </div>
-    <div class="rounded-xl border bg-card text-card-foreground p-6 shadow-sm">
-      <p class="text-xs font-medium text-zinc-600 uppercase tracking-wider">Cancelled</p>
-      <p class="text-2xl font-bold tracking-tight text-foreground mt-2">{countCancelled}</p>
-      <p class="text-[11px] text-muted-foreground mt-1">Deferred or withdrawn</p>
+    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
+      <p class="text-[11px] sm:text-xs font-medium text-zinc-600 uppercase tracking-wider">Cancelled</p>
+      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countCancelled}</p>
+      <p class="text-[11px] text-muted-foreground mt-0.5">Deferred or withdrawn</p>
     </div>
   </div>
 
   <!-- Segmented Tabs & Toolbar Bar (Matching Reference Screenshot) -->
-  <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+  <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 shrink-0">
     <!-- Status Filter Tabs -->
     <Tabs.Root
       value={activeFilter}
@@ -445,12 +445,12 @@
 
   <!-- Appointments Table View (Matching Reference Screenshot) -->
   {#if errorMessage}
-    <div class="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive">
+    <div class="rounded-xl bg-destructive/10 border border-destructive/20 p-4 text-sm text-destructive shrink-0">
       {errorMessage}
     </div>
   {:else}
-    <div class="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col">
-      <Table containerClass="max-h-[calc(100vh-340px)] min-h-[240px]">
+    <div class="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
+      <Table containerClass="flex-1 min-h-0 overflow-y-auto">
         <TableHeader class="sticky top-0 bg-card z-10 shadow-xs border-b [&_tr]:bg-card">
           <TableRow>
             <TableHead class="w-24">
