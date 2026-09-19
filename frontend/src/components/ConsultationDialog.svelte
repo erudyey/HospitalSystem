@@ -120,33 +120,19 @@
 <Dialog.Root bind:open>
   <Dialog.Content class="sm:max-w-3xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
     <!-- Header: Patient Details & Triage Info -->
-    <div class="px-6 pt-5 pb-4 border-b border-border bg-card">
-      <div class="flex items-start justify-between">
-        <div class="flex items-center gap-2.5">
-          <div class="size-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-            <Stethoscope class="size-5" />
-          </div>
-          <div>
-            <div class="flex items-center gap-2">
-              <Dialog.Title class="text-base font-semibold">
-                Clinical Consultation (SOAP)
-              </Dialog.Title>
-              <Badge variant="default" class="text-[11px] font-medium">
-                In Consultation
-              </Badge>
-            </div>
-            <Dialog.Description class="text-xs text-muted-foreground mt-0.5">
-              Attending: Dr. {activeDoctor?.full_name?.replace(/^Dr\.\s*/i, "") || "Physician"}
-              {activeDoctor?.specialty ? `(${activeDoctor.specialty})` : ""}
-            </Dialog.Description>
-          </div>
+    <div class="px-6 pt-5 pb-4 border-b border-border bg-card pr-12">
+      <div class="flex items-center gap-3">
+        <div class="size-9 rounded-lg bg-muted text-foreground flex items-center justify-center shrink-0">
+          <Stethoscope class="size-5 text-muted-foreground" />
         </div>
-
-        <div class="text-right text-xs">
-          <span class="font-mono text-muted-foreground">Appt #{appointment?.id}</span>
-          <p class="text-[11px] text-muted-foreground tabular-nums">
-            {appointment?.app_date} {appointment?.app_time ? `• ${appointment.app_time}` : ""}
-          </p>
+        <div>
+          <Dialog.Title class="text-base font-semibold text-foreground">
+            Clinical Consultation (SOAP)
+          </Dialog.Title>
+          <Dialog.Description class="text-xs text-muted-foreground mt-0.5">
+            Attending: Dr. {activeDoctor?.full_name?.replace(/^Dr\.\s*/i, "") || "Physician"}
+            {activeDoctor?.specialty ? `(${activeDoctor.specialty})` : ""} • Appt #{appointment?.id} • {appointment?.app_date}{appointment?.app_time ? ` at ${appointment.app_time}` : ""}
+          </Dialog.Description>
         </div>
       </div>
 
@@ -215,11 +201,11 @@
     </div>
 
     <!-- Scrollable SOAP Form -->
-    <form onsubmit={handleCompleteConsultation} class="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-4">
+    <form onsubmit={handleCompleteConsultation} class="flex-1 overflow-y-auto px-6 pt-5 pb-4 flex flex-col gap-4">
       <!-- 1. Symptoms (Subjective) -->
       <div>
-        <label for="soapSymptoms" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-          Subjective -- Symptoms & Chief Complaints
+        <label for="soapSymptoms" class="block text-xs font-semibold text-foreground mb-1.5">
+          Symptoms & Chief Complaints (Subjective)
         </label>
         <textarea
           id="soapSymptoms"
@@ -233,8 +219,8 @@
 
       <!-- 2. Diagnosis (Assessment - Required) -->
       <div>
-        <label for="soapDiagnosis" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-          Assessment -- Primary Diagnosis <span class="text-destructive">*</span>
+        <label for="soapDiagnosis" class="block text-xs font-semibold text-foreground mb-1.5">
+          Primary Diagnosis (Assessment) <span class="text-destructive">*</span>
         </label>
         <Input
           id="soapDiagnosis"
@@ -252,8 +238,8 @@
 
       <!-- 3. Clinical Notes (Objective / Examination) -->
       <div>
-        <label for="soapNotes" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-          Objective -- Physical Examination & Clinical Findings
+        <label for="soapNotes" class="block text-xs font-semibold text-foreground mb-1.5">
+          Physical Examination & Findings (Objective)
         </label>
         <textarea
           id="soapNotes"
@@ -267,9 +253,9 @@
 
       <!-- 4. Prescription (Plan - Rx) -->
       <div>
-        <label for="soapRx" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1.5">
-          <Pill class="size-3.5 text-sky-600" />
-          <span>Plan -- Prescription & Medication Orders (Rx)</span>
+        <label for="soapRx" class="block text-xs font-semibold text-foreground mb-1.5 flex items-center gap-1.5">
+          <Pill class="size-3.5 text-muted-foreground" />
+          <span>Prescription & Medication Orders (Plan / Rx)</span>
         </label>
         <textarea
           id="soapRx"
@@ -283,8 +269,8 @@
 
       <!-- 5. Follow-up Advice (Disposition) -->
       <div>
-        <label for="soapFollowUp" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-          Disposition -- Patient Advice & Follow-up Instructions
+        <label for="soapFollowUp" class="block text-xs font-semibold text-foreground mb-1.5">
+          Follow-up Advice & Instructions (Disposition)
         </label>
         <Input
           id="soapFollowUp"

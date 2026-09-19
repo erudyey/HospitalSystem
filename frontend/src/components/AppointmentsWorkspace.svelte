@@ -974,8 +974,8 @@
       <form onsubmit={handleCreateBooking} class="flex flex-col gap-4 py-2">
         <!-- Patient Selector with Empty State Guard -->
         <div>
-          <label for="modalPatientSelect" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-            Patient <span class="text-destructive">*</span>
+          <label for="modalPatientSelect" class="block text-xs font-semibold text-foreground mb-1.5">
+            Patient Record <span class="text-destructive">*</span>
           </label>
           {#if patientList.length === 0}
             <div class="rounded-lg border border-amber-200/80 bg-amber-50/70 p-3 text-xs text-amber-900 flex flex-col gap-1.5">
@@ -1000,7 +1000,7 @@
 
         <!-- Attending Physician Selector -->
         <div>
-          <label for="modalDoctorSelect" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+          <label for="modalDoctorSelect" class="block text-xs font-semibold text-foreground mb-1.5">
             Attending Physician <span class="text-destructive">*</span>
           </label>
           <select
@@ -1053,33 +1053,11 @@
 
         <!-- Date & Time Row -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <!-- Date with Quick Chips -->
+          <!-- Date -->
           <div>
-            <div class="flex items-center justify-between mb-1.5">
-              <label for="modalDate" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Date <span class="text-destructive">*</span>
-              </label>
-              <div class="flex items-center gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  class="h-6 text-[11px] px-1 text-muted-foreground hover:text-foreground cursor-pointer"
-                  onclick={() => setQuickDate(0)}
-                >
-                  Today
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  class="h-6 text-[11px] px-1 text-muted-foreground hover:text-foreground cursor-pointer"
-                  onclick={() => setQuickDate(1)}
-                >
-                  Tomorrow
-                </Button>
-              </div>
-            </div>
+            <label for="modalDate" class="block text-xs font-semibold text-foreground mb-1.5">
+              Appointment Date <span class="text-destructive">*</span>
+            </label>
             <Input
               id="modalDate"
               type="date"
@@ -1094,7 +1072,7 @@
 
           <!-- Time Slot -->
           <div>
-            <label for="modalTime" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+            <label for="modalTime" class="block text-xs font-semibold text-foreground mb-1.5">
               Time Slot <span class="text-destructive">*</span>
             </label>
             <Input
@@ -1110,28 +1088,15 @@
           </div>
         </div>
 
-        <!-- Reason for Visit & Quick Chips -->
+        <!-- Reason for Visit -->
         <div>
-          <div class="flex items-center justify-between mb-1.5">
-            <label for="modalReason" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Reason for Visit
-            </label>
-            <div class="flex items-center gap-1 flex-wrap">
-              {#each ["Checkup", "Follow-up", "Fever", "Rx Refill"] as reasonChip}
-                <button
-                  type="button"
-                  class="text-[10px] bg-muted/70 hover:bg-muted text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded cursor-pointer transition-colors"
-                  onclick={() => (reasonForVisit = reasonChip)}
-                >
-                  {reasonChip}
-                </button>
-              {/each}
-            </div>
-          </div>
+          <label for="modalReason" class="block text-xs font-semibold text-foreground mb-1.5">
+            Reason for Visit / Chief Complaint
+          </label>
           <Input
             id="modalReason"
             type="text"
-            placeholder="e.g. Routine checkup, throat pain, prescription renewal"
+            placeholder="e.g. Annual physical exam, follow-up on lab tests, sore throat"
             bind:value={reasonForVisit}
             disabled={isSubmitting || patientList.length === 0}
           />
