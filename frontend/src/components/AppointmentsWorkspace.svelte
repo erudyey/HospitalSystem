@@ -493,24 +493,24 @@
         }
       }}
     >
-      <Tabs.List class="flex flex-wrap h-auto p-1">
-        <Tabs.Trigger value="ALL" class="min-w-[64px]">
-          All <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countAll})</span>
+      <Tabs.List class="flex flex-nowrap items-center h-9 p-0.5 rounded-lg border bg-muted/60 text-muted-foreground overflow-x-auto no-scrollbar gap-0.5">
+        <Tabs.Trigger value="ALL" class="px-2.5 sm:px-3 text-xs shrink-0 whitespace-nowrap">
+          All <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countAll})</span>
         </Tabs.Trigger>
-        <Tabs.Trigger value="Checked In" class="min-w-[110px]">
-          Waiting Room <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countCheckedIn})</span>
+        <Tabs.Trigger value="Checked In" class="px-2.5 sm:px-3 text-xs shrink-0 whitespace-nowrap">
+          Waiting Room <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countCheckedIn})</span>
         </Tabs.Trigger>
-        <Tabs.Trigger value="Scheduled" class="min-w-[95px]">
-          Scheduled <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countScheduled})</span>
+        <Tabs.Trigger value="Scheduled" class="px-2.5 sm:px-3 text-xs shrink-0 whitespace-nowrap">
+          Scheduled <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countScheduled})</span>
         </Tabs.Trigger>
-        <Tabs.Trigger value="In Consultation" class="min-w-[110px]">
-          Consulting <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countInConsultation})</span>
+        <Tabs.Trigger value="In Consultation" class="px-2.5 sm:px-3 text-xs shrink-0 whitespace-nowrap">
+          Consulting <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countInConsultation})</span>
         </Tabs.Trigger>
-        <Tabs.Trigger value="Completed" class="min-w-[95px]">
-          Completed <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countCompleted})</span>
+        <Tabs.Trigger value="Completed" class="px-2.5 sm:px-3 text-xs shrink-0 whitespace-nowrap">
+          Completed <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countCompleted})</span>
         </Tabs.Trigger>
-        <Tabs.Trigger value="Cancelled" class="min-w-[90px]">
-          Cancelled <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countCancelled})</span>
+        <Tabs.Trigger value="Cancelled" class="px-2.5 sm:px-3 text-xs shrink-0 whitespace-nowrap">
+          Cancelled <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countCancelled})</span>
         </Tabs.Trigger>
       </Tabs.List>
     </Tabs.Root>
