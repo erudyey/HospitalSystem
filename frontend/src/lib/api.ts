@@ -330,17 +330,26 @@ export const api = {
     doctorId: number,
     dateStr: string,
     timeStr: string = "09:00",
-    duration: number = 15,
+    durationOrExcludeId: number = 15,
     excludeId?: number,
   ) => {
+    let duration = 15;
+    let exclude = excludeId;
+    if (excludeId === undefined && durationOrExcludeId !== 15) {
+      exclude = durationOrExcludeId;
+      duration = 15;
+    } else {
+      duration = durationOrExcludeId;
+    }
+
     const params = new URLSearchParams({
       doctor_id: String(doctorId),
       date: dateStr,
-      time: timeStr,
+      time: timeStr || "09:00",
       duration: String(duration),
     });
-    if (excludeId !== undefined) {
-      params.set("exclude_id", String(excludeId));
+    if (exclude !== undefined) {
+      params.set("exclude_id", String(exclude));
     }
     return request<ConflictCheckResponse>(
       `/api/appointments/conflict-check/?${params.toString()}`,
@@ -363,10 +372,18 @@ export const api = {
         body: JSON.stringify(data),
       }),
 
-    login: async (credentials: { username: string; password: string }) => {
+    login: async (
+      usernameOrCredentials: string | { username: string; password: string },
+      password?: string,
+    ) => {
+      const payload =
+        typeof usernameOrCredentials === "string"
+          ? { username: usernameOrCredentials, password: password || "" }
+          : usernameOrCredentials;
+
       const resp = await request<UserSession>("/api/auth/login/", {
         method: "POST",
-        body: JSON.stringify(credentials),
+        body: JSON.stringify(payload),
       });
       if (resp?.token) {
         setUserToken(resp.token);
@@ -386,31 +403,69 @@ export const api = {
       }
     },
 
-    updateProfile: (data: {
+    updateProfile: async (data: {
       full_name?: string;
       contact?: string;
       specialty?: string;
       license_number?: string;
       current_password?: string;
       new_password?: string;
-    }) =>
-      request<{ user: StaffUser }>("/api/auth/profile/", {
+    }): Promise<StaffUser> => {
+      const res = await request<{ user: StaffUser }>("/api/auth/profile/", {
         method: "PUT",
         body: JSON.stringify(data),
-      }),
+      });
+      return res.user;
+    },
 
     listDoctors: () => request<StaffUser[]>("/api/doctors/"),
   },
 
   // Clinical & Doctor Methods
   clinical: {
-    getDoctorQueue: (dateStr?: string) => {
-      const q = dateStr ? `?date=${encodeURIComponent(dateStr)}` : "";
+    checkScheduleConflict: (
+      doctorId: number,
+      dateStr: string,
+      timeStr: string = "09:00",
+      durationOrExcludeId: number = 15,
+      excludeId?: number,
+    ) => {
+      let duration = 15;
+      let exclude = excludeId;
+      if (excludeId === undefined && durationOrExcludeId !== 15) {
+        exclude = durationOrExcludeId;
+        duration = 15;
+      } else {
+        duration = durationOrExcludeId;
+      }
+
+      const params = new URLSearchParams({
+        doctor_id: String(doctorId),
+        date: dateStr,
+        time: timeStr || "09:00",
+        duration: String(duration),
+      });
+      if (exclude !== undefined) {
+        params.set("exclude_id", String(exclude));
+      }
+      return request<ConflictCheckResponse>(
+        `/api/appointments/conflict-check/?${params.toString()}`,
+      );
+    },
+
+    getDoctorQueue: (doctorIdOrDate?: number | string, dateStr?: string) => {
+      const date = typeof doctorIdOrDate === "string" ? doctorIdOrDate : dateStr;
+      const q = date ? `?date=${encodeURIComponent(date)}` : "";
       return request<DoctorQueueResponse>(`/api/doctor/queue/${q}`);
     },
 
-    getDoctorPatients: (query?: string) => {
-      const q = query ? `?q=${encodeURIComponent(query)}` : "";
+    getDoctorPatients: (
+      doctorIdOrQuery?: number | string,
+      queryStr?: string,
+    ) => {
+      const qVal =
+        typeof doctorIdOrQuery === "string" ? doctorIdOrQuery : queryStr;
+      const q = qVal ? `?q=${encodeURIComponent(qVal)}` : "";
       return request<Patient[]>(`/api/doctor/patients/${q}`);
     },
 

@@ -10,9 +10,9 @@ all UI/UX workflows to use standard default shadcn-svelte components.
 ## Progress Overview
 
 - Total Tasks: 16
-- Completed: 3
+- Completed: 6
 - In Progress: 0
-- Remaining: 13
+- Remaining: 10
 
 ---
 
@@ -38,16 +38,16 @@ all UI/UX workflows to use standard default shadcn-svelte components.
 
 ## Phase 2: Frontend API Client Harmonization & Robustness
 
-- [ ] **Task 2.1: Support Flexible Arguments & Session Storage in `api.auth.login`**
+- [x] **Task 2.1: Support Flexible Arguments & Session Storage in `api.auth.login`**
   - File: `frontend/src/lib/api.ts`
   - Update `api.auth.login` to accept both positional arguments `(username, password)` and object `{ username, password }`.
   - Ensure returned session token is persisted in storage and attached to subsequent request headers.
 
-- [ ] **Task 2.2: Fix Return Value Unwrapping in `api.auth.updateProfile`**
+- [x] **Task 2.2: Fix Return Value Unwrapping in `api.auth.updateProfile`**
   - File: `frontend/src/lib/api.ts`
   - Ensure `updateProfile` resolves cleanly with `StaffUser` directly (or unwraps `res.user`), preventing session state corruption in caller.
 
-- [ ] **Task 2.3: Harmonize Clinical Conflict Check and Doctor Queue Methods**
+- [x] **Task 2.3: Harmonize Clinical Conflict Check and Doctor Queue Methods**
   - File: `frontend/src/lib/api.ts`
   - Expose `checkScheduleConflict` under both `api` and `api.clinical` supporting `(doctorId, dateStr, timeStr?, duration?, excludeId?)`.
   - Support optional physician ID in `getDoctorQueue(doctorIdOrDate?, dateStr?)` and `getDoctorPatients(doctorIdOrQuery?, query?)` so callers passing doctor ID do not corrupt query parameters.
