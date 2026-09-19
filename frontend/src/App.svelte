@@ -237,18 +237,8 @@
     </div>
 
     <!-- Quick Action CTA Button (Sidebar) -->
-    <div class="p-3 border-b border-border">
-      {#if currentUser?.role === "doctor"}
-        <Button
-          variant="secondary"
-          size="sm"
-          onclick={() => (activeWorkspace = "doctor_workspace")}
-          class="w-full justify-center gap-2 text-xs font-medium cursor-pointer shadow-xs"
-        >
-          <Stethoscope class="size-3.5" />
-          <span>Physician Triage Queue</span>
-        </Button>
-      {:else}
+    {#if currentUser?.role === "receptionist"}
+      <div class="p-3 border-b border-border">
         <Button
           variant="default"
           size="sm"
@@ -258,8 +248,8 @@
           <UserPlus class="size-3.5" />
           <span>+ Register Patient</span>
         </Button>
-      {/if}
-    </div>
+      </div>
+    {/if}
 
     <!-- Navigation Workspace Switcher -->
     <div class="flex-1 py-3 px-2 flex flex-col gap-1 overflow-y-auto">
@@ -316,9 +306,9 @@
     <!-- Active User Card (Sidebar Bottom) -->
     <div class="p-3 border-t border-border mt-auto flex flex-col gap-2">
       {#if currentUser}
-        <div class="rounded-lg bg-muted/40 p-2 text-xs flex items-center justify-between">
+        <div class="rounded-lg bg-muted/40 p-2 text-xs flex items-center justify-between border border-border/40">
           <div class="flex items-center gap-2 min-w-0">
-            <div class="size-6 rounded-full bg-primary/20 text-primary font-bold text-[10px] flex items-center justify-center shrink-0">
+            <div class="size-6 rounded-full bg-muted text-foreground font-semibold text-[10px] flex items-center justify-center shrink-0 border border-border/70">
               {currentUser.full_name?.charAt(0) || currentUser.username.charAt(0).toUpperCase()}
             </div>
             <div class="min-w-0">
@@ -371,71 +361,55 @@
 
       <!-- Center: 1-Click Passwordless Demo Switcher (if Demo Mode ON) -->
       {#if demoMode}
-        <div class="hidden lg:flex items-center gap-1 bg-muted/70 p-1 rounded-lg border border-border/60 text-xs">
-          <span class="text-[11px] font-semibold text-muted-foreground px-1.5 flex items-center gap-1">
-            <Sparkles class="size-3 text-primary" />
-            <span>Switch Role:</span>
+        <div class="hidden lg:flex items-center bg-muted/60 p-0.5 rounded-lg border border-border/60 text-xs shadow-2xs">
+          <span class="text-[11px] font-medium text-muted-foreground px-2 flex items-center gap-1">
+            <Sparkles class="size-3 text-muted-foreground" />
+            <span>Demo:</span>
           </span>
 
-          <Button
+          <button
             type="button"
-            variant={currentUser?.username === "maria" ? "default" : "ghost"}
-            size="sm"
             onclick={() => switchDemoUser("maria")}
-            class="h-7 px-2.5 text-xs font-medium cursor-pointer"
+            class="h-7 px-2.5 rounded-md text-xs font-medium transition-colors cursor-pointer {currentUser?.username === 'maria' ? 'bg-background text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'}"
           >
             Receptionist
-          </Button>
-          <Button
+          </button>
+          <button
             type="button"
-            variant={currentUser?.username === "dreyes" ? "default" : "ghost"}
-            size="sm"
             onclick={() => switchDemoUser("dreyes")}
-            class="h-7 px-2.5 text-xs font-medium cursor-pointer"
+            class="h-7 px-2.5 rounded-md text-xs font-medium transition-colors cursor-pointer {currentUser?.username === 'dreyes' ? 'bg-background text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'}"
           >
             Dr. Reyes
-          </Button>
-          <Button
+          </button>
+          <button
             type="button"
-            variant={currentUser?.username === "dsantos" ? "default" : "ghost"}
-            size="sm"
             onclick={() => switchDemoUser("dsantos")}
-            class="h-7 px-2.5 text-xs font-medium cursor-pointer"
+            class="h-7 px-2.5 rounded-md text-xs font-medium transition-colors cursor-pointer {currentUser?.username === 'dsantos' ? 'bg-background text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'}"
           >
             Dr. Santos
-          </Button>
-          <Button
+          </button>
+          <button
             type="button"
-            variant={currentUser?.username === "dtan" ? "default" : "ghost"}
-            size="sm"
             onclick={() => switchDemoUser("dtan")}
-            class="h-7 px-2.5 text-xs font-medium cursor-pointer"
+            class="h-7 px-2.5 rounded-md text-xs font-medium transition-colors cursor-pointer {currentUser?.username === 'dtan' ? 'bg-background text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'}"
           >
             Dr. Tan
-          </Button>
+          </button>
         </div>
       {/if}
 
       <!-- Top Right Controls -->
       <div class="flex items-center gap-3">
         {#if currentUser}
-          <div class="flex items-center gap-2">
-            <Badge
-              variant={currentUser.role === "doctor" ? "default" : "secondary"}
-              class="text-[11px] font-semibold px-2 py-0.5 capitalize"
-            >
-              {currentUser.role}
-            </Badge>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              class="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-              onclick={() => (isSettingsOpen = true)}
-            >
-              Settings
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer gap-1.5"
+            onclick={() => (isSettingsOpen = true)}
+          >
+            <Settings class="size-3.5" />
+            <span>Settings</span>
+          </Button>
         {:else}
           <Button
             size="sm"
