@@ -288,27 +288,27 @@
     <div class="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto pr-1">
       <!-- Active Consultation Banner (if patient is currently consulting) -->
       {#if inConsultationQueue.length > 0}
-        <div class="rounded-xl border border-primary/30 bg-primary/5 p-4 shadow-xs flex flex-col gap-3">
+        <div class="rounded-xl border bg-card p-4 shadow-sm flex flex-col gap-3">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2">
-              <span class="size-2 rounded-full bg-primary animate-ping"></span>
-              <span class="text-xs font-semibold uppercase tracking-wider text-primary">
-                Active Consultation In Progress
+              <Stethoscope class="size-4 text-muted-foreground" />
+              <span class="text-xs font-semibold text-foreground">
+                Active Patient Consultation
               </span>
             </div>
-            <span class="text-xs text-muted-foreground font-mono">
-              {inConsultationQueue.length} patient session active
+            <span class="text-xs text-muted-foreground">
+              {inConsultationQueue.length} {inConsultationQueue.length === 1 ? "session" : "sessions"} active
             </span>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             {#each inConsultationQueue as activeApp (activeApp.id)}
-              <div class="rounded-lg border bg-card p-3.5 shadow-2xs flex flex-col justify-between gap-3">
+              <div class="rounded-lg border bg-muted/20 p-3.5 shadow-2xs flex flex-col justify-between gap-3">
                 <div>
                   <div class="flex items-start justify-between">
                     <div>
                       <h4 class="text-sm font-semibold text-foreground">{activeApp.patient_name}</h4>
-                      <p class="text-xs text-muted-foreground font-mono">Patient #{activeApp.patient_id} • Appt #{activeApp.id}</p>
+                      <p class="text-xs text-muted-foreground">Patient #{activeApp.patient_id} • Appt #{activeApp.id}</p>
                     </div>
                     <Badge variant="secondary" class="text-xs border border-border/80">
                       Consulting
@@ -323,9 +323,9 @@
 
                 <div class="flex items-center justify-between pt-2 border-t border-border/60">
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    class="h-7 text-xs px-2 text-muted-foreground hover:text-foreground cursor-pointer"
+                    class="h-7 text-xs px-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
                     onclick={() => openChartFromAppointment(activeApp)}
                   >
                     <FileText class="size-3.5 mr-1" />
@@ -359,8 +359,8 @@
         </div>
 
         {#if checkedInQueue.length === 0}
-          <div class="flex flex-col items-center justify-center py-12 text-center text-muted-foreground gap-2">
-            <UserCheck class="size-10 text-muted-foreground/40" />
+          <div class="flex flex-col items-center justify-center py-8 text-center text-muted-foreground gap-2">
+            <UserCheck class="size-9 text-muted-foreground/40" />
             <p class="text-sm font-medium text-foreground">The Waiting Room is Clear</p>
             <p class="text-xs max-w-sm">
               No patients are currently checked in for consultation. When the front desk marks an appointment as 'Checked In', it will appear here immediately.
