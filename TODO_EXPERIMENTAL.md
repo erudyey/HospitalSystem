@@ -1,18 +1,18 @@
-# Experimental Branch Task List: Stabilization & Shadcn Standardization
+# Experimental Branch Task List: Stabilization & Comprehensive UI/UX Polish
 
 This task list tracks discrete, one-at-a-time engineering tasks for the
 `experimental` branch. Its objective is to fix all authentication, API, and
-state bugs discovered during manual testing, while standardizing all UI
-elements to use standard default shadcn-svelte components.
+state bugs discovered during manual testing, while standardizing and polishing
+all UI/UX workflows to use standard default shadcn-svelte components.
 
 ---
 
 ## Progress Overview
 
-- Total Tasks: 14
+- Total Tasks: 16
 - Completed: 0
 - In Progress: 0
-- Remaining: 14
+- Remaining: 16
 
 ---
 
@@ -88,17 +88,33 @@ elements to use standard default shadcn-svelte components.
 
 ---
 
-## Phase 5: Shadcn UI Standardization & Polish
+## Phase 5: Comprehensive UI/UX Polish & Shadcn Standardization
 
-- [ ] **Task 5.1: Standardize Header, Navigation, and Role Switcher in `App.svelte`**
+- [ ] **Task 5.1: Polish Navigation, Header, and Role Switcher in `App.svelte`**
   - File: `frontend/src/App.svelte`
-  - Replace raw `<button>` elements in sidebar, quick switcher, and header with standard shadcn `<Button>` and `<Badge>`.
-  - Replace hardcoded palette colors (such as `bg-purple-700`) with semantic design tokens (`bg-primary`, `variant="secondary"`, `variant="ghost"`).
+  - Standardize sidebar navigation with shadcn `<Button variant={active ? "secondary" : "ghost"}>` with icons, badges, and smooth transitions.
+  - Standardize quick action CTA button with shadcn `<Button variant="default">`.
+  - Refactor top bar 1-click demo switcher using shadcn button variants instead of raw `<button>` elements and hardcoded colors.
+  - Clean active user footer card with avatar initials and role badge.
 
-- [ ] **Task 5.2: Audit and Polish Doctor Workspace UI**
+- [ ] **Task 5.2: Polish Doctor Workspace & Waiting Room Experience**
   - File: `frontend/src/components/DoctorWorkspace.svelte`
-  - Standardize metric cards, waiting room action buttons ("Resume Consultation", "Begin Consultation", "Chart") to standard shadcn button variants.
-  - Convert `space-y-*` layouts to flex gap layouts.
+  - Refactor top metrics cards to use clean semantic styling with icons and status indicators.
+  - Polish waiting room triage cards with queue numbers, timestamps, complaint quotes, and standard shadcn buttons ("Chart", "Begin Consultation").
+  - Polish active consultation banner and today's schedule table.
+  - Eliminate all hardcoded palette colors (`bg-purple-700`, `bg-emerald-600`) in favor of semantic design tokens.
+
+- [ ] **Task 5.3: Polish Receptionist Appointments & Triage Workspace**
+  - File: `frontend/src/components/AppointmentsWorkspace.svelte`
+  - Refactor booking modal with clean form fields, date picker, time picker, and real-time conflict alert banner.
+  - Refactor appointment status badges and table action buttons ("Check In", "Edit", "Cancel").
+  - Standardize filter tabs and search bar.
+
+- [ ] **Task 5.4: Polish Consultation (SOAP) & Patient Chart Dialogs**
+  - Files: `frontend/src/components/ConsultationDialog.svelte`, `frontend/src/components/PatientChartDialog.svelte`
+  - Refactor SOAP inputs (Diagnosis, Symptoms, Notes, Rx, Advice) with clean form layouts and validation feedback.
+  - Add collapsible past medical history accordion in consultation dialog.
+  - Polish patient chart timeline with visit dates, attending doctor badges, and prescription notes.
 
 ---
 
