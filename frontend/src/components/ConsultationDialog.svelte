@@ -131,7 +131,7 @@
               <Dialog.Title class="text-base font-semibold">
                 Clinical Consultation (SOAP)
               </Dialog.Title>
-              <Badge variant="outline" class="border-purple-300 bg-purple-50 text-purple-800 text-[11px] font-medium">
+              <Badge variant="default" class="text-[11px] font-medium">
                 In Consultation
               </Badge>
             </div>
@@ -186,7 +186,7 @@
 
       <!-- Collapsible Medical History Drawer -->
       {#if isHistoryExpanded}
-        <div class="mt-2 max-h-36 overflow-y-auto rounded-lg border border-border bg-muted/20 p-2.5 space-y-2 text-xs">
+        <div class="mt-2 max-h-36 overflow-y-auto rounded-lg border border-border bg-muted/20 p-2.5 flex flex-col gap-2 text-xs">
           {#if isLoadingHistory}
             <div class="flex items-center gap-2 text-muted-foreground py-2 justify-center">
               <Loader2 class="size-3.5 animate-spin" />
@@ -204,7 +204,7 @@
                   <span class="text-[10px] font-mono text-muted-foreground">{rec.created_at?.slice(0, 10)}</span>
                 </div>
                 {#if rec.prescription}
-                  <p class="text-sky-800 text-[11px] font-mono">Rx: {rec.prescription}</p>
+                  <p class="text-primary text-[11px] font-mono">Rx: {rec.prescription}</p>
                 {/if}
                 <p class="text-[11px] text-muted-foreground">Dr. {rec.doctor_name}</p>
               </div>
@@ -320,10 +320,10 @@
       </Button>
 
       <Button
-        type="button"
+        type="submit"
         onclick={handleCompleteConsultation}
         disabled={isSubmitting || !diagnosis.trim()}
-        class="cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+        class="cursor-pointer font-medium"
       >
         {#if isSubmitting}
           <Loader2 class="size-4 animate-spin mr-1.5" />
