@@ -6,6 +6,7 @@
     type StaffUser,
     getUserToken,
     clearUserToken,
+    switchApplicationMode,
   } from "$lib/api";
   import { cn } from "$lib/utils";
   import { toast } from "$lib/toast.svelte";
@@ -47,6 +48,18 @@
   let isSettingsOpen = $state(false);
   let settingsInitialTab = $state<"profile" | "system">("profile");
   let demoMode = $state(false);
+  let isSwitchingMode = $state(false);
+
+  async function handleSwitchMode() {
+    if (currentUser || isSwitchingMode) return;
+    isSwitchingMode = true;
+    try {
+      await switchApplicationMode(demoMode ? "clinic" : "demo");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to switch mode.");
+      isSwitchingMode = false;
+    }
+  }
 
   function openSettings(tab: "profile" | "system" = "profile") {
     settingsInitialTab = tab;
@@ -91,6 +104,12 @@
   async function initAuth() {
     isAuthChecking = true;
     try {
+      const startupUrl = new URL(window.location.href);
+      if (startupUrl.searchParams.get("signed_out") === "1") {
+        clearUserToken();
+        startupUrl.searchParams.delete("signed_out");
+        window.history.replaceState({}, "", startupUrl);
+      }
       // Check current session (either from localStorage if remembered, or sessionStorage)
       const token = getUserToken();
       if (token) {
@@ -465,6 +484,10 @@
           <Button size="sm" onclick={() => (isAuthModalOpen = true)} class="cursor-pointer">
             Sign In to Clinical Core
           </Button>
+          <Button variant="outline" size="sm" class="mt-3" disabled={isSwitchingMode} onclick={handleSwitchMode}>
+            {isSwitchingMode ? "Switching mode..." : demoMode ? "Return to clinic mode" : "Try demo"}
+          </Button>
+          <p class="text-xs text-muted-foreground mt-2">The app restarts when switching modes. Demo data is separate from clinic records.</p>
         </div>
       {:else if activeWorkspace === "doctor_workspace" && currentUser?.role === "doctor"}
         <DoctorWorkspace activeDoctor={currentUser} />
@@ -500,6 +523,8 @@
   <AuthModal
     bind:open={isAuthModalOpen}
     demoMode={demoMode}
+    isSwitchingMode={isSwitchingMode}
+    onSwitchMode={handleSwitchMode}
     onSuccess={(user) => {
       currentUser = user;
       try {

@@ -172,6 +172,21 @@ export function clearUserToken(): void {
   }
 }
 
+export async function switchApplicationMode(
+  mode: "clinic" | "demo",
+): Promise<void> {
+  const host = (window as unknown as {
+    pywebview?: { api?: { switch_mode: (mode: string) => Promise<void> } };
+  }).pywebview?.api;
+  if (!host?.switch_mode) {
+    throw new Error(
+      "Open the desktop app to switch between clinic and demo mode.",
+    );
+  }
+  clearUserToken();
+  await host.switch_mode(mode);
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers || {});
 
