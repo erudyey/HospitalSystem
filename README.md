@@ -121,6 +121,8 @@ On macOS / Linux:
 
 ### Run Automated Tests and Type Checks
 
+Run full quality gate (`basedpyright` strict type check + full `pytest` suite):
+
 On Windows:
 
 ```powershell
@@ -131,6 +133,13 @@ On macOS / Linux:
 
 ```bash
 ./run.sh test
+```
+
+For rapid inner-loop TDD (runs sub-second `pytest` without `basedpyright`):
+
+```powershell
+.\run.ps1 test -Quick       # Windows
+./run.sh test --quick       # macOS / Linux
 ```
 
 ### Format and Lint Code
@@ -149,6 +158,8 @@ On macOS / Linux:
 
 ### Package Standalone Executable
 
+Generate clean desktop bundle (`dist/HospitalSystem.exe` on Windows or `dist/HospitalSystem.app` on macOS):
+
 On Windows:
 
 ```powershell
@@ -159,6 +170,13 @@ On macOS:
 
 ```bash
 ./run.sh package
+```
+
+For fast local packaging during iteration (reuses PyInstaller cache & skips Deno if built):
+
+```powershell
+.\run.ps1 package -Quick    # Windows
+./run.sh package --quick    # macOS
 ```
 
 ### Verify Built Standalone Bundle

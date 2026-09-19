@@ -332,6 +332,67 @@ git branch -d feature/<feature-name>
 git remote prune origin
 ```
 
+#### Step 10: Downstream Rebase Workflow (master -> experimental)
+
+The repository maintains a strict separation of concerns between `master` and
+active feature branches:
+
+- `master`: Hardened, stable bedrock containing verified slices (Slices 1 to 3
+  backend + core UI). No unreleased experimental slices belong on `master`.
+- `experimental`: Active multi-role feature branch (Slices 4 to 7).
+
+All bug fixes, performance optimizations, and layout improvements are applied to
+`master` first. Once proven, they are rebased downstream onto `experimental`:
+
+```bash
+# 1. Ensure master is clean and up to date:
+git checkout master
+git pull origin master
+
+# 2. Switch to experimental and rebase on master:
+git checkout experimental
+git rebase master
+
+# 3. Resolve any conflicts in experimental UI components, run tests, and push:
+.\run.ps1 test
+git push --force-with-lease origin experimental
+
+# 4. CRITICAL: Immediately return to master if master is your active working branch:
+git checkout master
+```
+
+Rules:
+- Force-pushes (`--force`, `--force-with-lease`) are strictly forbidden on `master`.
+- `--force-with-lease` is permitted on `experimental` only after a verified downstream rebase.
+- Never merge `experimental` into `master` until all milestones are complete and formally approved.
+
+#### Step 11: Reviewing Pull Requests via GitHub CLI (gh)
+
+When reviewing or evaluating Pull Requests using the `gh` command-line interface:
+
+1. **Check PR Status and Checks**:
+   ```bash
+   gh pr status
+   gh pr view <pr-number>
+   gh pr checks <pr-number>
+   ```
+2. **Inspect Exact Diff**:
+   ```bash
+   gh pr diff <pr-number>
+   ```
+3. **Approval Criteria**:
+   Before approving a PR, verify:
+   - All GitHub Actions CI checks (`gh pr checks`) are passing.
+   - Strictly zero em dashes (`\u2014`) and en dashes (`\u2013`) exist in diff or commit messages.
+   - Strict `basedpyright` type checks pass with 0 errors.
+   - All unit and integration tests pass with 100% pass rate.
+   - Service layer isolation is respected (database writes in `services.py` inside `transaction.atomic()`).
+   - Clinical invariants (completed visit immutability, deletion protections) are preserved.
+4. **Submit Approval**:
+   ```bash
+   gh pr review <pr-number> --approve --body "Reviewed and verified across all repository quality gates and architectural invariants."
+   ```
+
 ---
 
 ## 5. Reverting and Stashing

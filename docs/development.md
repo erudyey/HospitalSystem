@@ -129,6 +129,24 @@ On macOS / Linux:
 ./run.sh test
 ```
 
+### Rapid Iterative Testing (Quick TDD Loop)
+
+Runs the backend `pytest` suite in sub-second time (~0.8s), bypassing the 5-second `basedpyright` check during active TDD iteration:
+
+On Windows:
+
+```powershell
+.\run.ps1 test -Quick
+```
+
+On macOS / Linux:
+
+```bash
+./run.sh test --quick
+```
+
+> **Note on Test Performance**: Automated tests execute against in-memory SQLite (`TESTING=True`) with 1-round PBKDF2 password hashing in test settings, running all 76 unit and integration tests in ~0.8 seconds without touching user data directories.
+
 ### Run Python Unit Tests Only
 
 Run pytest directly against the backend test suite:
@@ -229,6 +247,29 @@ On macOS (generates `dist/HospitalSystem.app` and `dist/HospitalSystem`):
 
 ```bash
 ./run.sh package
+```
+
+### Rapid Iterative Packaging (Quick Mode)
+
+During local testing of desktop changes, you can bypass the clean rebuild and reuse PyInstaller's module graph cache to package in ~10-15 seconds (skipping frontend compilation if `frontend/dist/` already exists):
+
+On Windows:
+
+```powershell
+.\run.ps1 package -Quick
+```
+
+On macOS:
+
+```bash
+./run.sh package --quick
+```
+
+Or directly via `package.py`:
+
+```bash
+.venv\Scripts\python.exe package.py --quick      # Windows
+.venv/bin/python package.py --quick             # macOS
 ```
 
 ### Build Pipeline Stages

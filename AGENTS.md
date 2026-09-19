@@ -39,8 +39,8 @@ contributors working on the HospitalSystem codebase.
 | **Frontend**    | Svelte 5, Tailwind CSS, shadcn-svelte      | `frontend/src/`       | Deno 2 build pipeline (zero Node.js)      |
 | **Desktop**     | `pywebview` 6.x (WebView2 / WebKit)        | `desktop/launcher.py` | Single-instance lock, loopback token auth |
 | **Persistence** | SQLite with WAL mode & foreign keys        | OS AppData / Library  | Production database: `clinic.sqlite3`     |
-| **Packaging**   | PyInstaller 6.x, `package.py`              | `desktop.spec`        | Generates `.exe` (Win) or `.app` (macOS)  |
-| **Task Runner** | PowerShell 7+ (`run.ps1`), Bash (`run.sh`) | Repo Root             | Unified CLI task automation               |
+| **Packaging**   | PyInstaller 6.x, `package.py`              | `desktop.spec`        | Generates `.exe` (Win) or `.app` (macOS), supports `--quick` / `--clean` |
+| **Task Runner** | PowerShell 7+ (`run.ps1`), Bash (`run.sh`) | Repo Root             | Unified CLI automation with `-Quick` / `--quick` iteration modes         |
 
 ---
 
@@ -50,6 +50,44 @@ contributors working on the HospitalSystem codebase.
   transitions, and database writes must reside in `backend/clinic/services.py`
   wrapped in `transaction.atomic()`. Views in `backend/clinic/views.py` are thin
   HTTP adapters that validate requests and serialize responses.
+- **Strict Working Branch Discipline & Flow Direction**:
+  - Always verify the active branch with `git branch --show-current` before making
+    edits or packaging.
+  - `master` is the hardened, production-grade clinical core (Slices 1 to 3 + core UI).
+    Never introduce unfinished experimental feature slices directly into `master`.
+  - `experimental` is the active feature branch (Slices 4 to 7).
+  - All bug fixes, optimizations, and invariant hardenings must be made on `master`
+    first, verified against quality gates, and then rebased onto `experimental`
+    (`git checkout experimental && git rebase master`).
+  - **Immediate Branch Return**: After executing a downstream rebase on `experimental`,
+    agents must immediately checkout `master` (`git checkout master`) unless explicitly
+    instructed by the user to stay on `experimental`.
+  - **No Force Pushes to Master**: Force pushes (`--force`, `--force-with-lease`) are
+    strictly forbidden on `master`. `--force-with-lease` is only permitted on
+    `experimental` after a verified downstream rebase.
+- **Clinical Data Immutability & Deletion Protection**:
+  - **Completed Visit Immutability**: Appointments in the `Completed` state represent
+    official medical encounters and are legally and clinically immutable. They cannot
+    be edited, rescheduled, or deleted under any circumstance.
+  - **Cascade Deletion Protection**: A patient who has existing completed appointments
+    or medical records cannot be deleted. Deletion requests must be rejected with an
+    HTTP 400 validation error to preserve the clinical audit trail.
+  - **Schedule Conflict Window**: Doctors cannot have overlapping appointments within
+    a +/- 15 minute window on the same date. When rescheduling an existing appointment,
+    the appointment itself must be excluded from conflict detection.
+- **Zero Outer Page Scroll (Desktop Viewport Containment)**:
+  - The entire desktop application must behave as a native window shell without
+    outer vertical window scrolling:
+    - Root layout container must use `h-screen overflow-hidden min-h-0`.
+    - Main workspace container must use `flex-1 min-h-0 overflow-hidden flex flex-col`.
+    - Top metrics cards and toolbars must use `shrink-0`.
+    - Tables must scroll internally via `<Table containerClass="flex-1 min-h-0 overflow-y-auto">`
+      with sticky headers (`sticky top-0 bg-card z-10`) and pinned pagination controls.
+- **Latin-Scoped Typography**:
+  - Font imports in `frontend/src/app.css` must remain strictly scoped to Latin
+    subsets (`@fontsource/inter/latin-*.css`). Never import unscoped `400.css`,
+    `500.css`, etc., which forces Vite to bundle 48 unused Cyrillic, Greek, and
+    Vietnamese font files into `dist/assets/`.
 - **Zero Em/En Dash Policy**: All code, comments, docstrings, markdown files,
   YAML workflows, and commit messages must contain strictly zero em dashes
   (`\u2014`) and en dashes (`\u2013`). Use standard double hyphens (`--`),
@@ -59,7 +97,7 @@ contributors working on the HospitalSystem codebase.
   Windows or `~/Library/Application Support/HospitalSystem/clinic.sqlite3` on
   macOS) contains user data. Never overwrite it during tests or use it as a test
   fixture. Automated tests must execute against in-memory SQLite
-  (`TESTING=True`).
+  (`TESTING=True`) with 1-round PBKDF2 password hashing for sub-second execution.
 - **Single Supported Frontend**: The Svelte 5 Single Page Application in
   `frontend/` is the sole production interface. All frontend dependencies are
   managed through Deno (`deno.json`). Do not introduce Node.js or `npm`.
@@ -72,8 +110,23 @@ contributors working on the HospitalSystem codebase.
 
 ## 4. Verification and Quality Gates
 
-Before concluding any development task or submitting changes, agents must
-execute and pass the following quality gates:
+### Rapid Inner-Loop Iteration (TDD & Fast Packaging)
+During active development, use fast modes to keep feedback turnaround under 2 seconds:
+- **Fast Test Loop (~1.0s)** (sub-second pytest without basedpyright):
+  ```bash
+  .\run.ps1 test -Quick       # Windows (PowerShell)
+  ./run.sh test --quick       # macOS / Linux (Bash)
+  uv run pytest backend/tests/ -v
+  ```
+- **Fast Desktop Packaging (~10-15s)** (reuses PyInstaller cache & skips Deno if built):
+  ```bash
+  .\run.ps1 package -Quick    # Windows (PowerShell)
+  ./run.sh package --quick    # macOS / Linux (Bash)
+  ```
+
+### Authoritative Quality Gates
+Before concluding any task, submitting changes, or approving Pull Requests,
+agents must execute and pass the full 6-gate verification:
 
 1. **Unit and Integration Tests**:
    ```bash
@@ -93,6 +146,15 @@ execute and pass the following quality gates:
    ```bash
    cd frontend && deno task build && cd ..
    deno fmt .github/workflows/
+   ```
+5. **Zero Em/En Dash Compliance**:
+   ```bash
+   python -c "import os; [print(f'Dash in {f}') for r, _, fs in os.walk('.') if not any(ign in r for ign in ['.git', '.venv', 'dist', 'build', 'node_modules', '.gemini']) for fn in fs for f in [os.path.join(r, fn)] if f.endswith(('.py', '.svelte', '.ts', '.css', '.ps1', '.sh', '.md', '.json', '.html')) if '\u2014' in open(f, 'r', encoding='utf-8', errors='ignore').read() or '\u2013' in open(f, 'r', encoding='utf-8', errors='ignore').read()]; print('Dash check completed.')"
+   ```
+6. **Standalone Bundle Bootstrapping & Verification**:
+   ```bash
+   .venv/Scripts/python.exe desktop/verify_bundle.py   # Windows
+   .venv/bin/python desktop/verify_bundle.py          # macOS
    ```
 
 ---
@@ -125,7 +187,7 @@ hospital management application with separate workspaces for **Receptionists** a
   - Endpoints: `/api/appointments/conflict-check/`, `/api/doctor/queue/`,
     `/api/doctor/patients/`, `/api/doctor/appointments/`, `/api/medical-records/`,
     `/api/patients/<id>/medical-records/`.
-  - Test Suite: **64 passing tests** in `backend/tests/` (100% pass rate).
+  - Test Suite: **76 passing tests** in `backend/tests/` (100% pass rate).
 
 ### What Is In Progress and Yet to Be Done (Slices 4 to 7)
 
@@ -153,7 +215,36 @@ hospital management application with separate workspaces for **Receptionists** a
 
 ---
 
-## 6. Bundled Skills and Agent Workflows
+## 6. GitHub CLI Pull Request Review Protocol
+
+When requested to review or evaluate Pull Requests on GitHub using the `gh` CLI:
+
+1. **Inspect PR and CI Status**:
+   ```bash
+   gh pr status
+   gh pr view <pr-number>
+   gh pr checks <pr-number>
+   ```
+2. **Inspect Exact Diff**:
+   ```bash
+   gh pr diff <pr-number>
+   ```
+3. **Mandatory Approval Conditions**:
+   Agents are authorized by the maintainer to approve Pull Requests provided that:
+   - All GitHub Actions CI checks (`gh pr checks`) are green.
+   - Strictly zero em dashes (`\u2014`) and en dashes (`\u2013`) exist in the PR diff or commit messages.
+   - Strict `basedpyright` type checks pass with 0 errors.
+   - All backend tests pass with 100% pass rate.
+   - Code strictly adheres to service layer isolation (writes in `services.py` with `transaction.atomic()`).
+   - Architectural invariants (completed visit immutability, cascade deletion protection, viewport containment) are preserved.
+4. **Submit Approval**:
+   ```bash
+   gh pr review <pr-number> --approve --body "Reviewed and verified across all repository quality gates and architectural invariants."
+   ```
+
+---
+
+## 7. Bundled Skills and Agent Workflows
 
 The repository bundles core engineering skills under `.agents/skills/`:
 
