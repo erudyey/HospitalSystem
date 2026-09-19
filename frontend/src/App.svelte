@@ -46,7 +46,7 @@
   let isAuthModalOpen = $state(false);
   let isSettingsOpen = $state(false);
   let settingsInitialTab = $state<"profile" | "system">("profile");
-  let demoMode = $state(true);
+  let demoMode = $state(false);
 
   function openSettings(tab: "profile" | "system" = "profile") {
     settingsInitialTab = tab;
@@ -81,6 +81,7 @@
       const res = await api.healthCheck();
       if (res.status === "ok") {
         isOnline = true;
+        demoMode = res.mode === "demo";
       }
     } catch {
       isOnline = false;
@@ -90,12 +91,6 @@
   async function initAuth() {
     isAuthChecking = true;
     try {
-      // Check stored demo mode preference
-      const savedDemo = localStorage.getItem("hospitalsystem_demo_mode");
-      if (savedDemo !== null) {
-        demoMode = savedDemo === "true";
-      }
-
       // Check current session (either from localStorage if remembered, or sessionStorage)
       const token = getUserToken();
       if (token) {

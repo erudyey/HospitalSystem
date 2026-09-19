@@ -14,6 +14,7 @@ import os
 import secrets
 import socket
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -48,7 +49,7 @@ if str(BUNDLE_ROOT) not in sys.path:
 
 
 # Diagnostic File Logger in OS-specific app directory
-def get_app_dir() -> Path:
+def get_app_dir(*, create: bool = False) -> Path:
     """Resolve application data directory based on operating system."""
     if sys.platform == "darwin":
         base = Path.home() / "Library" / "Application Support"
@@ -59,11 +60,26 @@ def get_app_dir() -> Path:
         xdg_data = os.environ.get("XDG_DATA_HOME")
         base = Path(xdg_data) if xdg_data else (Path.home() / ".local" / "share")
     app_dir = base / "HospitalSystem"
-    app_dir.mkdir(parents=True, exist_ok=True)
+    if create:
+        app_dir.mkdir(parents=True, exist_ok=True)
     return app_dir
 
 
-APP_DIR = get_app_dir()
+IS_VERIFY_MODE = "--verify" in sys.argv
+IS_DEMO_MODE = "--demo" in sys.argv
+if IS_VERIFY_MODE and not os.environ.get("HOSPITAL_DATA_DIR"):
+    _verification_dir = Path(tempfile.mkdtemp(prefix="hospitalsystem-verify-"))
+    os.environ["HOSPITAL_DATA_DIR"] = str(_verification_dir)
+else:
+    _verification_dir = None
+os.environ.setdefault("HOSPITAL_MODE", "demo" if IS_DEMO_MODE else "clinic")
+
+APP_DIR = (
+    Path(os.environ["HOSPITAL_DATA_DIR"])
+    if os.environ.get("HOSPITAL_DATA_DIR")
+    else get_app_dir(create=True)
+)
+APP_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = APP_DIR / "launcher.log"
 STATE_FILE = APP_DIR / "app_state.json"
 
@@ -76,7 +92,6 @@ logger = logging.getLogger("HospitalLauncher")
 logger.info("Initializing HospitalSystem launcher (PID: %d)...", os.getpid())
 
 # Single Instance Check (bypassed if running verification mode)
-IS_VERIFY_MODE = "--verify" in sys.argv
 _INSTANCE_LOCK_HANDLE = None
 _MUTEX_HANDLE = None
 
@@ -215,10 +230,11 @@ def main() -> None:
         logger.info("Executing database migrations...")
         call_command("migrate", interactive=False)
 
-        from backend.clinic.services import ensure_default_staff
+        if IS_DEMO_MODE:
+            from backend.clinic.services import ensure_default_staff
 
-        logger.info("Ensuring baseline staff accounts exist...")
-        ensure_default_staff()
+            logger.info("Ensuring demo staff accounts exist...")
+            ensure_default_staff()
 
         from waitress.server import create_server
 

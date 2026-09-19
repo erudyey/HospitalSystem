@@ -14,7 +14,10 @@ param (
     [string]$Command,
 
     [Parameter(Mandatory = $false)]
-    [switch]$Quick
+    [switch]$Quick,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$Demo
 )
 
 $ErrorActionPreference = "Stop"
@@ -76,7 +79,11 @@ switch ($Command) {
                 Pop-Location
             }
         }
-        & $VenvPython "$RepoRoot\desktop\launcher.py"
+        $desktopArgs = @()
+        if ($Demo) {
+            $desktopArgs += "--demo"
+        }
+        & $VenvPython "$RepoRoot\desktop\launcher.py" @desktopArgs
     }
 
     "test" {

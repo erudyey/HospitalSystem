@@ -324,7 +324,13 @@ class StaffAuthApiTests(TestCase):
             password_hash="dummy",
         )
         with patch.dict(os.environ, {"HOSPITAL_SESSION_TOKEN": self.session_token}):
-            response = self.auth_client.get(reverse("api-doctors"))
+            receptionist = register_staff(
+                "doctors.api", "password123", "Doctors API", StaffRole.RECEPTIONIST
+            )
+            _, session = authenticate_staff(receptionist.username, "password123")
+            response = Client(
+                headers={"X-Session-Token": self.session_token, "X-User-Token": session.token}
+            ).get(reverse("api-doctors"))
             self.assertEqual(response.status_code, 200)
             doctors = response.json()
             self.assertTrue(len(doctors) >= 1)

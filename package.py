@@ -2,7 +2,6 @@
 """One-command standalone executable packaging script."""
 
 import argparse
-import contextlib
 import subprocess
 import sys
 from pathlib import Path
@@ -41,28 +40,6 @@ def run_command(cmd: list[str], cwd: Path) -> None:
         sys.exit(result.returncode)
 
 
-def ensure_executable_unlocked() -> None:
-    """Ensure previous running instances of the executable are terminated before packaging."""
-    if sys.platform == "win32":
-        exe_path = REPO_ROOT / "dist" / "HospitalSystem.exe"
-        if exe_path.exists():
-            with contextlib.suppress(Exception):
-                subprocess.run(
-                    ["taskkill", "/F", "/IM", exe_path.name],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    check=False,
-                )
-    elif sys.platform == "darwin":
-        with contextlib.suppress(Exception):
-            subprocess.run(
-                ["pkill", "-f", "HospitalSystem"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
-
-
 def main() -> None:
     args = parse_args()
     platform_name = "macOS" if sys.platform == "darwin" else "Windows"
@@ -80,8 +57,6 @@ def main() -> None:
         print("\n[Step 1/3] Reusing existing frontend build in frontend/dist/...")
 
     # 2. Run PyInstaller
-    ensure_executable_unlocked()
-
     print("\n[Step 2/3] Freezing desktop bundle with PyInstaller...")
     pyinstaller_cmd = [
         sys.executable,

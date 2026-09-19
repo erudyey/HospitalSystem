@@ -16,6 +16,7 @@ from backend.clinic.models import (
     Appointment,
     AppointmentStatus,
     MedicalRecord,
+    MedicalRecordRevision,
     Patient,
     StaffRole,
     StaffUser,
@@ -114,6 +115,9 @@ def book_appointment(
     reason_for_visit: str = "",
     doctor_id: int | None = None,
     initial_status: str = AppointmentStatus.SCHEDULED,
+    allow_conflict: bool = False,
+    override_reason: str = "",
+    override_by_id: int | None = None,
 ) -> Appointment:
     """Book a new appointment with time slot, reason for visit, and optional doctor FK."""
     clean_doctor = (doctor_name or "").strip()
@@ -125,8 +129,9 @@ def book_appointment(
     if doctor_id is not None:
         try:
             assigned_doctor = StaffUser.objects.get(id=doctor_id)
-            if not clean_doctor:
-                clean_doctor = assigned_doctor.full_name
+            if assigned_doctor.role != StaffRole.DOCTOR or not assigned_doctor.is_active:
+                errors["doctor_id"] = "Appointment doctor must be an active physician."
+            clean_doctor = assigned_doctor.full_name
         except StaffUser.DoesNotExist:
             errors["doctor_id"] = f"Doctor #{doctor_id} does not exist."
 
@@ -158,7 +163,28 @@ def book_appointment(
     if errors or parsed_date is None or patient is None:
         raise ValidationError(errors)
 
+    clean_override_reason = (override_reason or "").strip()
+    if allow_conflict and not clean_override_reason:
+        errors["override_reason"] = "A reason is required to override a schedule conflict."
+    if errors:
+        raise ValidationError(errors)
+
     with transaction.atomic():
+        if assigned_doctor is not None:
+            conflicts = check_schedule_conflict(
+                assigned_doctor.id,
+                parsed_date,
+                parsed_time,
+            )
+            if conflicts and not allow_conflict:
+                raise ValidationError(
+                    {
+                        "schedule": "The selected physician already has an active appointment in this time window."
+                    }
+                )
+        override_by = None
+        if allow_conflict and override_by_id is not None:
+            override_by = StaffUser.objects.filter(id=override_by_id).first()
         appointment = Appointment(
             patient=patient,
             doctor=assigned_doctor,
@@ -167,6 +193,10 @@ def book_appointment(
             app_time=parsed_time,
             reason_for_visit=clean_reason,
             status=clean_status,
+            checked_in_at=timezone.now() if clean_status == AppointmentStatus.CHECKED_IN else None,
+            conflict_override_reason=clean_override_reason if allow_conflict else "",
+            conflict_overridden_at=timezone.now() if allow_conflict else None,
+            conflict_overridden_by=override_by,
         )
         appointment.save()
         return appointment
@@ -239,28 +269,34 @@ def update_appointment(
     app_time_str: str | None = None,
     reason_for_visit: str | None = None,
     doctor_id: int | None = None,
+    allow_conflict: bool = False,
+    override_reason: str = "",
+    override_by_id: int | None = None,
 ) -> Appointment:
     """Update appointment details (rescheduling, time slot, or doctor reassignment)."""
     errors: dict[str, str] = {}
 
     with transaction.atomic():
         appointment = Appointment.objects.select_for_update().get(id=appointment_id)
-        if appointment.status == AppointmentStatus.COMPLETED:
+        if appointment.status in (AppointmentStatus.COMPLETED, AppointmentStatus.IN_CONSULTATION):
             raise ValidationError(
                 {
-                    "appointment": "Completed appointments are finalized clinical records and cannot be rescheduled or modified."
+                    "appointment": "Completed or in-consultation appointments cannot be rescheduled or modified."
                 }
             )
 
         if doctor_id is not None:
             try:
                 assigned_doctor = StaffUser.objects.get(id=doctor_id)
-                appointment.doctor = assigned_doctor
-                appointment.doctor_name = assigned_doctor.full_name
+                if assigned_doctor.role != StaffRole.DOCTOR or not assigned_doctor.is_active:
+                    errors["doctor_id"] = "Appointment doctor must be an active physician."
+                else:
+                    appointment.doctor = assigned_doctor
+                    appointment.doctor_name = assigned_doctor.full_name
             except StaffUser.DoesNotExist:
                 errors["doctor_id"] = f"Doctor #{doctor_id} does not exist."
 
-        if doctor_name is not None:
+        if doctor_name is not None and doctor_id is None:
             clean_doctor = doctor_name.strip()
             if not clean_doctor:
                 errors["doctor_name"] = "Doctor name cannot be blank."
@@ -280,11 +316,37 @@ def update_appointment(
                 errors["app_time"] = "Time must be in HH:MM format (e.g. 09:30)."
 
         if reason_for_visit is not None:
-            appointment.reason_for_visit = reason_for_visit.strip()
+            if not isinstance(reason_for_visit, str):
+                errors["reason_for_visit"] = "Reason for visit must be a string."
+            else:
+                appointment.reason_for_visit = reason_for_visit.strip()
 
         if errors:
             raise ValidationError(errors)
 
+        clean_override_reason = (override_reason or "").strip()
+        conflicts = []
+        if appointment.doctor_id is not None:
+            conflicts = check_schedule_conflict(
+                appointment.doctor_id,
+                appointment.app_date,
+                appointment.app_time,
+                exclude_id=appointment.id,
+            )
+        if conflicts and not allow_conflict:
+            raise ValidationError(
+                {
+                    "schedule": "The selected physician already has an active appointment in this time window."
+                }
+            )
+        if allow_conflict and not clean_override_reason:
+            raise ValidationError(
+                {"override_reason": "A reason is required to override a schedule conflict."}
+            )
+        if allow_conflict:
+            appointment.conflict_override_reason = clean_override_reason
+            appointment.conflict_overridden_at = timezone.now()
+            appointment.conflict_overridden_by_id = override_by_id
         appointment.save()
         return appointment
 
@@ -293,10 +355,10 @@ def delete_appointment(appointment_id: int) -> tuple[int, dict[str, int]]:
     """Delete an appointment record."""
     with transaction.atomic():
         appointment = Appointment.objects.select_for_update().get(id=appointment_id)
-        if appointment.status == AppointmentStatus.COMPLETED:
+        if appointment.status in (AppointmentStatus.COMPLETED, AppointmentStatus.IN_CONSULTATION):
             raise ValidationError(
                 {
-                    "appointment": "Completed appointments are immutable clinical records and cannot be deleted."
+                    "appointment": "Clinical appointments cannot be deleted while in consultation or after completion."
                 }
             )
         return appointment.delete()
@@ -306,8 +368,8 @@ def update_appointment_status(appointment_id: int, new_status: str) -> Appointme
     """Update an appointment status following the 5-state clinical lifecycle.
 
     State transitions:
-    - Scheduled -> Checked In, Cancelled, Completed
-    - Checked In -> In Consultation, Scheduled, Cancelled, Completed
+    - Scheduled -> Checked In, Cancelled
+    - Checked In -> In Consultation, Scheduled, Cancelled
     - In Consultation -> Completed, Checked In
     - Completed -> Immutable
     - Cancelled -> Scheduled
@@ -358,7 +420,11 @@ def update_appointment_status(appointment_id: int, new_status: str) -> Appointme
             )
 
         appointment.status = clean_status
-        appointment.save()
+        update_fields = ["status"]
+        if clean_status == AppointmentStatus.CHECKED_IN and appointment.checked_in_at is None:
+            appointment.checked_in_at = timezone.now()
+            update_fields.append("checked_in_at")
+        appointment.save(update_fields=update_fields)
         return appointment
 
 
@@ -638,7 +704,7 @@ def check_schedule_conflict(
     doc = StaffUser.objects.filter(id=doctor_id).first()
     doctor_filter = Q(doctor_id=doctor_id)
     if doc and doc.full_name:
-        doctor_filter |= Q(doctor_name__iexact=doc.full_name)
+        doctor_filter |= Q(doctor__isnull=True, doctor_name__iexact=doc.full_name)
 
     qs = Appointment.objects.select_related("patient").filter(
         doctor_filter,
@@ -673,42 +739,47 @@ def create_medical_record(
     if not clean_diagnosis:
         raise ValidationError({"diagnosis": "Primary diagnosis is required."})
 
-    try:
-        patient = Patient.objects.get(id=patient_id)
-    except Patient.DoesNotExist:
-        raise ValidationError({"patient_id": f"Patient #{patient_id} does not exist."}) from None
-
-    try:
-        doctor = StaffUser.objects.get(id=doctor_id)
-        if not doctor.is_active:
-            raise ValidationError({"doctor_id": "Inactive doctor cannot author medical records."})
-        if doctor.role != StaffRole.DOCTOR:
-            raise ValidationError(
-                {"doctor_id": "Only registered doctors can author medical records."}
-            )
-    except StaffUser.DoesNotExist:
-        raise ValidationError({"doctor_id": f"Doctor #{doctor_id} does not exist."}) from None
-
-    appointment: Appointment | None = None
-    if appointment_id is not None:
-        try:
-            appointment = Appointment.objects.get(id=appointment_id)
-        except Appointment.DoesNotExist:
-            raise ValidationError(
-                {"appointment_id": f"Appointment #{appointment_id} does not exist."}
-            ) from None
-        if appointment.patient_id != patient.id:
-            raise ValidationError(
-                {"appointment_id": f"Appointment #{appointment_id} belongs to a different patient."}
-            )
-        if MedicalRecord.objects.filter(appointment_id=appointment_id).exists():
-            raise ValidationError(
-                {
-                    "appointment_id": f"A medical record already exists for appointment #{appointment_id}."
-                }
-            )
-
     with transaction.atomic():
+        try:
+            patient = Patient.objects.get(id=patient_id)
+        except Patient.DoesNotExist:
+            raise ValidationError(
+                {"patient_id": f"Patient #{patient_id} does not exist."}
+            ) from None
+        try:
+            doctor = StaffUser.objects.get(id=doctor_id)
+        except StaffUser.DoesNotExist:
+            raise ValidationError({"doctor_id": f"Doctor #{doctor_id} does not exist."}) from None
+        if not doctor.is_active or doctor.role != StaffRole.DOCTOR:
+            raise ValidationError({"doctor_id": "Only active doctors can author medical records."})
+        appointment: Appointment | None = None
+        if appointment_id is not None:
+            try:
+                appointment = Appointment.objects.select_for_update().get(id=appointment_id)
+            except Appointment.DoesNotExist:
+                raise ValidationError(
+                    {"appointment_id": f"Appointment #{appointment_id} does not exist."}
+                ) from None
+            if appointment.patient_id != patient.id:
+                raise ValidationError(
+                    {
+                        "appointment_id": f"Appointment #{appointment_id} belongs to a different patient."
+                    }
+                )
+            if appointment.doctor_id != doctor.id:
+                raise ValidationError(
+                    {"appointment_id": "Only the assigned doctor can sign this appointment."}
+                )
+            if appointment.status != AppointmentStatus.IN_CONSULTATION:
+                raise ValidationError(
+                    {"appointment_id": "Only an in-consultation appointment can be signed."}
+                )
+            if MedicalRecord.objects.filter(appointment_id=appointment_id).exists():
+                raise ValidationError(
+                    {
+                        "appointment_id": f"A medical record already exists for appointment #{appointment_id}."
+                    }
+                )
         record = MedicalRecord(
             patient=patient,
             doctor=doctor,
@@ -720,6 +791,17 @@ def create_medical_record(
             follow_up_advice=(follow_up_advice or "").strip(),
         )
         record.save()
+        MedicalRecordRevision.objects.create(
+            record=record,
+            revision=record.revision,
+            correction_reason="Initial signed record.",
+            diagnosis=record.diagnosis,
+            symptoms=record.symptoms,
+            clinical_notes=record.clinical_notes,
+            prescription=record.prescription,
+            follow_up_advice=record.follow_up_advice,
+            changed_by=doctor,
+        )
 
         # Finalize the linked appointment if present
         if appointment and appointment.status != AppointmentStatus.COMPLETED:
@@ -746,29 +828,52 @@ def update_medical_record(
     clinical_notes: str = "",
     prescription: str = "",
     follow_up_advice: str = "",
+    correction_reason: str = "",
+    expected_revision: int | None = None,
 ) -> MedicalRecord:
     """Update clinical record with author-only restriction."""
     clean_diagnosis = (diagnosis or "").strip()
     if not clean_diagnosis:
         raise ValidationError({"diagnosis": "Primary diagnosis is required."})
 
-    try:
-        record = MedicalRecord.objects.select_related("doctor").get(id=record_id)
-    except MedicalRecord.DoesNotExist:
-        raise ValidationError({"record": f"Medical record #{record_id} does not exist."}) from None
-
-    if record.doctor_id != doctor_id:
-        raise ValidationError(
-            {"doctor": "Only the authoring physician can edit this clinical record."}
-        )
-
     with transaction.atomic():
+        try:
+            record = MedicalRecord.objects.select_for_update().get(id=record_id)
+        except MedicalRecord.DoesNotExist:
+            raise ValidationError(
+                {"record": f"Medical record #{record_id} does not exist."}
+            ) from None
+        if record.doctor_id != doctor_id:
+            raise ValidationError(
+                {"doctor": "Only the authoring physician can edit this clinical record."}
+            )
+        if expected_revision is not None and record.revision != expected_revision:
+            raise ValidationError(
+                {
+                    "revision": "This record has been corrected by another user. Refresh and try again."
+                }
+            )
+        clean_reason = (correction_reason or "").strip()
+        if not clean_reason:
+            raise ValidationError({"correction_reason": "A correction reason is required."})
         record.diagnosis = clean_diagnosis
         record.symptoms = (symptoms or "").strip()
         record.clinical_notes = (clinical_notes or "").strip()
         record.prescription = (prescription or "").strip()
         record.follow_up_advice = (follow_up_advice or "").strip()
+        record.revision += 1
         record.save()
+        MedicalRecordRevision.objects.create(
+            record=record,
+            revision=record.revision,
+            correction_reason=clean_reason,
+            diagnosis=record.diagnosis,
+            symptoms=record.symptoms,
+            clinical_notes=record.clinical_notes,
+            prescription=record.prescription,
+            follow_up_advice=record.follow_up_advice,
+            changed_by_id=doctor_id,
+        )
         return record
 
 
@@ -780,12 +885,12 @@ def get_doctor_queue(
     doc = StaffUser.objects.filter(id=doctor_id).first()
     doctor_filter = Q(doctor_id=doctor_id)
     if doc and doc.full_name:
-        doctor_filter |= Q(doctor_name__iexact=doc.full_name)
+        doctor_filter |= Q(doctor__isnull=True, doctor_name__iexact=doc.full_name)
 
     base_qs = (
         Appointment.objects.select_related("patient")
         .filter(doctor_filter, app_date=ref_date)
-        .order_by("app_time", "id")
+        .order_by("checked_in_at", "app_time", "id")
     )
 
     return {
@@ -801,7 +906,9 @@ def get_doctor_patients(doctor_id: int, query: str | None = None) -> list[Patien
     doc = StaffUser.objects.filter(id=doctor_id).first()
     appt_filter = Q(appointments__doctor_id=doctor_id)
     if doc and doc.full_name:
-        appt_filter |= Q(appointments__doctor_name__iexact=doc.full_name)
+        appt_filter |= Q(
+            appointments__doctor__isnull=True, appointments__doctor_name__iexact=doc.full_name
+        )
 
     qs = (
         Patient.objects.filter(appt_filter | Q(medical_records__doctor_id=doctor_id))

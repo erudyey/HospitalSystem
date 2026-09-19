@@ -7,6 +7,7 @@ from unittest.mock import patch
 from django.test import Client, TestCase
 
 from backend.clinic import services
+from backend.clinic.models import StaffRole
 
 
 class ClinicAPITests(TestCase):
@@ -15,7 +16,16 @@ class ClinicAPITests(TestCase):
     def setUp(self) -> None:
         self.client = Client()
         self.token = "test-secret-session-token-32-chars-long"
-        self.auth_client = Client(headers={"X-Session-Token": self.token})
+        self.receptionist = services.register_staff(
+            "api.receptionist", "password123", "API Receptionist", StaffRole.RECEPTIONIST
+        )
+        _, session = services.authenticate_staff("api.receptionist", "password123")
+        self.doctor = services.register_staff(
+            "api.doctor", "password123", "Dr. API", StaffRole.DOCTOR
+        )
+        self.auth_client = Client(
+            headers={"X-Session-Token": self.token, "X-User-Token": session.token}
+        )
 
     def test_health_check_available_without_token(self) -> None:
         # Act
@@ -25,7 +35,7 @@ class ClinicAPITests(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertEqual(data["status"], "ok")
-        self.assertEqual(data["version"], "0.0.1")
+        self.assertEqual(data["version"], "0.1.0-beta.1")
 
     @patch.dict(os.environ, {"HOSPITAL_SESSION_TOKEN": "test-secret-session-token-32-chars-long"})
     def test_endpoints_reject_requests_without_session_token(self) -> None:
@@ -79,7 +89,7 @@ class ClinicAPITests(TestCase):
         # Act 1: Book appointment
         book_payload = {
             "patient_id": patient.id,
-            "doctor_name": "Dr. Tan",
+            "doctor_id": self.doctor.id,
             "app_date": "2026-10-01",
         }
         book_resp = self.auth_client.post(
@@ -98,15 +108,14 @@ class ClinicAPITests(TestCase):
         self.assertEqual(len(appointments), 1)
         self.assertEqual(appointments[0]["id"], app_data["id"])
 
-        # Act 3: Patch status to Completed
+        # Act 3: Receptionists cannot complete consultations directly.
         patch_payload = {"status": "Completed"}
         patch_resp = self.auth_client.patch(
             f"/api/appointments/{app_data['id']}/status/",
             data=json.dumps(patch_payload),
             content_type="application/json",
         )
-        self.assertEqual(patch_resp.status_code, 200)
-        self.assertEqual(patch_resp.json()["status"], "Completed")
+        self.assertEqual(patch_resp.status_code, 403)
 
     @patch.dict(os.environ, {"HOSPITAL_SESSION_TOKEN": "test-secret-session-token-32-chars-long"})
     def test_patient_detail_crud_api(self) -> None:
@@ -161,14 +170,14 @@ class ClinicAPITests(TestCase):
         self.assertEqual(detail_resp.json()["doctor_name"], "Dr. Richard")
 
         # Act 3: PUT reschedule appointment
-        put_payload = {"doctor_name": "Dr. Timothy", "app_date": "2026-10-25"}
+        put_payload = {"doctor_id": self.doctor.id, "app_date": "2026-10-25"}
         put_resp = self.auth_client.put(
             f"/api/appointments/{app.id}/",
             data=json.dumps(put_payload),
             content_type="application/json",
         )
         self.assertEqual(put_resp.status_code, 200)
-        self.assertEqual(put_resp.json()["doctor_name"], "Dr. Timothy")
+        self.assertEqual(put_resp.json()["doctor_name"], "Dr. API")
         self.assertEqual(put_resp.json()["app_date"], "2026-10-25")
 
         # Act 4: DELETE appointment
@@ -182,12 +191,14 @@ class ClinicAPITests(TestCase):
         patient = services.register_patient("Chandler Bing", "09173334455", 32)
         app = services.book_appointment(patient.id, "Dr. Ross", "2026-11-01")
 
-        # Complete the appointment
-        self.auth_client.patch(
+        # Receptionists cannot complete the appointment directly.
+        complete_resp = self.auth_client.patch(
             f"/api/appointments/{app.id}/status/",
             data=json.dumps({"status": "Completed"}),
             content_type="application/json",
         )
+        self.assertEqual(complete_resp.status_code, 403)
+        services.update_appointment_status(app.id, "Completed")
 
         # Attempt to cancel completed appointment -> HTTP 400
         cancel_resp = self.auth_client.patch(

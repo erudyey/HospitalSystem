@@ -77,8 +77,14 @@ else:
             if xdg_data
             else Path.home() / ".local" / "share" / "HospitalSystem"
         )
+    configured_dir = os.environ.get("HOSPITAL_DATA_DIR")
+    if configured_dir:
+        app_dir = Path(configured_dir).expanduser()
     app_dir.mkdir(parents=True, exist_ok=True)
-    DB_PATH = str(app_dir / "clinic.sqlite3")
+    database_name = (
+        "clinic_demo.sqlite3" if os.environ.get("HOSPITAL_MODE") == "demo" else "clinic.sqlite3"
+    )
+    DB_PATH = str(app_dir / database_name)
 
 DATABASES = {
     "default": {

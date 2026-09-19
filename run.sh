@@ -3,7 +3,7 @@
 # Usage:
 #   ./run.sh setup
 #   ./run.sh dev
-#   ./run.sh desktop
+#   ./run.sh desktop [--demo]
 #   ./run.sh test
 #   ./run.sh format
 #   ./run.sh package
@@ -71,7 +71,11 @@ case "$COMMAND" in
             echo "Building frontend bundle first..."
             (cd "$REPO_ROOT/frontend" && deno task build)
         fi
-        "$VENV_PYTHON" "$REPO_ROOT/desktop/launcher.py"
+        DESKTOP_ARGS=()
+        if [ "$OPTION" = "--demo" ]; then
+            DESKTOP_ARGS+=("--demo")
+        fi
+        "$VENV_PYTHON" "$REPO_ROOT/desktop/launcher.py" "${DESKTOP_ARGS[@]}"
         ;;
 
     test)
