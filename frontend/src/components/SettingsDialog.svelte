@@ -109,7 +109,7 @@
       });
 
       toast.success("Profile updated successfully.");
-      onProfileUpdated?.(updated);
+      onProfileUpdated?.((updated as any).user || updated);
       newPassword = "";
       confirmPassword = "";
     } catch (err) {
@@ -184,7 +184,7 @@
     <!-- Body -->
     <div class="px-6 py-4">
       {#if activeTab === "profile"}
-        <form onsubmit={handleSaveProfile} class="space-y-3.5">
+        <form onsubmit={handleSaveProfile} class="flex flex-col gap-3.5">
           <div class="grid grid-cols-2 gap-2.5">
             <div>
               <label for="profUser" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
@@ -255,7 +255,7 @@
           </div>
 
           <!-- Password Change Section -->
-          <div class="pt-2 border-t border-border/80 space-y-2.5">
+          <div class="pt-2 border-t border-border/80 flex flex-col gap-2.5">
             <p class="text-xs font-semibold text-foreground flex items-center gap-1.5">
               <KeyRound class="size-3.5 text-primary" />
               <span>Change Password (optional)</span>
@@ -302,10 +302,10 @@
 
       {:else}
         <!-- System & Demo Mode Tab -->
-        <div class="space-y-4">
+        <div class="flex flex-col gap-4">
           <!-- Demo Mode Toggle Card -->
           <div class="rounded-xl border border-primary/20 bg-primary/5 p-4 flex items-start justify-between gap-4">
-            <div class="space-y-1">
+            <div class="flex flex-col gap-1">
               <div class="flex items-center gap-2">
                 <Sparkles class="size-4 text-primary" />
                 <h4 class="text-xs font-semibold text-foreground">Evaluation Demo Mode</h4>
@@ -330,13 +330,13 @@
           </div>
 
           <!-- Storage & Engine Info -->
-          <div class="rounded-xl border border-border bg-card p-4 space-y-2.5 text-xs">
+          <div class="rounded-xl border border-border bg-card p-4 flex flex-col gap-2.5 text-xs">
             <div class="flex items-center gap-2 font-semibold text-foreground">
               <Database class="size-4 text-muted-foreground" />
               <span>Database Architecture & Storage</span>
             </div>
 
-            <div class="space-y-1.5 text-muted-foreground">
+            <div class="flex flex-col gap-1.5 text-muted-foreground">
               <div class="flex justify-between">
                 <span>Engine:</span>
                 <span class="font-mono text-foreground">SQLite 3 (WAL Mode)</span>
