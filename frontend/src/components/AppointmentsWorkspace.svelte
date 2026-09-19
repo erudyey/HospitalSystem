@@ -1045,7 +1045,7 @@
 
   <!-- Modal Dialog: New Appointment -->
   <Dialog.Root bind:open={isBookingModalOpen}>
-    <Dialog.Content class="sm:max-w-md">
+    <Dialog.Content class="sm:max-w-2xl overflow-x-hidden">
       <Dialog.Header>
         <Dialog.Title>Schedule Consultation</Dialog.Title>
         <Dialog.Description>
@@ -1053,7 +1053,7 @@
         </Dialog.Description>
       </Dialog.Header>
 
-      <form onsubmit={handleCreateBooking} class="flex flex-col gap-4 py-2">
+      <form onsubmit={handleCreateBooking} class="flex min-w-0 flex-col gap-4 py-2">
         <!-- Patient Selector with Empty State Guard -->
         <div>
           <label for="modalPatientSelect" class="block text-xs font-semibold text-foreground mb-1.5">
@@ -1119,16 +1119,12 @@
         </div>
 
         <!-- Date & Time Row -->
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
           <!-- Date -->
-          <div>
+          <div class="min-w-0">
             <label for="modalDate" class="block text-xs font-semibold text-foreground mb-1.5">
               Appointment Date <span class="text-destructive">*</span>
             </label>
-            {#if overrideConflict}
-              <Input class="text-xs" placeholder="Required override reason" bind:value={overrideReason} maxlength="255" />
-              {#if bookingErrors.override_reason}<p class="text-xs text-destructive">{bookingErrors.override_reason.join(" ")}</p>{/if}
-            {/if}
             <Input
               id="modalDate"
               type="date"
@@ -1142,7 +1138,7 @@
           </div>
 
           <!-- Time Slot -->
-          <div>
+          <div class="min-w-0">
             <label for="modalTime" class="block text-xs font-semibold text-foreground mb-1.5">
               Time Slot <span class="text-destructive">*</span>
             </label>
@@ -1194,6 +1190,10 @@
               />
               <span>Emergency / Walk-in Override (Book Anyway)</span>
             </label>
+            {#if overrideConflict}
+              <Input class="mt-1.5 text-xs" placeholder="Required override reason" bind:value={overrideReason} maxlength="255" />
+              {#if bookingErrors.override_reason}<p class="mt-1 text-xs text-destructive">{bookingErrors.override_reason.join(" ")}</p>{/if}
+            {/if}
           </div>
         {/if}
 
@@ -1203,12 +1203,13 @@
           </div>
         {/if}
 
-        <Dialog.Footer class="pt-2 flex flex-col sm:flex-row gap-2">
+        <Dialog.Footer class="grid w-full grid-cols-1 gap-2 pt-2 sm:grid-cols-3">
           <Button
             type="button"
             variant="outline"
             onclick={() => (isBookingModalOpen = false)}
             disabled={isSubmitting}
+            class="w-full whitespace-normal"
           >
             Cancel
           </Button>
@@ -1217,7 +1218,7 @@
             variant="secondary"
             onclick={(e) => handleWalkIn(e)}
             disabled={isSubmitting || patientList.length === 0 || (!!conflictWarning && !overrideConflict)}
-            class="cursor-pointer"
+            class="w-full whitespace-normal cursor-pointer"
           >
             {#if isSubmitting}
               <Loader2 class="size-4 animate-spin mr-1" />
@@ -1229,7 +1230,7 @@
           <Button
             type="submit"
             disabled={isSubmitting || patientList.length === 0 || (!!conflictWarning && !overrideConflict)}
-            class="cursor-pointer"
+            class="w-full whitespace-normal cursor-pointer"
           >
             {#if isSubmitting}
               <Loader2 class="size-4 animate-spin mr-1" />
