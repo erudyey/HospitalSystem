@@ -10,9 +10,9 @@ all UI/UX workflows to use standard default shadcn-svelte components.
 ## Progress Overview
 
 - Total Tasks: 17
-- Completed: 15
+- Completed: 17
 - In Progress: 0
-- Remaining: 2
+- Remaining: 0
 
 ---
 
@@ -120,12 +120,12 @@ all UI/UX workflows to use standard default shadcn-svelte components.
 
 ## Phase 6: Quality Gates & Verification
 
-- [ ] **Task 6.1: Run Backend Quality Gates**
+- [x] **Task 6.1: Run Backend Quality Gates**
   - Run fast test suite: `uv run pytest backend/tests/ -v`.
   - Run strict type checking: `.venv/Scripts/python.exe -m basedpyright` (0 errors).
   - Run style checks: `uv run ruff check backend desktop package.py` and `uv run ruff format --check backend desktop package.py`.
 
-- [ ] **Task 6.2: Run Frontend Build & System Quality Gates**
+- [x] **Task 6.2: Run Frontend Build & System Quality Gates**
   - Run Deno build: `cd frontend && deno task build && cd ..`.
   - Run zero em/en dash verification script across the entire repository.
   - Run standalone bundle verification: `.venv/Scripts/python.exe desktop/verify_bundle.py`.
