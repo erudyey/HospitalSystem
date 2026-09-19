@@ -55,6 +55,16 @@
     if (appointment && open) {
       selectedDoctorId = appointment.doctor_id ?? null;
       doctorName = appointment.doctor_name || "";
+      if (!selectedDoctorId && doctorName && doctorList.length > 0) {
+        const cleanName = doctorName.toLowerCase().replace(/^dr\.\s*/i, "").trim();
+        const matched = doctorList.find((d) => {
+          const docClean = d.full_name.toLowerCase().replace(/^dr\.\s*/i, "").trim();
+          return docClean === cleanName || d.full_name.toLowerCase() === doctorName.toLowerCase();
+        });
+        if (matched) {
+          selectedDoctorId = matched.id;
+        }
+      }
       appDate = appointment.app_date;
       appTime = appointment.app_time || "09:00";
       reasonForVisit = appointment.reason_for_visit || "";
@@ -80,6 +90,7 @@
           selectedDoctorId,
           appDate,
           appTime,
+          15,
           appointment.id
         );
         if (res.has_conflict && res.conflicts.length > 0) {

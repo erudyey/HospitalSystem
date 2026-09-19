@@ -335,7 +335,7 @@
   }
 
   async function handleCreateBooking(
-    e: SubmitEvent,
+    e: Event,
     initialStatus: AppointmentStatus = "Scheduled"
   ) {
     e.preventDefault();
