@@ -49,6 +49,8 @@ export interface Appointment {
   app_time?: string;
   reason_for_visit?: string;
   status: AppointmentStatus;
+  checked_in_at?: string | null;
+  conflict_override_reason?: string;
 }
 
 export interface MedicalRecord {
@@ -66,6 +68,7 @@ export interface MedicalRecord {
   follow_up_advice: string;
   created_at: string;
   updated_at: string;
+  revision: number;
 }
 
 export interface ConflictCheckResponse {
@@ -230,7 +233,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export const api = {
   /** Initialize connection and set CSRF cookie */
   healthCheck: () =>
-    request<{ status: string; version: string }>("/api/health/"),
+    request<{ status: string; version: string; mode: "clinic" | "demo" }>(
+      "/api/health/",
+    ),
 
   /** List / search patients */
   listPatients: (query?: string) => {
@@ -385,7 +390,9 @@ export const api = {
       if (typeof usernameOrCredentials === "string") {
         payload = {
           username: usernameOrCredentials,
-          password: typeof passwordOrRemember === "string" ? passwordOrRemember : "",
+          password: typeof passwordOrRemember === "string"
+            ? passwordOrRemember
+            : "",
         };
       } else {
         payload = usernameOrCredentials;
@@ -467,7 +474,9 @@ export const api = {
     },
 
     getDoctorQueue: (doctorIdOrDate?: number | string, dateStr?: string) => {
-      const date = typeof doctorIdOrDate === "string" ? doctorIdOrDate : dateStr;
+      const date = typeof doctorIdOrDate === "string"
+        ? doctorIdOrDate
+        : dateStr;
       const q = date ? `?date=${encodeURIComponent(date)}` : "";
       return request<DoctorQueueResponse>(`/api/doctor/queue/${q}`);
     },
@@ -476,8 +485,9 @@ export const api = {
       doctorIdOrQuery?: number | string,
       queryStr?: string,
     ) => {
-      const qVal =
-        typeof doctorIdOrQuery === "string" ? doctorIdOrQuery : queryStr;
+      const qVal = typeof doctorIdOrQuery === "string"
+        ? doctorIdOrQuery
+        : queryStr;
       const q = qVal ? `?q=${encodeURIComponent(qVal)}` : "";
       return request<Patient[]>(`/api/doctor/patients/${q}`);
     },
@@ -507,6 +517,8 @@ export const api = {
         clinical_notes?: string;
         prescription?: string;
         follow_up_advice?: string;
+        correction_reason: string;
+        expected_revision?: number;
       },
     ) =>
       request<MedicalRecord>(`/api/medical-records/${recordId}/`, {

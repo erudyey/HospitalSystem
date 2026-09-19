@@ -76,17 +76,7 @@
   });
 
   function toggleDemoMode() {
-    demoMode = !demoMode;
-    try {
-      localStorage.setItem("hospitalsystem_demo_mode", demoMode ? "true" : "false");
-    } catch {
-      // Ignore storage restrictions
-    }
-    toast.success(
-      demoMode
-        ? "Demo Mode enabled -- 1-click role switchers active."
-        : "Production Mode active -- Demo switchers hidden."
-    );
+    toast.info("Demo mode is selected when HospitalSystem starts. Relaunch with --demo to use the separate demo database.");
   }
 
   async function handleSaveProfile(e: SubmitEvent) {
@@ -316,7 +306,7 @@
       {:else}
         <!-- System & Demo Mode Tab -->
         <div class="flex flex-col gap-4">
-          <!-- Demo Mode Toggle Card -->
+          <!-- Demo Mode Status Card -->
           <div class="rounded-xl border border-primary/20 bg-primary/5 p-4 flex items-start justify-between gap-4">
             <div class="flex flex-col gap-1">
               <div class="flex items-center gap-2">
@@ -327,18 +317,18 @@
                 </Badge>
               </div>
               <p class="text-xs text-muted-foreground leading-relaxed">
-                When enabled, 1-click role switchers appear in the top bar to effortlessly switch between Receptionist, Dr. Reyes, Dr. Santos, and Dr. Tan without entering passwords.
+                Demo mode uses a separate database and provides the sample accounts for evaluation. Select it when starting HospitalSystem with the --demo option.
               </p>
             </div>
 
             <Button
               type="button"
-              variant={demoMode ? "default" : "outline"}
+              variant="outline"
               size="sm"
               class="h-8 text-xs shrink-0 cursor-pointer"
               onclick={toggleDemoMode}
             >
-              {demoMode ? "Turn Off" : "Enable Demo"}
+              How to launch demo
             </Button>
           </div>
 

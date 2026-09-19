@@ -398,6 +398,8 @@ class MedicalRecordClinicalTests(TestCase):
             app_time_str="11:00",
             doctor_id=self.doctor.id,
         )
+        update_appointment_status(self.appt.id, AppointmentStatus.CHECKED_IN)
+        update_appointment_status(self.appt.id, AppointmentStatus.IN_CONSULTATION)
 
     def test_create_medical_record_success(self) -> None:
         record = create_medical_record(
@@ -446,6 +448,7 @@ class MedicalRecordClinicalTests(TestCase):
             doctor_id=self.doctor.id,
             diagnosis="Allergic Rhinitis",
             prescription="Cetirizine 10mg once daily.",
+            correction_reason="Clarified final diagnosis.",
         )
         self.assertEqual(updated.diagnosis, "Allergic Rhinitis")
         self.assertEqual(updated.prescription, "Cetirizine 10mg once daily.")
@@ -555,7 +558,13 @@ class ClinicalApiIntegrationTests(TestCase):
             )
 
             # Query conflict check for conflicting time (14:10)
-            resp = self.auth_client.get(
+            receptionist_client = Client(
+                headers={
+                    "X-Session-Token": self.session_token,
+                    "X-User-Token": self.rec_session.token,
+                }
+            )
+            resp = receptionist_client.get(
                 reverse("api-appointment-conflict-check"),
                 {"doctor_id": self.doctor.id, "date": "2026-10-15", "time": "14:10"},
             )
@@ -565,7 +574,7 @@ class ClinicalApiIntegrationTests(TestCase):
             self.assertEqual(len(data["conflicts"]), 1)
 
             # Query conflict check for non-conflicting time (15:00)
-            clear_resp = self.auth_client.get(
+            clear_resp = receptionist_client.get(
                 reverse("api-appointment-conflict-check"),
                 {"doctor_id": self.doctor.id, "date": "2026-10-15", "time": "15:00"},
             )
@@ -632,6 +641,8 @@ class ClinicalApiIntegrationTests(TestCase):
                 "clinical_notes": "BP: 125/80 mmHg.",
                 "prescription": "Continue Losartan 50mg once daily.",
                 "follow_up_advice": "Check in 3 months.",
+                "correction_reason": "Updated after follow-up review.",
+                "expected_revision": 1,
             }
             update_resp = doc_client.put(
                 reverse("api-medical-record-detail", kwargs={"record_id": record_id}),

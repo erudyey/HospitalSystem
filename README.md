@@ -115,6 +115,15 @@ On macOS / Linux:
 ./run.sh desktop
 ```
 
+For the isolated evaluation data set and sample accounts, launch with `--demo`:
+
+```bash
+./run.sh desktop --demo
+```
+
+Clinic data and demo data are stored in separate SQLite databases. Standard desktop
+launches do not create sample accounts.
+
 ---
 
 ## Common Developer Tasks

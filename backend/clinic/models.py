@@ -169,6 +169,16 @@ class Appointment(models.Model):
         choices=AppointmentStatus.choices,
         default=AppointmentStatus.SCHEDULED,
     )
+    checked_in_at = models.DateTimeField(null=True, blank=True)
+    conflict_override_reason = models.CharField(max_length=255, blank=True, default="")
+    conflict_overridden_at = models.DateTimeField(null=True, blank=True)
+    conflict_overridden_by = models.ForeignKey(
+        StaffUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="appointment_conflict_overrides",
+    )
 
     class Meta:
         db_table = "clinic_appointments"
@@ -235,6 +245,7 @@ class MedicalRecord(models.Model):
     clinical_notes = models.TextField(blank=True, default="")
     prescription = models.TextField(blank=True, default="")
     follow_up_advice = models.TextField(blank=True, default="")
+    revision = models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -270,3 +281,36 @@ class MedicalRecord(models.Model):
 
     def __str__(self) -> str:
         return f"Record #{self.id}: {self.diagnosis} for {self.patient.full_name} by {self.doctor.full_name}"
+
+
+class MedicalRecordRevision(models.Model):
+    """Immutable audit snapshot created whenever an author corrects a medical record."""
+
+    record = models.ForeignKey(
+        MedicalRecord,
+        on_delete=models.CASCADE,
+        related_name="revisions",
+    )
+    revision = models.PositiveIntegerField()
+    correction_reason = models.CharField(max_length=255)
+    diagnosis = models.CharField(max_length=255)
+    symptoms = models.TextField(blank=True, default="")
+    clinical_notes = models.TextField(blank=True, default="")
+    prescription = models.TextField(blank=True, default="")
+    follow_up_advice = models.TextField(blank=True, default="")
+    changed_by = models.ForeignKey(
+        StaffUser,
+        on_delete=models.PROTECT,
+        related_name="medical_record_revisions",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "clinic_medical_record_revisions"
+        ordering = ["record_id", "revision"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["record", "revision"],
+                name="unique_medical_record_revision",
+            )
+        ]
