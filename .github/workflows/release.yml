@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - "v*"
-    branches:
-      - "review/experimental-adversarial-alpha"
   workflow_dispatch:
     inputs:
       tag_name:
@@ -36,9 +34,7 @@ jobs:
         id: resolve-tag
         shell: bash
         run: |
-          if [ "${GITHUB_REF}" = "refs/heads/review/experimental-adversarial-alpha" ]; then
-            TAG="v0.0.2-alpha.3"
-          elif [ -n "${{ github.event.inputs.tag_name }}" ]; then
+          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
             TAG="${{ github.event.inputs.tag_name }}"
           else
             TAG="${GITHUB_REF#refs/tags/}"
@@ -274,7 +270,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.pre-flight-check.outputs.tag_name }}
-          target_commitish: ca613d673ed087586c5f957ad5444ac31700828b
           name: Release ${{ needs.pre-flight-check.outputs.tag_name }}
           body_path: release_notes.md
           files: |
