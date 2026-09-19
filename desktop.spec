@@ -89,6 +89,8 @@ if sys.platform == 'darwin':
         icon=None,
         bundle_identifier='com.hospitalsystem.clinic',
         info_plist={
+            'CFBundleShortVersionString': '0.1.0-beta.1',
+            'CFBundleVersion': '0.1.0',
             'NSHighResolutionCapable': 'True',
             'LSBackgroundOnly': 'False',
         },
