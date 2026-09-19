@@ -369,28 +369,30 @@ def update_appointment_status(appointment_id: int, new_status: str) -> Appointme
                 }
             )
 
-        allowed_transitions: dict[str, set[str]] = {
-            AppointmentStatus.SCHEDULED: {
-                AppointmentStatus.CHECKED_IN,
-                AppointmentStatus.CANCELLED,
-            },
-            AppointmentStatus.CHECKED_IN: {
-                AppointmentStatus.IN_CONSULTATION,
-                AppointmentStatus.SCHEDULED,
-            },
-            AppointmentStatus.IN_CONSULTATION: {
-                AppointmentStatus.COMPLETED,
-                AppointmentStatus.CHECKED_IN,
-            },
-            AppointmentStatus.CANCELLED: {AppointmentStatus.SCHEDULED},
-        }
-        if clean_status not in allowed_transitions.get(current, set()):
+        if current == AppointmentStatus.CANCELLED and clean_status != AppointmentStatus.SCHEDULED:
             raise ValidationError(
                 {
-                    "status": (
-                        f"Appointment cannot transition from '{current}' "
-                        f"directly to '{clean_status}'."
-                    )
+                    "status": f"Cancelled appointments can only be restored to 'Scheduled', not directly to '{clean_status}'."
+                }
+            )
+
+        if current == AppointmentStatus.IN_CONSULTATION and clean_status not in (
+            AppointmentStatus.COMPLETED,
+            AppointmentStatus.CHECKED_IN,
+        ):
+            raise ValidationError(
+                {
+                    "status": f"In Consultation appointments can only transition to 'Completed' or 'Checked In', not '{clean_status}'."
+                }
+            )
+
+        if (
+            current == AppointmentStatus.SCHEDULED
+            and clean_status == AppointmentStatus.IN_CONSULTATION
+        ):
+            raise ValidationError(
+                {
+                    "status": "Scheduled appointments must be 'Checked In' before moving to 'In Consultation'."
                 }
             )
 
