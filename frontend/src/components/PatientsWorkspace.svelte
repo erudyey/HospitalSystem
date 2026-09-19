@@ -292,8 +292,8 @@
   <!-- Table Toolbar Bar (Matching Reference Screenshot) -->
   <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0 min-w-0">
     <div class="flex items-center gap-2">
-      <div class="relative w-full sm:w-72">
-        <Search class="absolute left-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
+      <div class="relative w-full sm:w-72 p-0.5">
+        <Search class="absolute left-3.5 top-3 size-4 text-muted-foreground pointer-events-none" />
         <Input
           type="text"
           placeholder="Filter patients by name, ID, or phone..."
@@ -309,7 +309,7 @@
           <button
             type="button"
             onclick={clearSearch}
-            class="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
+            class="absolute right-3 top-3 text-muted-foreground hover:text-foreground cursor-pointer"
             title="Clear filter (Esc)"
           >
             <X class="size-4" />

@@ -419,6 +419,25 @@
     isDeleteDialogOpen = true;
   }
 
+  // Scroll indicators for filter tabs track
+  let tabsListEl = $state<HTMLElement | null>(null);
+  let canScrollLeft = $state(false);
+  let canScrollRight = $state(false);
+
+  function checkTabScroll() {
+    if (!tabsListEl) return;
+    canScrollLeft = tabsListEl.scrollLeft > 2;
+    canScrollRight =
+      tabsListEl.scrollLeft + tabsListEl.clientWidth < tabsListEl.scrollWidth - 2;
+  }
+
+  function scrollTabs(direction: "left" | "right") {
+    if (!tabsListEl) return;
+    const offset = direction === "left" ? -180 : 180;
+    tabsListEl.scrollBy({ left: offset, behavior: "smooth" });
+    setTimeout(checkTabScroll, 220);
+  }
+
   $effect(() => {
     if (preselectedPatient) {
       selectedPatientId = preselectedPatient.id;
@@ -429,6 +448,11 @@
 
   onMount(() => {
     loadInitialData();
+    setTimeout(checkTabScroll, 100);
+    window.addEventListener("resize", checkTabScroll);
+    return () => {
+      window.removeEventListener("resize", checkTabScroll);
+    };
   });
 </script>
 
@@ -481,12 +505,12 @@
     </div>
   </div>
 
-  <!-- Segmented Tabs & Toolbar Bar -->
-  <div class="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3 shrink-0 min-w-0">
-    <!-- Status Filter Tabs -->
+  <!-- 2-Tier Structured Toolbar -->
+  <!-- Tier 1: Status Filter Tabs (Dedicated Full-Width Strip with Scroll Affordances) -->
+  <div class="relative flex items-center shrink-0 min-w-0">
     <Tabs.Root
       value={activeFilter}
-      class="min-w-0 max-w-full overflow-hidden shrink"
+      class="w-full min-w-0"
       onValueChange={(val) => {
         if (val) {
           activeFilter = val as StatusFilter;
@@ -494,30 +518,85 @@
         }
       }}
     >
-      <Tabs.List class="flex flex-nowrap items-center h-9 p-0.5 rounded-lg border bg-muted/60 text-muted-foreground overflow-x-auto no-scrollbar gap-0.5 max-w-full">
-        <Tabs.Trigger value="ALL" class="px-2.5 sm:px-3 text-xs shrink-0 whitespace-nowrap">
-          All <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countAll})</span>
-        </Tabs.Trigger>
-        <Tabs.Trigger value="Checked In" class="px-2.5 sm:px-3 text-xs shrink-0 whitespace-nowrap">
-          Waiting Room <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countCheckedIn})</span>
-        </Tabs.Trigger>
-        <Tabs.Trigger value="Scheduled" class="px-2.5 sm:px-3 text-xs shrink-0 whitespace-nowrap">
-          Scheduled <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countScheduled})</span>
-        </Tabs.Trigger>
-        <Tabs.Trigger value="In Consultation" class="px-2.5 sm:px-3 text-xs shrink-0 whitespace-nowrap">
-          Consulting <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countInConsultation})</span>
-        </Tabs.Trigger>
-        <Tabs.Trigger value="Completed" class="px-2.5 sm:px-3 text-xs shrink-0 whitespace-nowrap">
-          Completed <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countCompleted})</span>
-        </Tabs.Trigger>
-        <Tabs.Trigger value="Cancelled" class="px-2.5 sm:px-3 text-xs shrink-0 whitespace-nowrap">
-          Cancelled <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countCancelled})</span>
-        </Tabs.Trigger>
-      </Tabs.List>
-    </Tabs.Root>
+      <div class="relative flex items-center min-w-0">
+        {#if canScrollLeft}
+          <button
+            type="button"
+            onclick={() => scrollTabs("left")}
+            class="absolute left-0 z-20 h-9 w-7 flex items-center justify-center rounded-l-lg bg-card/95 hover:bg-card border-y border-l border-border shadow-xs cursor-pointer text-muted-foreground hover:text-foreground transition-colors"
+            title="Scroll Left"
+          >
+            <ChevronLeft class="size-4" />
+          </button>
+        {/if}
 
-    <!-- Search, Refresh, and Action -->
-    <div class="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap min-w-0">
+        <Tabs.List
+          bind:ref={tabsListEl}
+          onscroll={checkTabScroll}
+          class="flex flex-nowrap items-center h-9 p-0.5 rounded-lg border bg-muted/60 text-muted-foreground overflow-x-auto no-scrollbar gap-1 max-w-full w-full sm:w-auto"
+        >
+          <Tabs.Trigger value="ALL" class="px-3 text-xs shrink-0 whitespace-nowrap">
+            All <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countAll})</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="Checked In" class="px-3 text-xs shrink-0 whitespace-nowrap">
+            Waiting Room <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countCheckedIn})</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="Scheduled" class="px-3 text-xs shrink-0 whitespace-nowrap">
+            Scheduled <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countScheduled})</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="In Consultation" class="px-3 text-xs shrink-0 whitespace-nowrap">
+            Consulting <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countInConsultation})</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="Completed" class="px-3 text-xs shrink-0 whitespace-nowrap">
+            Completed <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countCompleted})</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="Cancelled" class="px-3 text-xs shrink-0 whitespace-nowrap">
+            Cancelled <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countCancelled})</span>
+          </Tabs.Trigger>
+        </Tabs.List>
+
+        {#if canScrollRight}
+          <button
+            type="button"
+            onclick={() => scrollTabs("right")}
+            class="absolute right-0 z-20 h-9 w-7 flex items-center justify-center rounded-r-lg bg-card/95 hover:bg-card border-y border-r border-border shadow-xs cursor-pointer text-muted-foreground hover:text-foreground transition-colors"
+            title="Scroll Right"
+          >
+            <ChevronRight class="size-4" />
+          </button>
+        {/if}
+      </div>
+    </Tabs.Root>
+  </div>
+
+  <!-- Tier 2: Search, Pagination, Refresh & Action Toolbar -->
+  <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0 min-w-0">
+    <div class="relative flex-1 sm:max-w-xs md:max-w-sm p-0.5">
+      <Search class="absolute left-3.5 top-3 size-4 text-muted-foreground pointer-events-none" />
+      <Input
+        type="text"
+        placeholder="Filter doctor, patient, ID..."
+        value={searchQuery}
+        oninput={handleSearchInput}
+        onkeydown={(e) => {
+          if (e.key === "Escape") clearSearch();
+        }}
+        data-search-input="true"
+        class="pl-9 pr-8 h-9"
+      />
+      {#if searchQuery}
+        <button
+          type="button"
+          onclick={clearSearch}
+          class="absolute right-3 top-3 text-muted-foreground hover:text-foreground cursor-pointer"
+          title="Clear filter (Esc)"
+        >
+          <X class="size-4" />
+        </button>
+      {/if}
+    </div>
+
+    <div class="flex items-center gap-2 shrink-0">
       {#if totalPages > 1}
         <div class="hidden sm:flex items-center gap-1.5 mr-1 text-xs text-muted-foreground border-r border-border pr-2.5 shrink-0">
           <span class="font-medium text-foreground tabular-nums">
@@ -548,30 +627,6 @@
         </div>
       {/if}
 
-      <div class="relative flex-1 sm:w-64 min-w-[160px]">
-        <Search class="absolute left-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
-        <Input
-          type="text"
-          placeholder="Filter doctor, patient, ID..."
-          value={searchQuery}
-          oninput={handleSearchInput}
-          onkeydown={(e) => {
-            if (e.key === "Escape") clearSearch();
-          }}
-          data-search-input="true"
-          class="pl-9 pr-8 h-9"
-        />
-        {#if searchQuery}
-          <button
-            type="button"
-            onclick={clearSearch}
-            class="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
-            title="Clear filter (Esc)"
-          >
-            <X class="size-4" />
-          </button>
-        {/if}
-      </div>
       <Button
         variant="outline"
         size="sm"

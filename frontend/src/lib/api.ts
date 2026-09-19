@@ -150,8 +150,10 @@ export function setUserToken(token: string, remember: boolean = true): void {
   try {
     if (remember) {
       localStorage.setItem("user_token", token);
+      sessionStorage.removeItem("user_token");
     } else {
       sessionStorage.setItem("user_token", token);
+      localStorage.removeItem("user_token");
     }
   } catch {
     // Ignore storage restrictions
@@ -374,19 +376,30 @@ export const api = {
 
     login: async (
       usernameOrCredentials: string | { username: string; password: string },
-      password?: string,
+      passwordOrRemember?: string | boolean,
+      remember: boolean = true,
     ) => {
-      const payload =
-        typeof usernameOrCredentials === "string"
-          ? { username: usernameOrCredentials, password: password || "" }
-          : usernameOrCredentials;
+      let payload: { username: string; password: string };
+      let shouldRemember = remember;
+
+      if (typeof usernameOrCredentials === "string") {
+        payload = {
+          username: usernameOrCredentials,
+          password: typeof passwordOrRemember === "string" ? passwordOrRemember : "",
+        };
+      } else {
+        payload = usernameOrCredentials;
+        if (typeof passwordOrRemember === "boolean") {
+          shouldRemember = passwordOrRemember;
+        }
+      }
 
       const resp = await request<UserSession>("/api/auth/login/", {
         method: "POST",
         body: JSON.stringify(payload),
       });
       if (resp?.token) {
-        setUserToken(resp.token);
+        setUserToken(resp.token, shouldRemember);
       }
       return resp;
     },
