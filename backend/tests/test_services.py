@@ -129,6 +129,8 @@ class ClinicServicesTests(TestCase):
     def test_delete_patient_with_completed_records_rejected(self) -> None:
         patient = services.register_patient("Sam Protected", "09170000008", 45)
         app = services.book_appointment(patient.id, "Dr. Stone", "2026-10-10")
+        services.update_appointment_status(app.id, AppointmentStatus.CHECKED_IN)
+        services.update_appointment_status(app.id, AppointmentStatus.IN_CONSULTATION)
         services.update_appointment_status(app.id, AppointmentStatus.COMPLETED)
 
         # Attempting to delete patient with completed appointment raises ValidationError
@@ -167,7 +169,9 @@ class ClinicServicesTests(TestCase):
         # Arrange
         patient = services.register_patient("Drew Scott", "09177778899", 50)
         app = services.book_appointment(patient.id, "Dr. Stone", "2026-10-10")
-        services.update_appointment_status(app.id, "Completed")
+        services.update_appointment_status(app.id, AppointmentStatus.CHECKED_IN)
+        services.update_appointment_status(app.id, AppointmentStatus.IN_CONSULTATION)
+        services.update_appointment_status(app.id, AppointmentStatus.COMPLETED)
 
         # Act & Assert: Modifying a completed appointment is rejected
         with self.assertRaises(ValidationError) as ctx:
@@ -199,8 +203,10 @@ class ClinicServicesTests(TestCase):
         patient = services.register_patient("Taylor Kim", "09170000005", 28)
         app = services.book_appointment(patient.id, "Dr. Santos", "2026-09-20")
 
-        # 1. Scheduled -> Completed
-        updated = services.update_appointment_status(app.id, "Completed")
+        # 1. Scheduled -> Checked In -> In Consultation -> Completed
+        services.update_appointment_status(app.id, AppointmentStatus.CHECKED_IN)
+        services.update_appointment_status(app.id, AppointmentStatus.IN_CONSULTATION)
+        updated = services.update_appointment_status(app.id, AppointmentStatus.COMPLETED)
         self.assertEqual(updated.status, AppointmentStatus.COMPLETED)
 
         # 2. Completed -> Cancelled is FORBIDDEN (immutable clinical record)

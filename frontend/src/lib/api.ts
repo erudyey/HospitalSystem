@@ -88,6 +88,55 @@ export interface ApiError {
   fields: Record<string, string[]>;
 }
 
+interface DesktopPersistentState {
+  user_token?: string;
+  demo_mode?: boolean;
+}
+
+interface DesktopBridgeApi {
+  load_persistent_state?: () => Promise<DesktopPersistentState>;
+  save_user_token?: (token: string) => Promise<boolean>;
+  clear_user_token?: () => Promise<boolean>;
+  save_demo_mode?: (enabled: boolean) => Promise<boolean>;
+}
+
+type DesktopWindow = Window & {
+  __SESSION_TOKEN__?: string;
+  pywebview?: { api?: DesktopBridgeApi };
+};
+
+const USER_TOKEN_KEY = "user_token";
+const USER_TOKEN_REMEMBERED_KEY = "user_token_remembered";
+const DEMO_MODE_KEY = "hospitalsystem_demo_mode";
+
+function getDesktopWindow(): DesktopWindow {
+  return window as DesktopWindow;
+}
+
+function getDesktopBridgeNow(): DesktopBridgeApi | null {
+  return getDesktopWindow().pywebview?.api || null;
+}
+
+async function getDesktopBridge(): Promise<DesktopBridgeApi | null> {
+  const immediate = getDesktopBridgeNow();
+  if (immediate) return immediate;
+
+  const win = getDesktopWindow();
+  if (!win.__SESSION_TOKEN__) return null;
+
+  return await new Promise<DesktopBridgeApi | null>((resolve) => {
+    const onReady = () => {
+      window.clearTimeout(timeoutId);
+      resolve(getDesktopBridgeNow());
+    };
+    const timeoutId = window.setTimeout(() => {
+      window.removeEventListener("pywebviewready", onReady);
+      resolve(getDesktopBridgeNow());
+    }, 2000);
+    window.addEventListener("pywebviewready", onReady, { once: true });
+  });
+}
+
 function getCookie(name: string): string | null {
   const match = document.cookie.match(
     new RegExp("(^|;\\s*)(" + name + ")=([^;]*)"),
@@ -139,22 +188,33 @@ function getSessionToken(): string {
 
 export function getUserToken(): string {
   try {
-    return localStorage.getItem("user_token") ||
-      sessionStorage.getItem("user_token") || "";
+    return localStorage.getItem(USER_TOKEN_KEY) ||
+      sessionStorage.getItem(USER_TOKEN_KEY) || "";
   } catch {
     return "";
   }
 }
 
+export function isUserTokenRemembered(): boolean {
+  try {
+    return sessionStorage.getItem(USER_TOKEN_REMEMBERED_KEY) === "true" ||
+      Boolean(localStorage.getItem(USER_TOKEN_KEY));
+  } catch {
+    return false;
+  }
+}
+
 export function setUserToken(token: string, remember: boolean = true): void {
   try {
-    if (remember) {
-      localStorage.setItem("user_token", token);
-      sessionStorage.removeItem("user_token");
+    const isDesktop = Boolean(getDesktopWindow().__SESSION_TOKEN__);
+    if (remember && !isDesktop) {
+      localStorage.setItem(USER_TOKEN_KEY, token);
+      sessionStorage.removeItem(USER_TOKEN_KEY);
     } else {
-      sessionStorage.setItem("user_token", token);
-      localStorage.removeItem("user_token");
+      sessionStorage.setItem(USER_TOKEN_KEY, token);
+      localStorage.removeItem(USER_TOKEN_KEY);
     }
+    sessionStorage.setItem(USER_TOKEN_REMEMBERED_KEY, remember ? "true" : "false");
   } catch {
     // Ignore storage restrictions
   }
@@ -162,10 +222,101 @@ export function setUserToken(token: string, remember: boolean = true): void {
 
 export function clearUserToken(): void {
   try {
-    localStorage.removeItem("user_token");
-    sessionStorage.removeItem("user_token");
+    localStorage.removeItem(USER_TOKEN_KEY);
+    sessionStorage.removeItem(USER_TOKEN_KEY);
+    sessionStorage.removeItem(USER_TOKEN_REMEMBERED_KEY);
   } catch {
     // Ignore storage restrictions
+  }
+}
+
+export async function restorePersistentState(): Promise<{
+  userToken: string;
+  demoMode: boolean | null;
+}> {
+  const isDesktop = Boolean(getDesktopWindow().__SESSION_TOKEN__);
+  let userToken = isDesktop ? "" : getUserToken();
+  let demoMode: boolean | null = null;
+
+  if (isDesktop) {
+    try {
+      localStorage.removeItem(USER_TOKEN_KEY);
+    } catch {
+      // Ignore storage restrictions
+    }
+
+    const bridge = await getDesktopBridge();
+    if (bridge?.load_persistent_state) {
+      try {
+        const state = await bridge.load_persistent_state();
+        if (typeof state.user_token === "string" && state.user_token.trim()) {
+          userToken = state.user_token.trim();
+          try {
+            sessionStorage.setItem(USER_TOKEN_KEY, userToken);
+            sessionStorage.setItem(USER_TOKEN_REMEMBERED_KEY, "true");
+          } catch {
+            // Ignore storage restrictions
+          }
+        }
+        if (typeof state.demo_mode === "boolean") {
+          demoMode = state.demo_mode;
+        }
+      } catch {
+        // Fall back to logged-out defaults if the native bridge is unavailable
+      }
+    }
+  } else {
+    try {
+      const savedDemoMode = localStorage.getItem(DEMO_MODE_KEY);
+      if (savedDemoMode !== null) demoMode = savedDemoMode === "true";
+    } catch {
+      // Ignore storage restrictions
+    }
+  }
+
+  return { userToken, demoMode };
+}
+
+export async function persistUserToken(token: string, remember: boolean): Promise<void> {
+  setUserToken(token, remember);
+  const bridge = await getDesktopBridge();
+  if (!bridge) return;
+
+  try {
+    if (remember && bridge.save_user_token) {
+      await bridge.save_user_token(token);
+    } else if (!remember && bridge.clear_user_token) {
+      await bridge.clear_user_token();
+    }
+  } catch {
+    // Browser storage still keeps the active launch authenticated
+  }
+}
+
+export async function clearPersistedUserToken(): Promise<void> {
+  clearUserToken();
+  const bridge = await getDesktopBridge();
+  if (!bridge?.clear_user_token) return;
+  try {
+    await bridge.clear_user_token();
+  } catch {
+    // Local session is already cleared
+  }
+}
+
+export async function persistDemoMode(enabled: boolean): Promise<void> {
+  try {
+    localStorage.setItem(DEMO_MODE_KEY, enabled ? "true" : "false");
+  } catch {
+    // Ignore storage restrictions
+  }
+
+  const bridge = await getDesktopBridge();
+  if (!bridge?.save_demo_mode) return;
+  try {
+    await bridge.save_demo_mode(enabled);
+  } catch {
+    // Browser preference remains valid for this origin
   }
 }
 
@@ -399,7 +550,7 @@ export const api = {
         body: JSON.stringify(payload),
       });
       if (resp?.token) {
-        setUserToken(resp.token, shouldRemember);
+        await persistUserToken(resp.token, shouldRemember);
       }
       return resp;
     },
@@ -412,7 +563,7 @@ export const api = {
           method: "POST",
         });
       } finally {
-        clearUserToken();
+        await clearPersistedUserToken();
       }
     },
 

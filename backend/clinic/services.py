@@ -125,7 +125,11 @@ def book_appointment(
     if doctor_id is not None:
         try:
             assigned_doctor = StaffUser.objects.get(id=doctor_id)
-            if not clean_doctor:
+            if assigned_doctor.role != StaffRole.DOCTOR:
+                errors["doctor_id"] = f"Staff user #{doctor_id} is not a doctor."
+            elif not assigned_doctor.is_active:
+                errors["doctor_id"] = f"Doctor #{doctor_id} is inactive."
+            else:
                 clean_doctor = assigned_doctor.full_name
         except StaffUser.DoesNotExist:
             errors["doctor_id"] = f"Doctor #{doctor_id} does not exist."
@@ -154,6 +158,23 @@ def book_appointment(
     except Patient.DoesNotExist:
         errors["patient_id"] = f"Patient #{patient_id} does not exist."
         patient = None
+
+    if (
+        assigned_doctor is not None
+        and not errors
+        and parsed_date is not None
+        and patient is not None
+    ):
+        conflicts = check_schedule_conflict(
+            doctor_id=assigned_doctor.id,
+            app_date=parsed_date,
+            app_time=parsed_time,
+        )
+        if conflicts:
+            errors["app_time"] = (
+                f"Doctor already has an active appointment within 15 minutes "
+                f"of {parsed_time.strftime('%H:%M')}."
+            )
 
     if errors or parsed_date is None or patient is None:
         raise ValidationError(errors)
@@ -255,8 +276,13 @@ def update_appointment(
         if doctor_id is not None:
             try:
                 assigned_doctor = StaffUser.objects.get(id=doctor_id)
-                appointment.doctor = assigned_doctor
-                appointment.doctor_name = assigned_doctor.full_name
+                if assigned_doctor.role != StaffRole.DOCTOR:
+                    errors["doctor_id"] = f"Staff user #{doctor_id} is not a doctor."
+                elif not assigned_doctor.is_active:
+                    errors["doctor_id"] = f"Doctor #{doctor_id} is inactive."
+                else:
+                    appointment.doctor = assigned_doctor
+                    appointment.doctor_name = assigned_doctor.full_name
             except StaffUser.DoesNotExist:
                 errors["doctor_id"] = f"Doctor #{doctor_id} does not exist."
 
@@ -281,6 +307,19 @@ def update_appointment(
 
         if reason_for_visit is not None:
             appointment.reason_for_visit = reason_for_visit.strip()
+
+        if not errors and appointment.doctor_id is not None:
+            conflicts = check_schedule_conflict(
+                doctor_id=appointment.doctor_id,
+                app_date=appointment.app_date,
+                app_time=appointment.app_time,
+                exclude_id=appointment.id,
+            )
+            if conflicts:
+                errors["app_time"] = (
+                    f"Doctor already has an active appointment within 15 minutes "
+                    f"of {appointment.app_time.strftime('%H:%M')}."
+                )
 
         if errors:
             raise ValidationError(errors)
@@ -700,6 +739,18 @@ def create_medical_record(
         if appointment.patient_id != patient.id:
             raise ValidationError(
                 {"appointment_id": f"Appointment #{appointment_id} belongs to a different patient."}
+            )
+        appointment_matches_doctor = appointment.doctor_id == doctor.id or (
+            appointment.doctor_id is None
+            and appointment.doctor_name.strip().lower() == doctor.full_name.strip().lower()
+        )
+        if not appointment_matches_doctor:
+            raise ValidationError(
+                {
+                    "appointment_id": (
+                        f"Appointment #{appointment_id} is assigned to a different doctor."
+                    )
+                }
             )
         if MedicalRecord.objects.filter(appointment_id=appointment_id).exists():
             raise ValidationError(

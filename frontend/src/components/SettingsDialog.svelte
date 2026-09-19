@@ -8,6 +8,7 @@
     api,
     type StaffUser,
     type ApiError,
+    persistDemoMode,
   } from "$lib/api";
   import { toast } from "$lib/toast.svelte";
   import {
@@ -51,6 +52,7 @@
   let contact = $state("");
   let specialty = $state("");
   let licenseNumber = $state("");
+  let currentPassword = $state("");
   let newPassword = $state("");
   let confirmPassword = $state("");
 
@@ -68,6 +70,7 @@
         contact = currentUser.contact || "";
         specialty = currentUser.specialty || "";
         licenseNumber = currentUser.license_number || "";
+        currentPassword = "";
         newPassword = "";
         confirmPassword = "";
         formErrors = {};
@@ -75,13 +78,9 @@
     }
   });
 
-  function toggleDemoMode() {
+  async function toggleDemoMode() {
     demoMode = !demoMode;
-    try {
-      localStorage.setItem("hospitalsystem_demo_mode", demoMode ? "true" : "false");
-    } catch {
-      // Ignore storage restrictions
-    }
+    await persistDemoMode(demoMode);
     toast.success(
       demoMode
         ? "Demo Mode enabled -- 1-click role switchers active."
@@ -92,6 +91,13 @@
   async function handleSaveProfile(e: SubmitEvent) {
     e.preventDefault();
     formErrors = {};
+
+    if (newPassword && !currentPassword) {
+      formErrors = {
+        password: ["Current password is required to set a new password."],
+      };
+      return;
+    }
 
     if (newPassword && newPassword.length < 6) {
       formErrors = {
@@ -114,11 +120,13 @@
         contact: contact.trim(),
         specialty: specialty.trim(),
         license_number: licenseNumber.trim(),
+        current_password: newPassword ? currentPassword : undefined,
         new_password: newPassword || undefined,
       });
 
       toast.success("Profile updated successfully.");
-      onProfileUpdated?.((updated as any).user || updated);
+      onProfileUpdated?.(updated);
+      currentPassword = "";
       newPassword = "";
       confirmPassword = "";
     } catch (err) {
@@ -273,6 +281,13 @@
               <KeyRound class="size-3.5 text-primary" />
               <span>Change Password (optional)</span>
             </p>
+            <Input
+              type="password"
+              placeholder="Current password"
+              bind:value={currentPassword}
+              disabled={isSaving}
+              class="h-8 text-xs"
+            />
             <div class="grid grid-cols-2 gap-2.5">
               <Input
                 type="password"

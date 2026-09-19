@@ -17,6 +17,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import cast
 from urllib.request import urlopen
 
 
@@ -66,6 +67,7 @@ def get_app_dir() -> Path:
 APP_DIR = get_app_dir()
 LOG_FILE = APP_DIR / "launcher.log"
 STATE_FILE = APP_DIR / "app_state.json"
+PERSISTENT_STATE_FILE = APP_DIR / "persistent_state.json"
 
 logging.basicConfig(
     filename=str(LOG_FILE),
@@ -74,6 +76,94 @@ logging.basicConfig(
 )
 logger = logging.getLogger("HospitalLauncher")
 logger.info("Initializing HospitalSystem launcher (PID: %d)...", os.getpid())
+
+
+class DesktopHostApi:
+    """Expose the minimal native bridge used by the desktop frontend."""
+
+    def __init__(self, session_token: str, state_file: Path = PERSISTENT_STATE_FILE) -> None:
+        self._session_token = session_token
+        self._state_file = state_file
+        self._state_lock = threading.Lock()
+
+    def _load_state(self) -> dict[str, object]:
+        if not self._state_file.exists():
+            return {}
+        try:
+            raw: object = json.loads(self._state_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+            logger.warning("Persistent desktop state is unreadable; ignoring it.")
+            return {}
+        if not isinstance(raw, dict):
+            return {}
+
+        parsed = cast(dict[str, object], raw)
+        state: dict[str, object] = {}
+        token = parsed.get("user_token")
+        demo_mode = parsed.get("demo_mode")
+        if isinstance(token, str) and token.strip():
+            state["user_token"] = token.strip()
+        if isinstance(demo_mode, bool):
+            state["demo_mode"] = demo_mode
+        return state
+
+    def _write_state(self, state: dict[str, object]) -> None:
+        self._state_file.parent.mkdir(parents=True, exist_ok=True)
+        temp_file = self._state_file.with_suffix(self._state_file.suffix + ".tmp")
+        temp_file.write_text(json.dumps(state, sort_keys=True), encoding="utf-8")
+        if os.name != "nt":
+            with contextlib.suppress(OSError):
+                temp_file.chmod(0o600)
+        temp_file.replace(self._state_file)
+
+    def get_session_token(self) -> str:
+        """Return the per-launch loopback security token."""
+        return self._session_token
+
+    def load_persistent_state(self) -> dict[str, object]:
+        """Return persistent desktop preferences needed before app initialization."""
+        with self._state_lock:
+            return self._load_state()
+
+    def save_user_token(self, token: str) -> bool:
+        """Persist a remembered staff bearer token outside origin-scoped web storage."""
+        clean_token = (token or "").strip()
+        if not clean_token or len(clean_token) > 256:
+            return False
+        try:
+            with self._state_lock:
+                state = self._load_state()
+                state["user_token"] = clean_token
+                self._write_state(state)
+            return True
+        except OSError:
+            logger.exception("Failed to persist remembered staff token.")
+            return False
+
+    def clear_user_token(self) -> bool:
+        """Remove a remembered staff bearer token while preserving other preferences."""
+        try:
+            with self._state_lock:
+                state = self._load_state()
+                state.pop("user_token", None)
+                self._write_state(state)
+            return True
+        except OSError:
+            logger.exception("Failed to clear remembered staff token.")
+            return False
+
+    def save_demo_mode(self, enabled: bool) -> bool:
+        """Persist the demo-mode preference independently of the loopback port."""
+        try:
+            with self._state_lock:
+                state = self._load_state()
+                state["demo_mode"] = bool(enabled)
+                self._write_state(state)
+            return True
+        except OSError:
+            logger.exception("Failed to persist demo-mode preference.")
+            return False
+
 
 # Single Instance Check (bypassed if running verification mode)
 IS_VERIFY_MODE = "--verify" in sys.argv
@@ -299,18 +389,12 @@ def main() -> None:
         )
         sys.exit(1)
 
-    class DesktopHostApi:
-        """Expose safe, minimal JS bridge."""
-
-        def get_session_token(self) -> str:
-            return session_token
-
-    api = DesktopHostApi()
+    api = DesktopHostApi(session_token)
 
     try:
         window = webview.create_window(
             title="Hospital Management System",
-            url=f"http://127.0.0.1:{port}/?token={session_token}",
+            url=f"http://127.0.0.1:{port}/",
             width=1320,
             height=840,
             min_size=(1024, 700),
