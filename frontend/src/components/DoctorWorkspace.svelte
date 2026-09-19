@@ -39,6 +39,8 @@
     X,
     Loader2,
     AlertCircle,
+    CalendarCheck,
+    ClipboardList,
   } from "lucide-svelte";
 
   interface Props {
@@ -203,37 +205,43 @@
   <!-- Physician Header & Metrics Bar -->
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 shrink-0">
     <!-- Waiting Room Card -->
-    <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3.5 sm:p-4 shadow-xs">
+    <div class="rounded-xl border bg-card text-card-foreground p-4 shadow-sm">
       <div class="flex items-center justify-between">
-        <p class="text-[11px] sm:text-xs font-semibold text-amber-700 uppercase tracking-wider">Waiting Room</p>
-        <span class="size-2 rounded-full bg-amber-500 animate-pulse"></span>
+        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Waiting Room</p>
+        <UserCheck class="size-4 text-muted-foreground" />
       </div>
       <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{checkedInQueue.length}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Patients checked in & waiting</p>
+      <p class="text-[11px] text-muted-foreground mt-0.5">Checked in & waiting</p>
     </div>
 
     <!-- Consulting Now Card -->
-    <div class="rounded-xl border border-primary/30 bg-primary/5 p-3.5 sm:p-4 shadow-xs">
+    <div class="rounded-xl border bg-card text-card-foreground p-4 shadow-sm">
       <div class="flex items-center justify-between">
-        <p class="text-[11px] sm:text-xs font-semibold text-primary uppercase tracking-wider">In Consultation</p>
-        <span class="size-2 rounded-full bg-primary animate-ping"></span>
+        <p class="text-xs sm:text-sm font-medium text-muted-foreground">In Consultation</p>
+        <Stethoscope class="size-4 text-muted-foreground" />
       </div>
       <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{inConsultationQueue.length}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Active patient session</p>
+      <p class="text-[11px] text-muted-foreground mt-0.5">Active patient encounter</p>
     </div>
 
     <!-- Scheduled Today Card -->
-    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-xs">
-      <p class="text-[11px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">Scheduled Today</p>
+    <div class="rounded-xl border bg-card text-card-foreground p-4 shadow-sm">
+      <div class="flex items-center justify-between">
+        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Scheduled Today</p>
+        <CalendarCheck class="size-4 text-muted-foreground" />
+      </div>
       <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{scheduledToday.length}</p>
       <p class="text-[11px] text-muted-foreground mt-0.5">Pending arrival</p>
     </div>
 
     <!-- Completed Today Card -->
-    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-xs">
-      <p class="text-[11px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">Seen Today</p>
+    <div class="rounded-xl border bg-card text-card-foreground p-4 shadow-sm">
+      <div class="flex items-center justify-between">
+        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Seen Today</p>
+        <ClipboardList class="size-4 text-muted-foreground" />
+      </div>
       <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{completedToday.length}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Completed & signed visits</p>
+      <p class="text-[11px] text-muted-foreground mt-0.5">Completed visits</p>
     </div>
   </div>
 
@@ -302,7 +310,7 @@
                       <h4 class="text-sm font-semibold text-foreground">{activeApp.patient_name}</h4>
                       <p class="text-xs text-muted-foreground font-mono">Patient #{activeApp.patient_id} • Appt #{activeApp.id}</p>
                     </div>
-                    <Badge variant="default" class="text-xs">
+                    <Badge variant="secondary" class="text-xs border border-border/80">
                       Consulting
                     </Badge>
                   </div>
@@ -458,7 +466,7 @@
                     Checked In
                   </Badge>
                 {:else if item.status === "In Consultation"}
-                  <Badge variant="default" class="text-xs">
+                  <Badge variant="secondary" class="text-xs border border-border/80">
                     Consulting
                   </Badge>
                 {:else if item.status === "Completed"}
