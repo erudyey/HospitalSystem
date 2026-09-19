@@ -199,43 +199,43 @@
   });
 </script>
 
-<div class="flex flex-col gap-6">
+<div class="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
   <!-- Physician Header & Metrics Bar -->
-  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 shrink-0">
     <!-- Waiting Room Card -->
-    <div class="rounded-xl border border-amber-300/80 bg-amber-50/50 p-5 shadow-xs">
+    <div class="rounded-xl border border-amber-300/80 bg-amber-50/50 p-3.5 sm:p-4 shadow-xs">
       <div class="flex items-center justify-between">
-        <p class="text-xs font-semibold text-amber-800 uppercase tracking-wider">Waiting Room</p>
+        <p class="text-[11px] sm:text-xs font-semibold text-amber-800 uppercase tracking-wider">Waiting Room</p>
         <span class="size-2 rounded-full bg-amber-500 animate-pulse"></span>
       </div>
-      <p class="text-3xl font-bold tracking-tight text-amber-900 mt-2">{checkedInQueue.length}</p>
-      <p class="text-[11px] text-amber-700/80 mt-1">Patients checked in & waiting</p>
+      <p class="text-xl sm:text-2xl font-bold tracking-tight text-amber-900 mt-1.5">{checkedInQueue.length}</p>
+      <p class="text-[11px] text-amber-700/80 mt-0.5">Patients checked in & waiting</p>
     </div>
 
     <!-- Consulting Now Card -->
-    <div class="rounded-xl border border-purple-300/80 bg-purple-50/50 p-5 shadow-xs">
-      <p class="text-xs font-semibold text-purple-800 uppercase tracking-wider">In Consultation</p>
-      <p class="text-3xl font-bold tracking-tight text-purple-900 mt-2">{inConsultationQueue.length}</p>
-      <p class="text-[11px] text-purple-700/80 mt-1">Active patient session</p>
+    <div class="rounded-xl border border-purple-300/80 bg-purple-50/50 p-3.5 sm:p-4 shadow-xs">
+      <p class="text-[11px] sm:text-xs font-semibold text-purple-800 uppercase tracking-wider">In Consultation</p>
+      <p class="text-xl sm:text-2xl font-bold tracking-tight text-purple-900 mt-1.5">{inConsultationQueue.length}</p>
+      <p class="text-[11px] text-purple-700/80 mt-0.5">Active patient session</p>
     </div>
 
     <!-- Scheduled Today Card -->
-    <div class="rounded-xl border bg-card text-card-foreground p-5 shadow-xs">
-      <p class="text-xs font-medium text-sky-700 uppercase tracking-wider">Scheduled Today</p>
-      <p class="text-3xl font-bold tracking-tight text-foreground mt-2">{scheduledToday.length}</p>
-      <p class="text-[11px] text-muted-foreground mt-1">Pending arrival</p>
+    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-xs">
+      <p class="text-[11px] sm:text-xs font-medium text-sky-700 uppercase tracking-wider">Scheduled Today</p>
+      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{scheduledToday.length}</p>
+      <p class="text-[11px] text-muted-foreground mt-0.5">Pending arrival</p>
     </div>
 
     <!-- Completed Today Card -->
-    <div class="rounded-xl border bg-card text-card-foreground p-5 shadow-xs">
-      <p class="text-xs font-medium text-emerald-700 uppercase tracking-wider">Seen Today</p>
-      <p class="text-3xl font-bold tracking-tight text-foreground mt-2">{completedToday.length}</p>
-      <p class="text-[11px] text-muted-foreground mt-1">Completed & signed visits</p>
+    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-xs">
+      <p class="text-[11px] sm:text-xs font-medium text-emerald-700 uppercase tracking-wider">Seen Today</p>
+      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{completedToday.length}</p>
+      <p class="text-[11px] text-muted-foreground mt-0.5">Completed & signed visits</p>
     </div>
   </div>
 
   <!-- Workspace Tabs Navigation & Refresh -->
-  <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+  <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
     <Tabs.Root
       value={activeTab}
       onValueChange={(val) => {
@@ -274,7 +274,7 @@
 
   <!-- Tab 1: Waiting Room Triage Queue -->
   {#if activeTab === "queue"}
-    <div class="space-y-4">
+    <div class="space-y-4 flex-1 min-h-0 overflow-y-auto pr-1">
       <!-- Active Consultation Banner (if patient is currently consulting) -->
       {#if inConsultationQueue.length > 0}
         <div class="rounded-xl border border-purple-300 bg-purple-50/60 p-4 shadow-xs flex flex-col gap-3">
@@ -421,9 +421,9 @@
 
   <!-- Tab 2: Today's Full Schedule -->
   {:else if activeTab === "schedule"}
-    <div class="rounded-xl border bg-card text-card-foreground shadow-xs overflow-hidden">
-      <Table>
-        <TableHeader>
+    <div class="rounded-xl border bg-card text-card-foreground shadow-xs overflow-hidden flex flex-col flex-1 min-h-0">
+      <Table containerClass="flex-1 min-h-0 overflow-y-auto">
+        <TableHeader class="sticky top-0 bg-card z-10 shadow-xs border-b [&_tr]:bg-card">
           <TableRow>
             <TableHead class="w-20">Appt #</TableHead>
             <TableHead>Patient</TableHead>
@@ -484,8 +484,8 @@
 
   <!-- Tab 3: My Patients Roster -->
   {:else if activeTab === "patients"}
-    <div class="space-y-4">
-      <div class="flex items-center justify-between gap-3">
+    <div class="flex flex-col gap-3 flex-1 min-h-0 overflow-hidden">
+      <div class="flex items-center justify-between gap-3 shrink-0">
         <div class="relative w-full sm:w-72">
           <Search class="absolute left-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
           <Input
@@ -497,9 +497,9 @@
         </div>
       </div>
 
-      <div class="rounded-xl border bg-card text-card-foreground shadow-xs overflow-hidden">
-        <Table>
-          <TableHeader>
+      <div class="rounded-xl border bg-card text-card-foreground shadow-xs overflow-hidden flex flex-col flex-1 min-h-0">
+        <Table containerClass="flex-1 min-h-0 overflow-y-auto">
+          <TableHeader class="sticky top-0 bg-card z-10 shadow-xs border-b [&_tr]:bg-card">
             <TableRow>
               <TableHead class="w-20">ID</TableHead>
               <TableHead>Full Name</TableHead>
