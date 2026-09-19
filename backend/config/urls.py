@@ -34,7 +34,7 @@ def serve_spa(request: HttpRequest) -> HttpResponse:
 
     response = HttpResponse(html_content, content_type="text/html")
     if token:
-        response.set_cookie("session_token", token, samesite="Strict", httponly=False)
+        response.set_cookie("session_token", token, samesite="Strict", httponly=True)
     return response
 
 
