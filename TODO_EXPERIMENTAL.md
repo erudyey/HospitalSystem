@@ -10,9 +10,9 @@ all UI/UX workflows to use standard default shadcn-svelte components.
 ## Progress Overview
 
 - Total Tasks: 16
-- Completed: 6
+- Completed: 8
 - In Progress: 0
-- Remaining: 10
+- Remaining: 8
 
 ---
 
@@ -56,14 +56,14 @@ all UI/UX workflows to use standard default shadcn-svelte components.
 
 ## Phase 3: Auth Flow & Modal State Corrections
 
-- [ ] **Task 3.1: Auto-Login on Registration & Shadcn Styling in `AuthModal.svelte`**
+- [x] **Task 3.1: Auto-Login on Registration & Shadcn Styling in `AuthModal.svelte`**
   - File: `frontend/src/components/AuthModal.svelte`
   - Fix crash on registration: await registration, then immediately invoke `api.auth.login(username, password)` to establish session and pass authenticated user to `onSuccess`.
   - Replace raw HTML quick-fill buttons with standard shadcn `<Button variant="outline" size="sm">`.
   - Standardize role selection and inputs using shadcn styling conventions.
   - Convert `space-y-*` classes to `flex flex-col gap-3.5`.
 
-- [ ] **Task 3.2: Prevent User State Corruption in `SettingsDialog.svelte`**
+- [x] **Task 3.2: Prevent User State Corruption in `SettingsDialog.svelte`**
   - File: `frontend/src/components/SettingsDialog.svelte`
   - Ensure `onProfileUpdated` receives the unwrapped `StaffUser` object, preserving `currentUser.role` and preventing UI state collapse.
   - Standardize logout button with `variant="destructive"` and demo mode toggle controls.

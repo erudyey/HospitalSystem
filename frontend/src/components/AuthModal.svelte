@@ -130,7 +130,7 @@
 
     isSubmitting = true;
     try {
-      const session = await api.auth.register({
+      await api.auth.register({
         username: trimmedUser,
         password: regPassword,
         full_name: trimmedName,
@@ -140,7 +140,11 @@
         contact: regContact.trim(),
       });
 
-      toast.success(`Staff account created for ${session.user.full_name}!`);
+      // Automatically sign in the newly registered staff user to establish session
+      const session = await api.auth.login(trimmedUser, regPassword);
+      toast.success(
+        `Staff account created for ${session.user.full_name || session.user.username}!`
+      );
       open = false;
       onSuccess?.(session.user);
     } catch (err) {
@@ -201,22 +205,24 @@
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
               {#each demoProfiles as p}
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
                   onclick={() => quickFill(p)}
-                  class="text-left px-2.5 py-1.5 rounded-md border border-border/80 bg-background hover:bg-muted text-[11px] transition-colors cursor-pointer flex items-center justify-between"
+                  class="h-auto py-1.5 px-2.5 justify-between font-normal text-[11px] text-left border-border/80 hover:bg-muted/70 cursor-pointer"
                 >
                   <span class="font-medium text-foreground truncate">{p.label}</span>
-                  <Badge variant="outline" class="text-[9px] px-1 py-0 uppercase">
+                  <Badge variant="secondary" class="text-[9px] px-1 py-0 uppercase ml-1 shrink-0">
                     {p.role}
                   </Badge>
-                </button>
+                </Button>
               {/each}
             </div>
           </div>
         {/if}
 
-        <form onsubmit={handleLogin} class="space-y-3.5">
+        <form onsubmit={handleLogin} class="flex flex-col gap-3.5">
           <div>
             <label for="authUsername" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
               Username
@@ -269,7 +275,7 @@
 
       {:else}
         <!-- Register Form -->
-        <form onsubmit={handleRegister} class="space-y-3">
+        <form onsubmit={handleRegister} class="flex flex-col gap-3">
           <div class="grid grid-cols-2 gap-2.5">
             <div>
               <label for="regUser" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
