@@ -10,8 +10,8 @@ all UI/UX workflows to use standard default shadcn-svelte components.
 ## Progress Overview
 
 - Total Tasks: 30
-- Completed: 29
-- In Progress: 1
+- Completed: 30
+- In Progress: 0
 - Remaining: 0
 
 ---
@@ -223,6 +223,6 @@ all UI/UX workflows to use standard default shadcn-svelte components.
   - Tag verified commit on `experimental` branch as `v0.0.2-rc`.
   - Push tag to origin: `git push origin v0.0.2-rc` (or trigger workflow dispatch on `experimental`).
 
-- [ ] **Task 11.3: Inspect and Verify GitHub Pre-Release**
+- [x] **Task 11.3: Inspect and Verify GitHub Pre-Release**
   - Run `gh pr checks` / `gh run list --workflow=release.yml` to track build completion.
   - Verify attached Windows and macOS binaries and SHA-256 integrity checksums under the `v0.0.2-rc` pre-release tag.
