@@ -394,7 +394,7 @@ def main() -> None:
     try:
         window = webview.create_window(
             title="Hospital Management System",
-            url=f"http://127.0.0.1:{port}/?token={session_token}",
+            url=f"http://127.0.0.1:{port}/",
             width=1320,
             height=840,
             min_size=(1024, 700),
