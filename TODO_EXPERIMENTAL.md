@@ -9,10 +9,10 @@ all UI/UX workflows to use standard default shadcn-svelte components.
 
 ## Progress Overview
 
-- Total Tasks: 16
-- Completed: 8
+- Total Tasks: 17
+- Completed: 11
 - In Progress: 0
-- Remaining: 8
+- Remaining: 6
 
 ---
 
@@ -72,16 +72,16 @@ all UI/UX workflows to use standard default shadcn-svelte components.
 
 ## Phase 4: Clinical Appointments & Queue Engine
 
-- [ ] **Task 4.1: Fix Schedule Conflict Check in `EditAppointmentDialog.svelte`**
+- [x] **Task 4.1: Fix Schedule Conflict Check in `EditAppointmentDialog.svelte`**
   - File: `frontend/src/components/EditAppointmentDialog.svelte`
   - Correct argument order when calling `api.clinical.checkScheduleConflict`: pass `(selectedDoctorId, appDate, appTime, 15, appointment.id)` so the appointment is excluded from its own conflict check.
   - Auto-select doctor ID by doctor name matching if `appointment.doctor_id` is missing.
 
-- [ ] **Task 4.2: Enable Legacy Appointment Visibility in Doctor Services**
+- [x] **Task 4.2: Enable Legacy Appointment Visibility in Doctor Services**
   - File: `backend/clinic/services.py`
   - Update `get_doctor_queue` and `get_doctor_patients` to query `Q(doctor_id=doctor_id) | Q(doctor_name__iexact=doc.full_name)` so legacy appointments appear in the doctor roster and queue.
 
-- [ ] **Task 4.3: Verify Receptionist Triage & Walk-In Actions**
+- [x] **Task 4.3: Verify Receptionist Triage & Walk-In Actions**
   - File: `frontend/src/components/AppointmentsWorkspace.svelte`
   - Ensure "Book & Check In" creates appointment with initial status `Checked In`.
   - Ensure in-table "Check In" action for `Scheduled` appointments transitions them to `Checked In` for the waiting room.

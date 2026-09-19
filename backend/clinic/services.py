@@ -777,9 +777,14 @@ def get_doctor_queue(
 ) -> dict[str, list[Appointment]]:
     """Return today's doctor queue grouped by clinical status."""
     ref_date = target_date or date.today()
+    doc = StaffUser.objects.filter(id=doctor_id).first()
+    doctor_filter = Q(doctor_id=doctor_id)
+    if doc and doc.full_name:
+        doctor_filter |= Q(doctor_name__iexact=doc.full_name)
+
     base_qs = (
         Appointment.objects.select_related("patient")
-        .filter(doctor_id=doctor_id, app_date=ref_date)
+        .filter(doctor_filter, app_date=ref_date)
         .order_by("app_time", "id")
     )
 
@@ -793,16 +798,19 @@ def get_doctor_queue(
 
 def get_doctor_patients(doctor_id: int, query: str | None = None) -> list[Patient]:
     """Return distinct patients seen by or scheduled with this doctor."""
+    doc = StaffUser.objects.filter(id=doctor_id).first()
+    appt_filter = Q(appointments__doctor_id=doctor_id)
+    if doc and doc.full_name:
+        appt_filter |= Q(appointments__doctor_name__iexact=doc.full_name)
+
     qs = (
-        Patient.objects.filter(
-            Q(appointments__doctor_id=doctor_id) | Q(medical_records__doctor_id=doctor_id)
-        )
+        Patient.objects.filter(appt_filter | Q(medical_records__doctor_id=doctor_id))
         .distinct()
         .annotate(
             appointment_count=Count("appointments"),
             doctor_appointment_count=Count(
                 "appointments",
-                filter=Q(appointments__doctor_id=doctor_id),
+                filter=appt_filter,
             ),
         )
         .order_by("full_name")

@@ -9,7 +9,7 @@ from django.core.exceptions import ValidationError
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from backend.clinic.models import AppointmentStatus, StaffRole
+from backend.clinic.models import Appointment, AppointmentStatus, StaffRole
 from backend.clinic.services import (
     authenticate_staff,
     book_appointment,
@@ -337,6 +337,28 @@ class ClinicalLifecycleAndQueueTests(TestCase):
         filtered = get_doctor_patients(doctor_id=self.doctor.id, query="Roster Patient 1")
         self.assertEqual(len(filtered), 1)
         self.assertEqual(filtered[0].id, p1.id)
+
+    def test_legacy_appointments_included_in_doctor_queue_and_roster(self) -> None:
+        target_date = date(2026, 10, 7)
+        legacy_patient = register_patient("Legacy Patient", "0917009", 50)
+        # Create unassigned appointment matching doctor name only (doctor_id is None)
+        legacy_appt = Appointment.objects.create(
+            patient=legacy_patient,
+            doctor_name=self.doctor.full_name,
+            doctor=None,
+            app_date=target_date,
+            app_time=time(11, 0),
+            status=AppointmentStatus.SCHEDULED,
+            reason_for_visit="Legacy migration follow-up",
+        )
+
+        queue = get_doctor_queue(doctor_id=self.doctor.id, target_date=target_date)
+        scheduled_ids = [a.id for a in queue["scheduled"]]
+        self.assertIn(legacy_appt.id, scheduled_ids)
+
+        roster = get_doctor_patients(doctor_id=self.doctor.id)
+        roster_ids = [p.id for p in roster]
+        self.assertIn(legacy_patient.id, roster_ids)
 
 
 class MedicalRecordClinicalTests(TestCase):
