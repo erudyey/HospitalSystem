@@ -175,10 +175,10 @@
 
               <!-- Symptoms & Clinical Notes -->
               {#if record.symptoms || record.clinical_notes}
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs bg-muted/20 p-2.5 rounded-lg">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs bg-muted/20 p-2.5 rounded-lg border border-border/40">
                   {#if record.symptoms}
                     <div>
-                      <p class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <p class="text-xs font-semibold text-foreground">
                         Reported Symptoms
                       </p>
                       <p class="text-foreground mt-0.5 whitespace-pre-wrap">{record.symptoms}</p>
@@ -186,8 +186,8 @@
                   {/if}
                   {#if record.clinical_notes}
                     <div>
-                      <p class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        Clinical Examination / Findings
+                      <p class="text-xs font-semibold text-foreground">
+                        Clinical Examination & Findings
                       </p>
                       <p class="text-foreground mt-0.5 whitespace-pre-wrap">{record.clinical_notes}</p>
                     </div>
@@ -198,11 +198,11 @@
               <!-- Prescription Box -->
               {#if record.prescription}
                 <div class="rounded-lg border border-border bg-muted/40 p-2.5 text-xs text-foreground flex flex-col gap-1">
-                  <div class="flex items-center gap-1.5 font-semibold text-primary text-[11px] uppercase tracking-wider">
-                    <Pill class="size-3.5 text-primary" />
+                  <div class="flex items-center gap-1.5 font-semibold text-foreground text-xs">
+                    <Pill class="size-3.5 text-muted-foreground" />
                     <span>Prescribed Medication (Rx)</span>
                   </div>
-                  <p class="font-mono text-xs whitespace-pre-wrap pl-5">{record.prescription}</p>
+                  <p class="font-mono text-xs whitespace-pre-wrap pl-5 text-foreground/90">{record.prescription}</p>
                 </div>
               {/if}
 
