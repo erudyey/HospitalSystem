@@ -4,8 +4,10 @@
     api,
     type Patient,
     type StaffUser,
-    getUserToken,
     clearUserToken,
+    clearPersistedUserToken,
+    isUserTokenRemembered,
+    restorePersistentState,
   } from "$lib/api";
   import { cn } from "$lib/utils";
   import { toast } from "$lib/toast.svelte";
@@ -90,14 +92,13 @@
   async function initAuth() {
     isAuthChecking = true;
     try {
-      // Check stored demo mode preference
-      const savedDemo = localStorage.getItem("hospitalsystem_demo_mode");
-      if (savedDemo !== null) {
-        demoMode = savedDemo === "true";
+      // Restore native desktop state before checking the authenticated staff session.
+      const persistentState = await restorePersistentState();
+      if (persistentState.demoMode !== null) {
+        demoMode = persistentState.demoMode;
       }
 
-      // Check current session (either from localStorage if remembered, or sessionStorage)
-      const token = getUserToken();
+      const token = persistentState.userToken;
       if (token) {
         try {
           const res = await api.auth.me();
@@ -109,7 +110,7 @@
           }
           return;
         } catch {
-          clearUserToken();
+          await clearPersistedUserToken();
           currentUser = null;
         }
       }
@@ -124,9 +125,8 @@
 
   async function switchDemoUser(username: string) {
     try {
-      // Preserve current persistence preference (if user has token in localStorage, keep remembered)
-      const isPersistent = Boolean(localStorage.getItem("user_token"));
-      const session = await api.auth.login(username, "password123", isPersistent);
+      // Preserve the current account's persistence preference while switching demo users.
+      const session = await api.auth.login(username, "password123", isUserTokenRemembered());
       currentUser = session.user;
       if (currentUser.role === "doctor") {
         activeWorkspace = "doctor_workspace";
