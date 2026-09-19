@@ -10,9 +10,9 @@ all UI/UX workflows to use standard default shadcn-svelte components.
 ## Progress Overview
 
 - Total Tasks: 16
-- Completed: 2
+- Completed: 3
 - In Progress: 0
-- Remaining: 14
+- Remaining: 13
 
 ---
 
@@ -29,7 +29,7 @@ all UI/UX workflows to use standard default shadcn-svelte components.
   - File: `backend/clinic/management/commands/seed.py`
   - Reorder seeding execution so staff accounts are guaranteed to seed even when existing patients are already present in the database.
 
-- [ ] **Task 1.3: Hook Default Staff Seeding into Desktop Launcher and Health Check**
+- [x] **Task 1.3: Hook Default Staff Seeding into Desktop Launcher and Health Check**
   - Files: `desktop/launcher.py`, `backend/clinic/views.py`
   - In `desktop/launcher.py`, call `services.ensure_default_staff()` immediately after `call_command("migrate")`.
   - In `health_check()` view, call `services.ensure_default_staff()` when `not settings.TESTING`.

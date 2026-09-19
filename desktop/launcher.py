@@ -197,6 +197,11 @@ def main() -> None:
         logger.info("Executing database migrations...")
         call_command("migrate", interactive=False)
 
+        from backend.clinic.services import ensure_default_staff
+
+        logger.info("Ensuring baseline staff accounts exist...")
+        ensure_default_staff()
+
         from waitress.server import create_server
 
         from backend.config.wsgi import application

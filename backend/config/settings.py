@@ -51,6 +51,7 @@ IS_TESTING = (
     or any("pytest" in arg for arg in sys.argv)
     or any(arg.endswith("pytest") or arg.endswith("pytest.exe") for arg in sys.argv)
 )
+TESTING = IS_TESTING
 
 if IS_TESTING:
     DB_PATH = ":memory:"

@@ -8,6 +8,7 @@ import json
 from datetime import date
 from typing import Any
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -140,6 +141,8 @@ def get_authenticated_user(request: HttpRequest) -> StaffUser | None:
 @require_GET
 def health_check(_request: HttpRequest) -> JsonResponse:
     """Readiness probe and CSRF cookie setter."""
+    if not getattr(settings, "IS_TESTING", False):
+        services.ensure_default_staff()
     return JsonResponse({"status": "ok", "version": "0.0.1"})
 
 
