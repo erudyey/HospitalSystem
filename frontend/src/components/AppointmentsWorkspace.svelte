@@ -440,23 +440,23 @@
       <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countAll}</p>
       <p class="text-[11px] text-muted-foreground mt-0.5">Master schedule count</p>
     </div>
-    <div class="rounded-xl border border-amber-200/80 bg-amber-50/40 text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <p class="text-[11px] sm:text-xs font-semibold text-amber-800 uppercase tracking-wider">Waiting Room</p>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-amber-900 mt-1.5">{countCheckedIn}</p>
-      <p class="text-[11px] text-amber-700/80 mt-0.5">Checked in at clinic</p>
+    <div class="rounded-xl border border-amber-500/30 bg-amber-500/5 text-card-foreground p-3.5 sm:p-4 shadow-sm">
+      <p class="text-[11px] sm:text-xs font-semibold text-amber-700 uppercase tracking-wider">Waiting Room</p>
+      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countCheckedIn}</p>
+      <p class="text-[11px] text-muted-foreground mt-0.5">Checked in at clinic</p>
     </div>
     <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <p class="text-[11px] sm:text-xs font-medium text-sky-700 uppercase tracking-wider">Scheduled</p>
+      <p class="text-[11px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">Scheduled</p>
       <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countScheduled}</p>
       <p class="text-[11px] text-muted-foreground mt-0.5">Pending clinical visits</p>
     </div>
-    <div class="rounded-xl border border-purple-200/80 bg-purple-50/40 text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <p class="text-[11px] sm:text-xs font-semibold text-purple-800 uppercase tracking-wider">Consulting</p>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-purple-900 mt-1.5">{countInConsultation}</p>
-      <p class="text-[11px] text-purple-700/80 mt-0.5">Currently with physician</p>
+    <div class="rounded-xl border border-primary/30 bg-primary/5 text-card-foreground p-3.5 sm:p-4 shadow-sm">
+      <p class="text-[11px] sm:text-xs font-semibold text-primary uppercase tracking-wider">Consulting</p>
+      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countInConsultation}</p>
+      <p class="text-[11px] text-muted-foreground mt-0.5">Currently with physician</p>
     </div>
     <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <p class="text-[11px] sm:text-xs font-medium text-emerald-700 uppercase tracking-wider">Completed</p>
+      <p class="text-[11px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">Completed</p>
       <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countCompleted}</p>
       <p class="text-[11px] text-muted-foreground mt-0.5">Discharged records</p>
     </div>
@@ -478,7 +478,7 @@
         <Tabs.Trigger value="ALL" class="min-w-[64px]">
           All <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countAll})</span>
         </Tabs.Trigger>
-        <Tabs.Trigger value="Checked In" class="min-w-[110px] text-amber-800 data-[state=active]:text-amber-900">
+        <Tabs.Trigger value="Checked In" class="min-w-[110px]">
           Waiting Room <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countCheckedIn})</span>
         </Tabs.Trigger>
         <Tabs.Trigger value="Scheduled" class="min-w-[95px]">
@@ -503,24 +503,28 @@
           <span class="font-medium text-foreground tabular-nums">
             {currentPage}/{totalPages}
           </span>
-          <button
+          <Button
             type="button"
-            class="p-1 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            variant="outline"
+            size="icon"
+            class="size-7 cursor-pointer"
             onclick={() => (currentPage = Math.max(1, currentPage - 1))}
             disabled={currentPage === 1}
             title="Previous Page"
           >
             <ChevronLeft class="size-3.5" />
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            class="p-1 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            variant="outline"
+            size="icon"
+            class="size-7 cursor-pointer"
             onclick={() => (currentPage = Math.min(totalPages, currentPage + 1))}
             disabled={currentPage >= totalPages}
             title="Next Page"
           >
             <ChevronRight class="size-3.5" />
-          </button>
+          </Button>
         </div>
       {/if}
 
@@ -730,28 +734,28 @@
                 <!-- Status Indicator Badge (5 Clinical States) -->
                 <TableCell class="text-center">
                   {#if app.status === "Scheduled"}
-                    <Badge variant="outline" class="border-sky-200 bg-sky-50 text-sky-700 gap-1 font-medium text-xs">
-                      <Clock class="size-3 text-sky-600 shrink-0" />
+                    <Badge variant="outline" class="gap-1 font-medium text-xs text-muted-foreground">
+                      <Clock class="size-3 shrink-0" />
                       Scheduled
                     </Badge>
                   {:else if app.status === "Checked In"}
-                    <Badge variant="outline" class="border-amber-300 bg-amber-50 text-amber-800 gap-1 font-medium text-xs">
-                      <UserCheck class="size-3 text-amber-600 shrink-0" />
+                    <Badge variant="secondary" class="gap-1 font-medium text-xs">
+                      <UserCheck class="size-3 shrink-0" />
                       Checked In
                     </Badge>
                   {:else if app.status === "In Consultation"}
-                    <Badge variant="outline" class="border-purple-300 bg-purple-50 text-purple-800 gap-1 font-medium text-xs">
-                      <Stethoscope class="size-3 text-purple-600 shrink-0" />
+                    <Badge variant="default" class="gap-1 font-medium text-xs">
+                      <Stethoscope class="size-3 shrink-0" />
                       Consulting
                     </Badge>
                   {:else if app.status === "Completed"}
-                    <Badge variant="outline" class="border-emerald-200 bg-emerald-50 text-emerald-700 gap-1 font-medium text-xs">
-                      <CheckCircle2 class="size-3 text-emerald-600 shrink-0" />
+                    <Badge variant="outline" class="gap-1 font-medium text-xs">
+                      <CheckCircle2 class="size-3 shrink-0" />
                       Completed
                     </Badge>
                   {:else if app.status === "Cancelled"}
-                    <Badge variant="outline" class="border-zinc-200 bg-zinc-50 text-zinc-600 gap-1 font-medium text-xs">
-                      <XCircle class="size-3 text-zinc-500 shrink-0" />
+                    <Badge variant="outline" class="gap-1 font-medium text-xs opacity-70">
+                      <XCircle class="size-3 shrink-0" />
                       Cancelled
                     </Badge>
                   {/if}
@@ -763,12 +767,12 @@
                     {#if app.status === "Scheduled"}
                       <Button
                         size="sm"
-                        variant="outline"
-                        class="h-7 text-xs px-2 border-amber-300 bg-amber-50/70 text-amber-900 hover:bg-amber-100 hover:text-amber-950 cursor-pointer inline-flex items-center gap-1 font-medium"
+                        variant="secondary"
+                        class="h-7 text-xs px-2 cursor-pointer inline-flex items-center gap-1 font-medium"
                         onclick={() => handleStatusChange(app.id, "Checked In")}
                         title="Check in patient to Waiting Room"
                       >
-                        <UserCheck class="size-3 text-amber-600" />
+                        <UserCheck class="size-3" />
                         Check In
                       </Button>
                     {/if}
@@ -1158,12 +1162,12 @@
             variant="secondary"
             onclick={(e) => handleCreateBooking(e, "Checked In")}
             disabled={isSubmitting || patientList.length === 0 || (!!conflictWarning && !overrideConflict)}
-            class="cursor-pointer border border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100"
+            class="cursor-pointer"
           >
             {#if isSubmitting}
               <Loader2 class="size-4 animate-spin mr-1" />
             {:else}
-              <UserCheck class="size-4 mr-1 text-amber-700" />
+              <UserCheck class="size-4 mr-1" />
             {/if}
             Book & Check In
           </Button>

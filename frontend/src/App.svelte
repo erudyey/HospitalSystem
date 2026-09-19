@@ -209,34 +209,40 @@
         </div>
       </div>
 
-      <button
+      <Button
         type="button"
+        variant="ghost"
+        size="icon"
         onclick={() => (isSettingsOpen = true)}
-        class="size-7 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground flex items-center justify-center transition-colors cursor-pointer"
+        class="size-7 text-muted-foreground hover:text-foreground cursor-pointer"
         title="Settings & Profile"
       >
         <Settings class="size-4" />
-      </button>
+      </Button>
     </div>
 
     <!-- Quick Action CTA Button (Sidebar) -->
     <div class="p-3 border-b border-border">
       {#if currentUser?.role === "doctor"}
-        <button
+        <Button
+          variant="secondary"
+          size="sm"
           onclick={() => (activeWorkspace = "doctor_workspace")}
-          class="w-full inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-xs font-medium h-8 px-3 bg-purple-700 text-white shadow-xs hover:bg-purple-800 transition-colors cursor-pointer"
+          class="w-full justify-center gap-2 text-xs font-medium cursor-pointer shadow-xs"
         >
           <Stethoscope class="size-3.5" />
           <span>Physician Triage Queue</span>
-        </button>
+        </Button>
       {:else}
-        <button
+        <Button
+          variant="default"
+          size="sm"
           onclick={handleQuickRegisterPatient}
-          class="w-full inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-xs font-medium h-8 px-3 bg-primary text-primary-foreground shadow hover:bg-primary/90 transition-colors cursor-pointer"
+          class="w-full justify-center gap-2 text-xs font-medium cursor-pointer shadow-xs"
         >
           <UserPlus class="size-3.5" />
           <span>+ Register Patient</span>
-        </button>
+        </Button>
       {/if}
     </div>
 
@@ -248,59 +254,47 @@
 
       {#if currentUser?.role === "doctor"}
         <!-- Doctor Navigation Items -->
-        <button
+        <Button
+          variant={activeWorkspace === "doctor_workspace" ? "secondary" : "ghost"}
+          size="sm"
           onclick={() => (activeWorkspace = "doctor_workspace")}
-          class={cn(
-            "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer",
-            activeWorkspace === "doctor_workspace"
-              ? "bg-muted text-foreground font-semibold shadow-xs"
-              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-          )}
+          class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer {activeWorkspace === 'doctor_workspace' ? 'font-semibold text-foreground shadow-2xs' : 'text-muted-foreground'}"
         >
-          <Stethoscope class="size-4 {activeWorkspace === 'doctor_workspace' ? 'text-purple-700' : 'text-muted-foreground'}" />
+          <Stethoscope class="size-4 shrink-0 {activeWorkspace === 'doctor_workspace' ? 'text-primary' : 'text-muted-foreground'}" />
           <span>Doctor Workspace</span>
-        </button>
+        </Button>
 
-        <button
+        <Button
+          variant={activeWorkspace === "patients" ? "secondary" : "ghost"}
+          size="sm"
           onclick={() => (activeWorkspace = "patients")}
-          class={cn(
-            "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer",
-            activeWorkspace === "patients"
-              ? "bg-muted text-foreground font-semibold shadow-xs"
-              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-          )}
+          class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer {activeWorkspace === 'patients' ? 'font-semibold text-foreground shadow-2xs' : 'text-muted-foreground'}"
         >
-          <Users class="size-4 {activeWorkspace === 'patients' ? 'text-primary' : 'text-muted-foreground'}" />
+          <Users class="size-4 shrink-0 {activeWorkspace === 'patients' ? 'text-primary' : 'text-muted-foreground'}" />
           <span>Patient Directory</span>
-        </button>
+        </Button>
 
       {:else}
         <!-- Receptionist Navigation Items -->
-        <button
+        <Button
+          variant={activeWorkspace === "appointments" ? "secondary" : "ghost"}
+          size="sm"
           onclick={() => (activeWorkspace = "appointments")}
-          class={cn(
-            "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer",
-            activeWorkspace === "appointments"
-              ? "bg-muted text-foreground font-semibold shadow-xs"
-              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-          )}
+          class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer {activeWorkspace === 'appointments' ? 'font-semibold text-foreground shadow-2xs' : 'text-muted-foreground'}"
         >
-          <Calendar class="size-4 {activeWorkspace === 'appointments' ? 'text-primary' : 'text-muted-foreground'}" />
+          <Calendar class="size-4 shrink-0 {activeWorkspace === 'appointments' ? 'text-primary' : 'text-muted-foreground'}" />
           <span>Appointments & Triage</span>
-        </button>
+        </Button>
 
-        <button
+        <Button
+          variant={activeWorkspace === "patients" ? "secondary" : "ghost"}
+          size="sm"
           onclick={() => (activeWorkspace = "patients")}
-          class={cn(
-            "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer",
-            activeWorkspace === "patients"
-              ? "bg-muted text-foreground font-semibold shadow-xs"
-              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-          )}
+          class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer {activeWorkspace === 'patients' ? 'font-semibold text-foreground shadow-2xs' : 'text-muted-foreground'}"
         >
-          <Users class="size-4 {activeWorkspace === 'patients' ? 'text-primary' : 'text-muted-foreground'}" />
+          <Users class="size-4 shrink-0 {activeWorkspace === 'patients' ? 'text-primary' : 'text-muted-foreground'}" />
           <span>Patients Directory</span>
-        </button>
+        </Button>
       {/if}
     </div>
 
@@ -318,14 +312,16 @@
             </div>
           </div>
 
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onclick={() => (isSettingsOpen = true)}
-            class="text-muted-foreground hover:text-foreground cursor-pointer p-1"
+            class="size-6 text-muted-foreground hover:text-foreground cursor-pointer"
             title="Profile Settings"
           >
             <Settings class="size-3.5" />
-          </button>
+          </Button>
         </div>
       {/if}
 
@@ -360,60 +356,48 @@
 
       <!-- Center: 1-Click Passwordless Demo Switcher (if Demo Mode ON) -->
       {#if demoMode}
-        <div class="hidden lg:flex items-center gap-1 bg-muted/60 p-1 rounded-lg border border-border/60 text-xs">
+        <div class="hidden lg:flex items-center gap-1 bg-muted/70 p-1 rounded-lg border border-border/60 text-xs">
           <span class="text-[11px] font-semibold text-muted-foreground px-1.5 flex items-center gap-1">
-            <Sparkles class="size-3 text-amber-500" />
+            <Sparkles class="size-3 text-primary" />
             <span>Switch Role:</span>
           </span>
 
-          <button
+          <Button
             type="button"
+            variant={currentUser?.username === "maria" ? "default" : "ghost"}
+            size="sm"
             onclick={() => switchDemoUser("maria")}
-            class={cn(
-              "px-2 py-0.5 rounded text-xs font-medium transition-colors cursor-pointer",
-              currentUser?.username === "maria"
-                ? "bg-primary text-primary-foreground shadow-2xs font-semibold"
-                : "text-muted-foreground hover:bg-background hover:text-foreground"
-            )}
+            class="h-7 px-2.5 text-xs font-medium cursor-pointer"
           >
             Receptionist
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant={currentUser?.username === "dreyes" ? "default" : "ghost"}
+            size="sm"
             onclick={() => switchDemoUser("dreyes")}
-            class={cn(
-              "px-2 py-0.5 rounded text-xs font-medium transition-colors cursor-pointer",
-              currentUser?.username === "dreyes"
-                ? "bg-purple-700 text-white shadow-2xs font-semibold"
-                : "text-muted-foreground hover:bg-background hover:text-foreground"
-            )}
+            class="h-7 px-2.5 text-xs font-medium cursor-pointer"
           >
             Dr. Reyes
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant={currentUser?.username === "dsantos" ? "default" : "ghost"}
+            size="sm"
             onclick={() => switchDemoUser("dsantos")}
-            class={cn(
-              "px-2 py-0.5 rounded text-xs font-medium transition-colors cursor-pointer",
-              currentUser?.username === "dsantos"
-                ? "bg-purple-700 text-white shadow-2xs font-semibold"
-                : "text-muted-foreground hover:bg-background hover:text-foreground"
-            )}
+            class="h-7 px-2.5 text-xs font-medium cursor-pointer"
           >
             Dr. Santos
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant={currentUser?.username === "dtan" ? "default" : "ghost"}
+            size="sm"
             onclick={() => switchDemoUser("dtan")}
-            class={cn(
-              "px-2 py-0.5 rounded text-xs font-medium transition-colors cursor-pointer",
-              currentUser?.username === "dtan"
-                ? "bg-purple-700 text-white shadow-2xs font-semibold"
-                : "text-muted-foreground hover:bg-background hover:text-foreground"
-            )}
+            class="h-7 px-2.5 text-xs font-medium cursor-pointer"
           >
             Dr. Tan
-          </button>
+          </Button>
         </div>
       {/if}
 
@@ -422,13 +406,8 @@
         {#if currentUser}
           <div class="flex items-center gap-2">
             <Badge
-              variant="outline"
-              class={cn(
-                "text-[11px] font-semibold px-2 py-0.5 capitalize",
-                currentUser.role === "doctor"
-                  ? "border-purple-300 bg-purple-50 text-purple-800"
-                  : "border-sky-300 bg-sky-50 text-sky-800"
-              )}
+              variant={currentUser.role === "doctor" ? "default" : "secondary"}
+              class="text-[11px] font-semibold px-2 py-0.5 capitalize"
             >
               {currentUser.role}
             </Badge>
@@ -458,9 +437,14 @@
     {#if globalError}
       <div class="bg-destructive/10 border-b border-destructive/20 text-destructive px-6 py-2.5 text-xs flex items-center justify-between shrink-0">
         <span><strong>System Alert:</strong> {globalError}</span>
-        <button onclick={() => (globalError = null)} class="text-destructive font-bold underline ml-4 cursor-pointer">
+        <Button
+          variant="ghost"
+          size="sm"
+          onclick={() => (globalError = null)}
+          class="h-6 text-destructive font-semibold hover:bg-destructive/10 px-2 cursor-pointer"
+        >
           Dismiss
-        </button>
+        </Button>
       </div>
     {/if}
 

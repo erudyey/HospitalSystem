@@ -144,14 +144,14 @@
           </p>
         </div>
       {:else}
-        <div class="space-y-4">
+        <div class="flex flex-col gap-4">
           {#each records as record, idx (record.id)}
             <div class="rounded-xl border border-border bg-card p-4 shadow-xs flex flex-col gap-3">
               <!-- Card Header -->
               <div class="flex items-start justify-between gap-2 border-b border-border/60 pb-2.5">
                 <div>
                   <div class="flex items-center gap-2">
-                    <Badge variant="outline" class="border-emerald-300 bg-emerald-50 text-emerald-800 font-semibold text-xs">
+                    <Badge variant="secondary" class="font-semibold text-xs">
                       {record.diagnosis}
                     </Badge>
                     <span class="text-[11px] font-mono text-muted-foreground">
@@ -197,9 +197,9 @@
 
               <!-- Prescription Box -->
               {#if record.prescription}
-                <div class="rounded-lg border border-sky-200/80 bg-sky-50/50 p-2.5 text-xs text-sky-950 flex flex-col gap-1">
-                  <div class="flex items-center gap-1.5 font-semibold text-sky-800 text-[11px] uppercase tracking-wider">
-                    <Pill class="size-3.5 text-sky-600" />
+                <div class="rounded-lg border border-border bg-muted/40 p-2.5 text-xs text-foreground flex flex-col gap-1">
+                  <div class="flex items-center gap-1.5 font-semibold text-primary text-[11px] uppercase tracking-wider">
+                    <Pill class="size-3.5 text-primary" />
                     <span>Prescribed Medication (Rx)</span>
                   </div>
                   <p class="font-mono text-xs whitespace-pre-wrap pl-5">{record.prescription}</p>
