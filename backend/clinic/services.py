@@ -4,17 +4,21 @@ All operations execute inside database transactions, perform explicit validation
 and return strongly-typed model instances decoupled from HTTP requests.
 """
 
+import os
 import secrets
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 
 from backend.clinic.models import (
     Appointment,
+    AppointmentAudit,
     AppointmentStatus,
+    DemoSeedState,
     MedicalRecord,
     MedicalRecordRevision,
     Patient,
@@ -22,6 +26,60 @@ from backend.clinic.models import (
     StaffUser,
     UserSession,
 )
+
+
+def clinic_timezone():
+    """Return the configured clinic timezone or the workstation local timezone."""
+    configured = os.environ.get("HOSPITAL_TIME_ZONE", "").strip()
+    if configured:
+        try:
+            return ZoneInfo(configured)
+        except ZoneInfoNotFoundError:
+            pass
+    return datetime.now().astimezone().tzinfo
+
+
+def clinic_now() -> datetime:
+    """Return the current clinic-local wall time."""
+    return datetime.now(clinic_timezone())
+
+
+def clinic_context() -> dict[str, str]:
+    tz = clinic_timezone()
+    return {"timezone": getattr(tz, "key", None) or str(tz), "now": clinic_now().isoformat()}
+
+
+def _appointment_snapshot(appointment: Appointment) -> dict[str, str | int | None]:
+    return {
+        "doctor_id": appointment.doctor_id,
+        "doctor_name": appointment.doctor_name,
+        "app_date": appointment.app_date.isoformat(),
+        "app_time": appointment.app_time.strftime("%H:%M"),
+        "status": appointment.status,
+        "checked_in_at": appointment.checked_in_at.isoformat() if appointment.checked_in_at else None,
+    }
+
+
+def _audit(appointment: Appointment, event: str, actor_id: int | None, reason: str = "", before=None) -> None:
+    AppointmentAudit.objects.create(
+        appointment=appointment,
+        actor_id=actor_id,
+        event=event,
+        reason=reason,
+        before=before or {},
+        after=_appointment_snapshot(appointment),
+    )
+
+
+def _validate_future_slot(app_date: date, app_time: time) -> None:
+    if datetime.combine(app_date, app_time, tzinfo=clinic_timezone()) <= clinic_now():
+        raise ValidationError({"schedule": "Scheduled appointments must be in the future."})
+
+
+def next_quarter_hour() -> datetime:
+    """Return the next clinic-local fifteen-minute appointment boundary."""
+    now = clinic_now().replace(second=0, microsecond=0)
+    return now + timedelta(minutes=15 - (now.minute % 15))
 
 
 def register_patient(full_name: str, contact: str = "", age: int = 0) -> Patient:
@@ -135,7 +193,7 @@ def book_appointment(
         except StaffUser.DoesNotExist:
             errors["doctor_id"] = f"Doctor #{doctor_id} does not exist."
 
-    if not clean_doctor:
+    elif not clean_doctor:
         errors["doctor_name"] = "Doctor name is required."
 
     clean_date_str = (app_date_str or "").strip()
@@ -160,12 +218,17 @@ def book_appointment(
         errors["patient_id"] = f"Patient #{patient_id} does not exist."
         patient = None
 
+    if clean_status == AppointmentStatus.SCHEDULED and parsed_date is not None:
+        try:
+            _validate_future_slot(parsed_date, parsed_time)
+        except ValidationError as exc:
+            errors.update(exc.message_dict)
     if errors or parsed_date is None or patient is None:
         raise ValidationError(errors)
 
     clean_override_reason = (override_reason or "").strip()
-    if allow_conflict and not clean_override_reason:
-        errors["override_reason"] = "A reason is required to override a schedule conflict."
+    if allow_conflict and (not clean_override_reason or len(clean_override_reason) > 255):
+        errors["override_reason"] = "An override reason of at most 255 characters is required."
     if errors:
         raise ValidationError(errors)
 
@@ -199,6 +262,12 @@ def book_appointment(
             conflict_overridden_by=override_by,
         )
         appointment.save()
+        _audit(
+            appointment,
+            "walk_in" if clean_status == AppointmentStatus.CHECKED_IN else "booked",
+            override_by_id,
+            clean_override_reason if allow_conflict else "",
+        )
         return appointment
 
 
@@ -278,6 +347,7 @@ def update_appointment(
 
     with transaction.atomic():
         appointment = Appointment.objects.select_for_update().get(id=appointment_id)
+        before = _appointment_snapshot(appointment)
         if appointment.status in (AppointmentStatus.COMPLETED, AppointmentStatus.IN_CONSULTATION):
             raise ValidationError(
                 {
@@ -324,6 +394,12 @@ def update_appointment(
         if errors:
             raise ValidationError(errors)
 
+        if appointment.status != AppointmentStatus.CANCELLED:
+            try:
+                _validate_future_slot(appointment.app_date, appointment.app_time)
+            except ValidationError as exc:
+                raise exc
+
         clean_override_reason = (override_reason or "").strip()
         conflicts = []
         if appointment.doctor_id is not None:
@@ -339,15 +415,25 @@ def update_appointment(
                     "schedule": "The selected physician already has an active appointment in this time window."
                 }
             )
-        if allow_conflict and not clean_override_reason:
+        if allow_conflict and (not clean_override_reason or len(clean_override_reason) > 255):
             raise ValidationError(
-                {"override_reason": "A reason is required to override a schedule conflict."}
+                {"override_reason": "An override reason of at most 255 characters is required."}
             )
         if allow_conflict:
             appointment.conflict_override_reason = clean_override_reason
             appointment.conflict_overridden_at = timezone.now()
             appointment.conflict_overridden_by_id = override_by_id
+        if before["status"] == AppointmentStatus.CHECKED_IN:
+            appointment.status = AppointmentStatus.SCHEDULED
+            appointment.checked_in_at = None
         appointment.save()
+        _audit(
+            appointment,
+            "rescheduled",
+            override_by_id,
+            clean_override_reason if allow_conflict else "",
+            before,
+        )
         return appointment
 
 
@@ -452,7 +538,9 @@ def register_staff(
 
     if not clean_username:
         errors["username"] = "Username is required."
-    elif StaffUser.objects.filter(username=clean_username).exists():
+    elif len(clean_username) > 50:
+        errors["username"] = "Username must be at most 50 characters long."
+    elif StaffUser.objects.filter(username__iexact=clean_username).exists():
         errors["username"] = f"Username '{clean_username}' is already taken."
 
     if not clean_name:
@@ -467,18 +555,31 @@ def register_staff(
     if errors:
         raise ValidationError(errors)
 
+    try:
+        with transaction.atomic():
+            staff = StaffUser(
+                username=clean_username,
+                full_name=clean_name,
+                role=clean_role,
+                specialty=clean_specialty,
+                license_number=clean_license,
+                contact=clean_contact,
+            )
+            staff.set_password(password)
+            staff.save()
+            return staff
+    except IntegrityError as exc:
+        raise ValidationError({"username": "This username is already taken."}) from exc
+
+
+def bootstrap_receptionist(**kwargs) -> StaffUser:
+    """Create the sole initial receptionist, never reopening public registration."""
     with transaction.atomic():
-        staff = StaffUser(
-            username=clean_username,
-            full_name=clean_name,
-            role=clean_role,
-            specialty=clean_specialty,
-            license_number=clean_license,
-            contact=clean_contact,
-        )
-        staff.set_password(password)
-        staff.save()
-        return staff
+        if StaffUser.objects.exists():
+            raise ValidationError({"registration": "Initial setup has already been completed."})
+        if kwargs.get("role", StaffRole.RECEPTIONIST) != StaffRole.RECEPTIONIST:
+            raise ValidationError({"role": "The initial account must be a receptionist."})
+        return register_staff(**kwargs)
 
 
 def authenticate_staff(username: str, password: str) -> tuple[StaffUser, UserSession]:
@@ -549,6 +650,16 @@ def logout_staff(token: str) -> bool:
         return deleted_count > 0
 
 
+def rotate_session(token: str, user: StaffUser) -> UserSession:
+    """Replace the current session after a credential change."""
+    with transaction.atomic():
+        if token:
+            UserSession.objects.filter(token=token, user=user).delete()
+        session = UserSession(token=secrets.token_urlsafe(48), user=user)
+        session.save()
+        return session
+
+
 def update_staff_profile(
     user_id: int,
     full_name: str,
@@ -557,6 +668,8 @@ def update_staff_profile(
     license_number: str = "",
     current_password: str | None = None,
     new_password: str | None = None,
+    username: str | None = None,
+    session_token: str | None = None,
 ) -> StaffUser:
     """Update staff profile information and optionally change password."""
     clean_name = (full_name or "").strip()
@@ -577,13 +690,19 @@ def update_staff_profile(
         except StaffUser.DoesNotExist:
             raise ValidationError({"user": f"Staff user #{user_id} does not exist."}) from None
 
-        if new_password:
+        clean_username = (username or staff.username).strip().lower()
+        changing_credentials = bool(new_password) or clean_username != staff.username
+        if changing_credentials:
             if not current_password:
-                errors["current_password"] = "Current password is required to set a new password."
+                errors["current_password"] = "Current password is required to change credentials."
             elif not staff.check_password(current_password):
                 errors["current_password"] = "Incorrect current password."
-            elif len(new_password) < 6:
+            elif new_password and len(new_password) < 6:
                 errors["new_password"] = "New password must be at least 6 characters long."
+            elif len(clean_username) > 50:
+                errors["username"] = "Username must be at most 50 characters long."
+            elif StaffUser.objects.filter(username__iexact=clean_username).exclude(id=staff.id).exists():
+                errors["username"] = "This username is already taken."
 
         if errors:
             raise ValidationError(errors)
@@ -592,9 +711,12 @@ def update_staff_profile(
         staff.contact = clean_contact
         staff.specialty = clean_specialty
         staff.license_number = clean_license
+        staff.username = clean_username
         if new_password:
             staff.set_password(new_password)
         staff.save()
+        if changing_credentials:
+            UserSession.objects.filter(user=staff).exclude(token=session_token or "").delete()
         return staff
 
 
@@ -643,6 +765,59 @@ DEFAULT_STAFF_ACCOUNTS: list[dict[str, str]] = [
         "contact": "09221234567",
     },
 ]
+
+
+DEMO_SEED_VERSION = 1
+
+
+def ensure_demo_data() -> None:
+    """Create versioned sample data once in the separate demo database.
+
+    Existing unversioned clinical data is deliberately retained. Reset is an explicit
+    user operation, never a side effect of opening demo mode.
+    """
+    if os.environ.get("HOSPITAL_MODE") != "demo":
+        raise ValidationError({"mode": "Demo fixtures can only be seeded in demo mode."})
+    with transaction.atomic():
+        state = DemoSeedState.objects.filter(key="default").first()
+        if state and state.version >= DEMO_SEED_VERSION:
+            return
+        staff = ensure_default_staff()
+        if not state and (Patient.objects.exists() or Appointment.objects.exists()):
+            return
+        patients = []
+        names = [
+            "Alex Rivera", "Jamie Lim", "Morgan Cruz", "Taylor Reyes", "Casey Flores", "Avery Santos",
+            "Riley Garcia", "Jordan Tan", "Parker Diaz", "Quinn Ramos", "Skyler Navarro", "Drew Torres",
+            "Cameron Aquino", "Emerson Go", "Finley Chua", "Hayden Ong", "Rowan Bautista", "Sage Villanueva",
+        ]
+        for index, name in enumerate(names, start=1):
+            patients.append(Patient.objects.create(full_name=name, contact=f"0917000{index:04d}", age=18 + index))
+        doctors = [user for user in staff if user.role == StaffRole.DOCTOR]
+        statuses = [
+            AppointmentStatus.SCHEDULED, AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_CONSULTATION,
+            AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED,
+        ]
+        anchor = clinic_now().date()
+        for index in range(24):
+            status = statuses[index % len(statuses)]
+            doctor = doctors[index % len(doctors)]
+            day = anchor + timedelta(days=(index % 8) - 3)
+            appointment = Appointment.objects.create(
+                patient=patients[index % len(patients)], doctor=doctor, doctor_name=doctor.full_name,
+                app_date=day, app_time=time(9 + (index % 6), (index // 3 % 4) * 15),
+                reason_for_visit="Sample consultation", status=status,
+                checked_in_at=timezone.now() if status in (AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_CONSULTATION, AppointmentStatus.COMPLETED) else None,
+            )
+            if status == AppointmentStatus.COMPLETED:
+                record = MedicalRecord.objects.create(
+                    patient=appointment.patient, doctor=doctor, appointment=appointment,
+                    diagnosis="Sample follow-up", clinical_notes="Demo clinical history.",
+                )
+                MedicalRecordRevision.objects.create(record=record, revision=1, correction_reason="Initial demo record", diagnosis=record.diagnosis, symptoms="", clinical_notes=record.clinical_notes, prescription="", follow_up_advice="", changed_by=doctor)
+        DemoSeedState.objects.update_or_create(
+            key="default", defaults={"version": DEMO_SEED_VERSION, "account_ids": {u.username: u.id for u in staff}}
+        )
 
 
 def ensure_default_staff() -> list[StaffUser]:
@@ -708,17 +883,17 @@ def check_schedule_conflict(
 
     qs = Appointment.objects.select_related("patient").filter(
         doctor_filter,
-        app_date=app_date,
+        app_date__range=(app_date - timedelta(days=1), app_date + timedelta(days=1)),
         status__in=active_statuses,
     )
     if exclude_id is not None:
         qs = qs.exclude(id=exclude_id)
 
     conflicts: list[Appointment] = []
-    target_minutes = app_time.hour * 60 + app_time.minute
+    target = datetime.combine(app_date, app_time)
     for appt in qs:
-        appt_minutes = appt.app_time.hour * 60 + appt.app_time.minute
-        if abs(appt_minutes - target_minutes) < slot_duration_minutes:
+        appointment_at = datetime.combine(appt.app_date, appt.app_time)
+        if abs((appointment_at - target).total_seconds()) < slot_duration_minutes * 60:
             conflicts.append(appt)
 
     return conflicts

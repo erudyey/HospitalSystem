@@ -14,6 +14,7 @@ urlpatterns = [
         name="api-patient-appointments",
     ),
     path("appointments/", views.appointments_collection, name="api-appointments"),
+    path("appointments/walk-in/", views.appointment_walk_in, name="api-appointment-walk-in"),
     path(
         "appointments/<int:appointment_id>/",
         views.appointment_detail,
@@ -26,6 +27,7 @@ urlpatterns = [
     ),
     # Authentication & Staff
     path("auth/register/", views.auth_register, name="api-auth-register"),
+    path("auth/status/", views.auth_status, name="api-auth-status"),
     path("auth/login/", views.auth_login, name="api-auth-login"),
     path("auth/me/", views.auth_me, name="api-auth-me"),
     path("auth/logout/", views.auth_logout, name="api-auth-logout"),

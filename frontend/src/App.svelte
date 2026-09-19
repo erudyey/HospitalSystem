@@ -5,6 +5,7 @@
     type Patient,
     type StaffUser,
     getUserToken,
+    restoreRememberedToken,
     clearUserToken,
     switchApplicationMode,
   } from "$lib/api";
@@ -110,7 +111,8 @@
         startupUrl.searchParams.delete("signed_out");
         window.history.replaceState({}, "", startupUrl);
       }
-      // Check current session (either from localStorage if remembered, or sessionStorage)
+      // A remembered token only comes from the operating system credential store.
+      await restoreRememberedToken();
       const token = getUserToken();
       if (token) {
         try {
@@ -128,7 +130,6 @@
         }
       }
 
-      // Default behavior: user starts in logged-out state unless explicitly kept signed in
       currentUser = null;
       isAuthModalOpen = true;
     } finally {

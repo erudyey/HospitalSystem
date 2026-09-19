@@ -9,6 +9,7 @@ dependencies = [
     "waitress>=3.0.0",
     "pywebview>=6.0.0",
     "whitenoise>=6.8.0",
+    "keyring>=25.0",
     "pyobjc-core>=10.0; sys_platform == 'darwin'",
     "pyobjc-framework-Cocoa>=10.0; sys_platform == 'darwin'",
     "pyobjc-framework-WebKit>=10.0; sys_platform == 'darwin'",

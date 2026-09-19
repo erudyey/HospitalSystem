@@ -202,6 +202,7 @@ def health_check(_request: HttpRequest) -> JsonResponse:
             "status": "ok",
             "version": "0.1.0-beta.1",
             "mode": os.environ.get("HOSPITAL_MODE", "clinic"),
+            **services.clinic_context(),
         }
     )
 
@@ -350,6 +351,34 @@ def appointments_collection(request: HttpRequest) -> JsonResponse:
         return validation_error_response(err, "Appointment booking failed validation.")
 
 
+@require_http_methods(["POST"])
+def appointment_walk_in(request: HttpRequest) -> JsonResponse:
+    """Check a patient in immediately using the server's clinic-local clock."""
+    user, response = receptionist_required(request)
+    if response is not None or user is None:
+        return response or JsonResponse(format_error("UNAUTHENTICATED", "Active session required."), status=401)
+    data, err_response = parse_json(request)
+    if err_response or data is None:
+        return err_response or JsonResponse(format_error("BAD_REQUEST", "Request body must not be empty."), status=400)
+    now = services.clinic_now()
+    try:
+        appointment = services.book_appointment(
+            patient_id=get_int(data, "patient_id", required=True) or 0,
+            doctor_name="",
+            doctor_id=get_int(data, "doctor_id", required=True),
+            app_date_str=now.date().isoformat(),
+            app_time_str=now.strftime("%H:%M"),
+            reason_for_visit=get_string(data, "reason_for_visit"),
+            initial_status=AppointmentStatus.CHECKED_IN,
+            allow_conflict=data.get("allow_conflict") is True,
+            override_reason=get_string(data, "override_reason"),
+            override_by_id=user.id,
+        )
+        return JsonResponse(serialize_appointment(appointment), status=201)
+    except ValidationError as err:
+        return validation_error_response(err, "Walk-in check-in failed validation.")
+
+
 @require_http_methods(["GET", "PUT", "DELETE"])
 def appointment_detail(request: HttpRequest, appointment_id: int) -> JsonResponse:
     """Retrieve (GET), update/reschedule (PUT), or delete (DELETE) a single appointment."""
@@ -467,6 +496,12 @@ def appointment_status(request: HttpRequest, appointment_id: int) -> JsonRespons
 # Authentication and Staff Views
 
 
+@require_GET
+def auth_status(_request: HttpRequest) -> JsonResponse:
+    """Describe whether this database needs its one-time initial receptionist."""
+    return JsonResponse({"initial_setup_required": not StaffUser.objects.exists()})
+
+
 @require_http_methods(["POST"])
 def auth_register(request: HttpRequest) -> JsonResponse:
     """Register a new staff account (Receptionist or Doctor)."""
@@ -477,15 +512,27 @@ def auth_register(request: HttpRequest) -> JsonResponse:
         )
 
     try:
-        staff = services.register_staff(
-            username=data.get("username", ""),
-            password=data.get("password", ""),
-            full_name=data.get("full_name", ""),
-            role=data.get("role", StaffRole.RECEPTIONIST),
-            specialty=data.get("specialty", ""),
-            license_number=data.get("license_number", ""),
-            contact=data.get("contact", ""),
-        )
+        username = get_string(data, "username")
+        password = get_string(data, "password")
+        confirmation = get_string(data, "password_confirmation") if "password_confirmation" in data else password
+        if password != confirmation:
+            raise ValidationError({"password_confirmation": "Passwords do not match."})
+        payload = {
+            "username": username,
+            "password": password,
+            "full_name": get_string(data, "full_name"),
+            "role": get_string(data, "role", StaffRole.RECEPTIONIST),
+            "specialty": get_string(data, "specialty"),
+            "license_number": get_string(data, "license_number"),
+            "contact": get_string(data, "contact"),
+        }
+        if not StaffUser.objects.exists():
+            staff = services.bootstrap_receptionist(**payload)
+        else:
+            user, response = receptionist_required(request)
+            if response is not None:
+                return response
+            staff = services.register_staff(**payload)
         return JsonResponse(serialize_staff_user(staff), status=201)
     except ValidationError as err:
         return validation_error_response(err, "Staff registration failed validation.")
@@ -555,16 +602,23 @@ def auth_profile(request: HttpRequest) -> JsonResponse:
         )
 
     try:
+        token = request.headers.get("X-User-Token", "").strip()
+        changing_credentials = "username" in data or bool(data.get("new_password"))
         updated_user = services.update_staff_profile(
             user_id=user.id,
-            full_name=data.get("full_name", user.full_name),
-            contact=data.get("contact", user.contact),
-            specialty=data.get("specialty", user.specialty),
-            license_number=data.get("license_number", user.license_number),
-            current_password=data.get("current_password") or None,
-            new_password=data.get("new_password") or None,
+            full_name=get_string(data, "full_name", user.full_name),
+            contact=get_string(data, "contact", user.contact),
+            specialty=get_string(data, "specialty", user.specialty),
+            license_number=get_string(data, "license_number", user.license_number),
+            current_password=get_string(data, "current_password") or None,
+            new_password=get_string(data, "new_password") or None,
+            username=get_string(data, "username", user.username),
+            session_token=token,
         )
-        return JsonResponse({"user": serialize_staff_user(updated_user)}, status=200)
+        payload = {"user": serialize_staff_user(updated_user)}
+        if changing_credentials:
+            payload["token"] = services.rotate_session(token, updated_user).token
+        return JsonResponse(payload, status=200)
     except ValidationError as err:
         return validation_error_response(err, "Profile update failed validation.")
 
