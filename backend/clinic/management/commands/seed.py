@@ -10,7 +10,6 @@ import random
 from datetime import date, time, timedelta
 
 from django.core.management.base import BaseCommand
-from django.db import transaction
 
 from backend.clinic.models import (
     Appointment,
@@ -21,50 +20,15 @@ from backend.clinic.models import (
     StaffUser,
 )
 from backend.clinic.services import (
+    DEFAULT_STAFF_ACCOUNTS,
     book_appointment,
     create_medical_record,
+    ensure_default_staff,
     register_patient,
     update_appointment_status,
 )
 
-STAFF_FIXTURES = [
-    {
-        "username": "maria",
-        "password": "password123",
-        "full_name": "Maria Santos",
-        "role": StaffRole.RECEPTIONIST,
-        "specialty": "",
-        "license_number": "",
-        "contact": "09171234567",
-    },
-    {
-        "username": "dreyes",
-        "password": "password123",
-        "full_name": "Dr. Elena Reyes",
-        "role": StaffRole.DOCTOR,
-        "specialty": "General Medicine",
-        "license_number": "PRC-018245",
-        "contact": "09181234567",
-    },
-    {
-        "username": "dsantos",
-        "password": "password123",
-        "full_name": "Dr. Marco Santos",
-        "role": StaffRole.DOCTOR,
-        "specialty": "Pediatrics",
-        "license_number": "PRC-019382",
-        "contact": "09201234567",
-    },
-    {
-        "username": "dtan",
-        "password": "password123",
-        "full_name": "Dr. Chloe Tan",
-        "role": StaffRole.DOCTOR,
-        "specialty": "Cardiology",
-        "license_number": "PRC-020491",
-        "contact": "09221234567",
-    },
-]
+STAFF_FIXTURES = DEFAULT_STAFF_ACCOUNTS
 
 FIRST_NAMES = [
     "Maria",
@@ -209,6 +173,15 @@ class Command(BaseCommand):
                 )
             )
 
+        # 1. Ensure baseline staff accounts exist regardless of existing patients
+        staff_users = ensure_default_staff()
+        doctors = [s for s in staff_users if s.role == StaffRole.DOCTOR]
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"Verified/seeded {len(staff_users)} staff accounts (1 receptionist, {len(doctors)} doctors)."
+            )
+        )
+
         existing_patients = Patient.objects.count()
         if existing_patients > 0 and not options["clear"]:
             self.stdout.write(
@@ -218,31 +191,6 @@ class Command(BaseCommand):
                 )
             )
             return
-
-        # 1. Seed Staff Users
-        doctors: list[StaffUser] = []
-        with transaction.atomic():
-            for fixture in STAFF_FIXTURES:
-                user = StaffUser.objects.filter(username=fixture["username"]).first()
-                if not user:
-                    user = StaffUser(
-                        username=fixture["username"],
-                        full_name=fixture["full_name"],
-                        role=fixture["role"],
-                        specialty=fixture["specialty"],
-                        license_number=fixture["license_number"],
-                        contact=fixture["contact"],
-                    )
-                    user.set_password(fixture["password"])
-                    user.save()
-                if user.role == StaffRole.DOCTOR:
-                    doctors.append(user)
-
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Seeded {len(STAFF_FIXTURES)} staff accounts (1 receptionist, {len(doctors)} doctors)."
-            )
-        )
 
         # 2. Seed Patients
         count = max(1, options["count"])
