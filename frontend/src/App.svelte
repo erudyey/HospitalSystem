@@ -96,7 +96,7 @@
         demoMode = savedDemo === "true";
       }
 
-      // Check current session
+      // Check current session (either from localStorage if remembered, or sessionStorage)
       const token = getUserToken();
       if (token) {
         try {
@@ -104,35 +104,19 @@
           currentUser = res.user;
           if (currentUser.role === "doctor") {
             activeWorkspace = "doctor_workspace";
+          } else {
+            activeWorkspace = "appointments";
           }
           return;
         } catch {
           clearUserToken();
+          currentUser = null;
         }
       }
 
-      // Check if user explicitly logged out in this session
-      let hasExplicitLogout = false;
-      try {
-        hasExplicitLogout = sessionStorage.getItem("hospitalsystem_explicit_logout") === "true";
-      } catch {
-        // Ignore storage restrictions
-      }
-
-      // If no valid session and in demo mode AND user did not explicitly log out,
-      // auto-activate receptionist for zero-friction start
-      if (demoMode && !hasExplicitLogout) {
-        try {
-          const session = await api.auth.login("maria", "password123");
-          currentUser = session.user;
-          activeWorkspace = "appointments";
-        } catch {
-          // If demo user is not yet seeded, show modal
-          isAuthModalOpen = true;
-        }
-      } else {
-        isAuthModalOpen = true;
-      }
+      // Default behavior: user starts in logged-out state unless explicitly kept signed in
+      currentUser = null;
+      isAuthModalOpen = true;
     } finally {
       isAuthChecking = false;
     }
@@ -140,13 +124,10 @@
 
   async function switchDemoUser(username: string) {
     try {
-      const session = await api.auth.login(username, "password123");
+      // Preserve current persistence preference (if user has token in localStorage, keep remembered)
+      const isPersistent = Boolean(localStorage.getItem("user_token"));
+      const session = await api.auth.login(username, "password123", isPersistent);
       currentUser = session.user;
-      try {
-        sessionStorage.removeItem("hospitalsystem_explicit_logout");
-      } catch {
-        // Ignore storage restrictions
-      }
       if (currentUser.role === "doctor") {
         activeWorkspace = "doctor_workspace";
       } else {
@@ -160,15 +141,21 @@
     }
   }
 
-  function handleLogout() {
-    clearUserToken();
-    currentUser = null;
+  async function handleLogout() {
     try {
-      sessionStorage.setItem("hospitalsystem_explicit_logout", "true");
+      await api.auth.logout();
     } catch {
-      // Ignore storage restrictions
+      // Non-blocking logout cleanup
+    } finally {
+      clearUserToken();
+      currentUser = null;
+      try {
+        sessionStorage.removeItem("hospitalsystem_explicit_logout");
+      } catch {
+        // Ignore storage restrictions
+      }
+      isAuthModalOpen = true;
     }
-    isAuthModalOpen = true;
   }
 
   onMount(() => {

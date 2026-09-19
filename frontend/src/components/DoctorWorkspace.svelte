@@ -41,6 +41,8 @@
     AlertCircle,
     CalendarCheck,
     ClipboardList,
+    ChevronLeft,
+    ChevronRight,
   } from "lucide-svelte";
 
   interface Props {
@@ -179,9 +181,30 @@
     );
   });
 
+  // Scroll indicators for workspace tabs track
+  let tabsListEl = $state<HTMLElement | null>(null);
+  let canScrollLeft = $state(false);
+  let canScrollRight = $state(false);
+
+  function checkTabScroll() {
+    if (!tabsListEl) return;
+    canScrollLeft = tabsListEl.scrollLeft > 2;
+    canScrollRight =
+      tabsListEl.scrollLeft + tabsListEl.clientWidth < tabsListEl.scrollWidth - 2;
+  }
+
+  function scrollTabs(direction: "left" | "right") {
+    if (!tabsListEl) return;
+    const offset = direction === "left" ? -180 : 180;
+    tabsListEl.scrollBy({ left: offset, behavior: "smooth" });
+    setTimeout(checkTabScroll, 220);
+  }
+
   onMount(() => {
     reloadAll();
     startPolling();
+    setTimeout(checkTabScroll, 100);
+    window.addEventListener("resize", checkTabScroll);
 
     const handleVisibilityChange = () => {
       if (!document.hidden && !isConsultationOpen) {
@@ -192,6 +215,7 @@
 
     return () => {
       stopPolling();
+      window.removeEventListener("resize", checkTabScroll);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   });
@@ -254,20 +278,48 @@
         if (val) activeTab = val as DoctorTab;
       }}
     >
-      <Tabs.List class="h-10 p-1 max-w-full overflow-x-auto no-scrollbar flex flex-nowrap">
-        <Tabs.Trigger value="queue" class="px-3.5 text-xs font-medium gap-1.5 shrink-0 whitespace-nowrap">
-          <UserCheck class="size-3.5" />
-          <span>Waiting Room ({checkedInQueue.length + inConsultationQueue.length})</span>
-        </Tabs.Trigger>
-        <Tabs.Trigger value="schedule" class="px-3.5 text-xs font-medium gap-1.5 shrink-0 whitespace-nowrap">
-          <Calendar class="size-3.5" />
-          <span>Today's Schedule ({scheduledToday.length + checkedInQueue.length + inConsultationQueue.length + completedToday.length})</span>
-        </Tabs.Trigger>
-        <Tabs.Trigger value="patients" class="px-3.5 text-xs font-medium gap-1.5 shrink-0 whitespace-nowrap">
-          <Users class="size-3.5" />
-          <span>My Patients ({myPatients.length})</span>
-        </Tabs.Trigger>
-      </Tabs.List>
+      <div class="relative flex items-center min-w-0">
+        {#if canScrollLeft}
+          <button
+            type="button"
+            onclick={() => scrollTabs("left")}
+            class="absolute left-0 z-20 h-10 w-7 flex items-center justify-center rounded-l-lg bg-card/95 hover:bg-card border-y border-l border-border shadow-xs cursor-pointer text-muted-foreground hover:text-foreground transition-colors"
+            title="Scroll Left"
+          >
+            <ChevronLeft class="size-4" />
+          </button>
+        {/if}
+
+        <Tabs.List
+          bind:ref={tabsListEl}
+          onscroll={checkTabScroll}
+          class="h-10 p-1 max-w-full overflow-x-auto no-scrollbar flex flex-nowrap"
+        >
+          <Tabs.Trigger value="queue" class="px-3.5 text-xs font-medium gap-1.5 shrink-0 whitespace-nowrap">
+            <UserCheck class="size-3.5" />
+            <span>Waiting Room ({checkedInQueue.length + inConsultationQueue.length})</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="schedule" class="px-3.5 text-xs font-medium gap-1.5 shrink-0 whitespace-nowrap">
+            <Calendar class="size-3.5" />
+            <span>Today's Schedule ({scheduledToday.length + checkedInQueue.length + inConsultationQueue.length + completedToday.length})</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="patients" class="px-3.5 text-xs font-medium gap-1.5 shrink-0 whitespace-nowrap">
+            <Users class="size-3.5" />
+            <span>My Patients ({myPatients.length})</span>
+          </Tabs.Trigger>
+        </Tabs.List>
+
+        {#if canScrollRight}
+          <button
+            type="button"
+            onclick={() => scrollTabs("right")}
+            class="absolute right-0 z-20 h-10 w-7 flex items-center justify-center rounded-r-lg bg-card/95 hover:bg-card border-y border-r border-border shadow-xs cursor-pointer text-muted-foreground hover:text-foreground transition-colors"
+            title="Scroll Right"
+          >
+            <ChevronRight class="size-4" />
+          </button>
+        {/if}
+      </div>
     </Tabs.Root>
 
     <div class="flex items-center gap-2 shrink-0">
@@ -496,8 +548,8 @@
   {:else if activeTab === "patients"}
     <div class="flex flex-col gap-3 flex-1 min-h-0 min-w-0 overflow-hidden">
       <div class="flex items-center justify-between gap-3 shrink-0 min-w-0">
-        <div class="relative w-full sm:w-72">
-          <Search class="absolute left-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
+        <div class="relative w-full sm:w-72 p-0.5">
+          <Search class="absolute left-3.5 top-3 size-4 text-muted-foreground pointer-events-none" />
           <Input
             type="text"
             placeholder="Search patient name or ID..."

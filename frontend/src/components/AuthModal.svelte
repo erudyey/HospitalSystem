@@ -42,6 +42,7 @@
   // Login form
   let loginUsername = $state("");
   let loginPassword = $state("");
+  let keepSignedIn = $state(true);
 
   // Register form
   let regUsername = $state("");
@@ -103,7 +104,7 @@
 
     isSubmitting = true;
     try {
-      const session = await api.auth.login(trimmedUser, loginPassword);
+      const session = await api.auth.login(trimmedUser, loginPassword, keepSignedIn);
       toast.success(`Welcome back, ${session.user.full_name || session.user.username}!`);
       open = false;
       onSuccess?.(session.user);
@@ -141,7 +142,7 @@
       });
 
       // Automatically sign in the newly registered staff user to establish session
-      const session = await api.auth.login(trimmedUser, regPassword);
+      const session = await api.auth.login(trimmedUser, regPassword, keepSignedIn);
       toast.success(
         `Staff account created for ${session.user.full_name || session.user.username}!`
       );
@@ -224,7 +225,7 @@
 
         <form onsubmit={handleLogin} class="flex flex-col gap-3.5">
           <div>
-            <label for="authUsername" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+            <label for="authUsername" class="block text-xs font-medium text-foreground mb-1.5">
               Username
             </label>
             <Input
@@ -239,7 +240,7 @@
           </div>
 
           <div>
-            <label for="authPassword" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+            <label for="authPassword" class="block text-xs font-medium text-foreground mb-1.5">
               Password
             </label>
             <Input
@@ -252,6 +253,19 @@
             />
           </div>
 
+          <!-- Keep me signed in option -->
+          <div class="flex items-center justify-between py-1">
+            <label class="flex items-center gap-2 cursor-pointer select-none text-xs text-foreground font-normal">
+              <input
+                type="checkbox"
+                bind:checked={keepSignedIn}
+                class="size-4 rounded border-border text-primary focus:ring-primary/20 accent-primary cursor-pointer"
+              />
+              <span>Keep me signed in</span>
+            </label>
+            <span class="text-[11px] text-muted-foreground">Persist session on this PC</span>
+          </div>
+
           {#if formErrors.general}
             <div class="rounded-lg bg-destructive/10 border border-destructive/20 p-2.5 text-xs text-destructive flex items-center gap-2">
               <AlertCircle class="size-4 shrink-0" />
@@ -259,7 +273,7 @@
             </div>
           {/if}
 
-          <div class="pt-2">
+          <div class="pt-1">
             <Button
               type="submit"
               disabled={isSubmitting}
@@ -278,7 +292,7 @@
         <form onsubmit={handleRegister} class="flex flex-col gap-3">
           <div class="grid grid-cols-2 gap-2.5">
             <div>
-              <label for="regUser" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+              <label for="regUser" class="block text-xs font-medium text-foreground mb-1">
                 Username <span class="text-destructive">*</span>
               </label>
               <Input
@@ -291,7 +305,7 @@
               />
             </div>
             <div>
-              <label for="regPass" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+              <label for="regPass" class="block text-xs font-medium text-foreground mb-1">
                 Password <span class="text-destructive">*</span>
               </label>
               <Input
@@ -306,7 +320,7 @@
           </div>
 
           <div>
-            <label for="regName" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+            <label for="regName" class="block text-xs font-medium text-foreground mb-1">
               Full Legal Name <span class="text-destructive">*</span>
             </label>
             <Input
@@ -320,7 +334,7 @@
           </div>
 
           <div>
-            <label for="regRoleSelect" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+            <label for="regRoleSelect" class="block text-xs font-medium text-foreground mb-1">
               Hospital Role <span class="text-destructive">*</span>
             </label>
             <select
@@ -337,7 +351,7 @@
           {#if regRole === "doctor"}
             <div class="grid grid-cols-2 gap-2.5">
               <div>
-                <label for="regSpec" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                <label for="regSpec" class="block text-xs font-medium text-foreground mb-1">
                   Specialty
                 </label>
                 <Input
@@ -350,7 +364,7 @@
                 />
               </div>
               <div>
-                <label for="regLic" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                <label for="regLic" class="block text-xs font-medium text-foreground mb-1">
                   License #
                 </label>
                 <Input
@@ -366,7 +380,7 @@
           {/if}
 
           <div>
-            <label for="regContact" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+            <label for="regContact" class="block text-xs font-medium text-foreground mb-1">
               Contact Detail
             </label>
             <Input

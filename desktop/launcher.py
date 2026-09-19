@@ -78,6 +78,7 @@ logger.info("Initializing HospitalSystem launcher (PID: %d)...", os.getpid())
 # Single Instance Check (bypassed if running verification mode)
 IS_VERIFY_MODE = "--verify" in sys.argv
 _INSTANCE_LOCK_HANDLE = None
+_MUTEX_HANDLE = None
 
 
 def show_error_dialog(title: str, message: str) -> None:
@@ -110,20 +111,32 @@ def show_error_dialog(title: str, message: str) -> None:
         sys.stderr.write(f"[{title}] {message}\n")
 
 
-if not IS_VERIFY_MODE:
+def acquire_instance_lock() -> bool:
+    """Acquire single-instance lock to prevent concurrent application launches.
+
+    Returns True if the lock was successfully acquired, or False if another
+    instance is already running.
+    """
+    global _INSTANCE_LOCK_HANDLE, _MUTEX_HANDLE
+    if IS_VERIFY_MODE or os.environ.get("TESTING") == "True" or "pytest" in sys.modules:
+        return True
+
     if sys.platform == "win32" and hasattr(ctypes, "windll"):
         MUTEX_NAME = "Local\\HospitalSystem_AppMutex"
         kernel32 = ctypes.windll.kernel32
         mutex = kernel32.CreateMutexW(None, False, MUTEX_NAME)
         if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+            kernel32.CloseHandle(mutex)
             logger.warning("Application already running; secondary instance exited.")
             ctypes.windll.user32.MessageBoxW(
                 0,
                 "Hospital Management System is already running.\n\nPlease check your taskbar.",
-                "HospitalSystem - Already Running",
+                "HospitalSystem -- Already Running",
                 0x40 | 0x1,  # MB_ICONINFORMATION | MB_OK
             )
-            sys.exit(0)
+            return False
+        _MUTEX_HANDLE = mutex
+        return True
     else:
         # POSIX file locking via fcntl for macOS and Linux
         try:
@@ -150,9 +163,11 @@ if not IS_VERIFY_MODE:
                             check=False,
                             timeout=5,
                         )
-                sys.exit(0)
+                return False
+            return True
         except Exception as exc:
             logger.warning("Could not acquire POSIX instance lock: %s", exc)
+            return True
 
 
 def find_available_port() -> int:
@@ -177,6 +192,10 @@ def wait_for_server(url: str, timeout_sec: float = 10.0) -> bool:
 
 
 def main() -> None:
+    # 0. Single instance lock check
+    if not acquire_instance_lock():
+        sys.exit(0)
+
     # 1. Generate 256-bit cryptographically secure session token
     session_token = secrets.token_urlsafe(32)
     os.environ["HOSPITAL_SESSION_TOKEN"] = session_token
@@ -239,6 +258,15 @@ def main() -> None:
         with contextlib.suppress(Exception):
             if STATE_FILE.exists():
                 STATE_FILE.unlink()
+        global _MUTEX_HANDLE, _INSTANCE_LOCK_HANDLE
+        if sys.platform == "win32" and _MUTEX_HANDLE and hasattr(ctypes, "windll"):
+            with contextlib.suppress(Exception):
+                ctypes.windll.kernel32.CloseHandle(_MUTEX_HANDLE)
+                _MUTEX_HANDLE = None
+        if _INSTANCE_LOCK_HANDLE:
+            with contextlib.suppress(Exception):
+                _INSTANCE_LOCK_HANDLE.close()
+                _INSTANCE_LOCK_HANDLE = None
 
     atexit.register(cleanup_server)
 
