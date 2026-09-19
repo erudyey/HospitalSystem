@@ -267,7 +267,14 @@ def appointments_collection(request: HttpRequest) -> JsonResponse:
         raw_doc_id = data.get("doctor_id")
         doc_id_val: int | None = int(raw_doc_id) if raw_doc_id is not None else None
     except (ValueError, TypeError):
-        doc_id_val = None
+        return JsonResponse(
+            format_error(
+                "VALIDATION_ERROR",
+                "Invalid Doctor ID.",
+                {"doctor_id": ["Doctor ID must be an integer."]},
+            ),
+            status=400,
+        )
 
     try:
         appointment = services.book_appointment(
@@ -300,7 +307,17 @@ def appointment_detail(request: HttpRequest, appointment_id: int) -> JsonRespons
                 )
 
             raw_doc_id = data.get("doctor_id")
-            doc_id_val = int(raw_doc_id) if raw_doc_id is not None else None
+            try:
+                doc_id_val = int(raw_doc_id) if raw_doc_id is not None else None
+            except (ValueError, TypeError):
+                return JsonResponse(
+                    format_error(
+                        "VALIDATION_ERROR",
+                        "Invalid Doctor ID.",
+                        {"doctor_id": ["Doctor ID must be an integer."]},
+                    ),
+                    status=400,
+                )
 
             appointment = services.update_appointment(
                 appointment_id=appointment_id,
@@ -665,7 +682,17 @@ def medical_records_collection(request: HttpRequest) -> JsonResponse:
         )
 
     raw_appt_id = data.get("appointment_id")
-    appt_id_val: int | None = int(raw_appt_id) if raw_appt_id is not None else None
+    try:
+        appt_id_val: int | None = int(raw_appt_id) if raw_appt_id is not None else None
+    except (ValueError, TypeError):
+        return JsonResponse(
+            format_error(
+                "VALIDATION_ERROR",
+                "Invalid Appointment ID.",
+                {"appointment_id": ["Appointment ID must be an integer."]},
+            ),
+            status=400,
+        )
 
     try:
         record = services.create_medical_record(
