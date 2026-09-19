@@ -40,8 +40,248 @@ jobs:
             TAG="${GITHUB_REF#refs/tags/}"
           fi
 
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
-            echo "::error::Release tag '$TAG' is invalid. Must follow SemVer pattern (e.g. v0.0.1, v1.0.0-rc1)."
+          SEMVER="${TAG#v}"
+          SEMVER_RE='^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\.((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)))*))?(\+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*))?
+          echo "tag_name=$TAG" >> $GITHUB_OUTPUT
+          echo "Resolved release tag: $TAG"
+
+          if [[ "$TAG" =~ - ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "make_latest=false" >> $GITHUB_OUTPUT
+            echo "Detected pre-release tag: marking as pre-release and not latest."
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "make_latest=true" >> $GITHUB_OUTPUT
+            echo "Detected production tag: marking as latest release."
+          fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Set up virtual environment and install dependencies
+        run: |
+          uv venv .venv
+          uv pip install -e ".[dev]"
+
+      - name: Zero Em/En Dash Compliance
+        run: |
+          uv run python -c "import os, sys; errors = [f'{os.path.join(r, fn)}: contains dash' for r, _, fs in os.walk('.') if not any(ign in r for ign in ['.git', '.venv', 'dist', 'build', 'node_modules', '.gemini']) for fn in fs if fn.endswith(('.py', '.svelte', '.ts', '.css', '.ps1', '.sh', '.md', '.json', '.html', '.yml', '.yaml')) for f in [os.path.join(r, fn)] if '\u2014' in open(f, 'r', encoding='utf-8', errors='ignore').read() or '\u2013' in open(f, 'r', encoding='utf-8', errors='ignore').read()]; (print('\n'.join(errors)) or sys.exit(1)) if errors else print('Zero em/en dashes found.')"
+
+      - name: Check Formatting & Linting
+        run: |
+          uv run ruff check backend desktop package.py
+          uv run ruff format --check backend desktop package.py
+
+      - name: Strict Python Type Check
+        run: uv run python -m basedpyright
+
+      - name: Check Workflow Formatting
+        run: deno fmt --check .github/workflows/
+
+      - name: Compile Frontend
+        working-directory: ./frontend
+        run: |
+          deno install
+          deno task build
+
+      - name: Run Backend Tests
+        run: uv run pytest backend/tests/ -v
+
+  build-windows:
+    name: Build Windows Executable
+    needs: [pre-flight-check]
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install dependencies
+        run: |
+          uv venv .venv
+          uv pip install -e ".[dev]"
+
+      - name: Build frontend
+        working-directory: ./frontend
+        run: |
+          deno install
+          deno task build
+
+      - name: Freeze standalone executable
+        run: |
+          uv run python package.py --clean
+
+      - name: Verify standalone bundle
+        run: |
+          uv run python desktop/verify_bundle.py
+
+      - name: Prepare artifact
+        run: |
+          Move-Item dist/HospitalSystem.exe dist/HospitalSystem-Windows-x64.exe
+
+      - name: Upload Windows binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: HospitalSystem-Windows-x64.exe
+          path: dist/HospitalSystem-Windows-x64.exe
+          if-no-files-found: error
+
+  build-macos:
+    name: Build macOS Bundle
+    needs: [pre-flight-check]
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install dependencies
+        run: |
+          uv venv .venv
+          uv pip install -e ".[dev]"
+
+      - name: Build frontend
+        working-directory: ./frontend
+        run: |
+          deno install
+          deno task build
+
+      - name: Freeze standalone application
+        run: |
+          uv run python package.py --clean
+
+      - name: Verify standalone bundle
+        run: |
+          dist/HospitalSystem.app/Contents/MacOS/HospitalSystem --verify
+
+      - name: Compress macOS application bundle
+        run: |
+          cd dist
+          zip -r -y HospitalSystem-macOS.zip HospitalSystem.app
+          cd ..
+
+      - name: Upload macOS archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: HospitalSystem-macOS.zip
+          path: dist/HospitalSystem-macOS.zip
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [pre-flight-check, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download release assets
+        uses: actions/download-artifact@v4
+        with:
+          path: release_assets
+          merge-multiple: true
+
+      - name: Generate SHA-256 Checksums and Release Notes
+        run: |
+          python3 -c "
+          import hashlib
+          from pathlib import Path
+
+          def compute_sha256(file_path):
+              sha = hashlib.sha256()
+              with open(file_path, 'rb') as f:
+                  while chunk := f.read(65536):
+                      sha.update(chunk)
+              return sha.hexdigest()
+
+          win_file = Path('release_assets/HospitalSystem-Windows-x64.exe')
+          mac_file = Path('release_assets/HospitalSystem-macOS.zip')
+          tag = '${{ needs.pre-flight-check.outputs.tag_name }}'
+
+          win_hash = compute_sha256(win_file)
+          mac_hash = compute_sha256(mac_file)
+
+          sums_text = f'{win_hash}  {win_file.name}\n{mac_hash}  {mac_file.name}\n'
+          Path('release_assets/SHA256SUMS.txt').write_text(sums_text, encoding='utf-8')
+
+          b = chr(96)
+          release_body = f'''## Release {tag}
+
+          Cross-platform standalone desktop application for Hospital Management System.
+
+          ### Downloads & Verification
+
+          | Platform | File | SHA-256 Checksum |
+          | :--- | :--- | :--- |
+          | **Windows (x64)** | {b}{win_file.name}{b} | {b}{win_hash}{b} |
+          | **macOS (Apple Silicon / Intel)** | {b}{mac_file.name}{b} | {b}{mac_hash}{b} |
+          | **Integrity Hashes** | {b}SHA256SUMS.txt{b} | See attached asset |
+
+          ### Quick Start
+
+          - **Windows**: Download {b}{win_file.name}{b} and run it directly. No installation or external runtime required.
+          - **macOS**: Download {b}{mac_file.name}{b}, extract {b}HospitalSystem.app{b}, and move it to your Applications folder.
+          '''
+
+          Path('release_notes.md').write_text(release_body, encoding='utf-8')
+          "
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.pre-flight-check.outputs.tag_name }}
+          name: Release ${{ needs.pre-flight-check.outputs.tag_name }}
+          body_path: release_notes.md
+          files: |
+            release_assets/HospitalSystem-Windows-x64.exe
+            release_assets/HospitalSystem-macOS.zip
+            release_assets/SHA256SUMS.txt
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ needs.pre-flight-check.outputs.is_prerelease == 'true' }}
+          make_latest: ${{ needs.pre-flight-check.outputs.make_latest == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          if [[ "$TAG" != v* || ! "$SEMVER" =~ $SEMVER_RE ]]; then
+            echo "::error::Release tag '$TAG' is invalid. Use SemVer 2.0.0 (e.g. v0.0.2-alpha.3, v1.0.0-rc.1)."
             exit 1
           fi
 
