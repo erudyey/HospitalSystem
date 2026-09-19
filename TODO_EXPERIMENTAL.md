@@ -10,9 +10,9 @@ all UI/UX workflows to use standard default shadcn-svelte components.
 ## Progress Overview
 
 - Total Tasks: 16
-- Completed: 1
+- Completed: 2
 - In Progress: 0
-- Remaining: 15
+- Remaining: 14
 
 ---
 
@@ -25,7 +25,7 @@ all UI/UX workflows to use standard default shadcn-svelte components.
   - Re-link unassigned legacy appointments matching doctor names (`doctor_id=None` but `doctor_name='Dr. Elena Reyes'`).
   - Add dedicated unit tests in `backend/tests/test_auth.py` to prove idempotent auto-seeding.
 
-- [ ] **Task 1.2: Repair Staff Seeding Guard in Seed Command**
+- [x] **Task 1.2: Repair Staff Seeding Guard in Seed Command**
   - File: `backend/clinic/management/commands/seed.py`
   - Reorder seeding execution so staff accounts are guaranteed to seed even when existing patients are already present in the database.
 
