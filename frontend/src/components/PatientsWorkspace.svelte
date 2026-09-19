@@ -258,7 +258,7 @@
   });
 </script>
 
-<div class="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
+<div class="flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
   <!-- Top Metrics Cards (Matching Reference Screenshot) -->
   <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 shrink-0">
     <div class="rounded-xl border bg-card text-card-foreground p-4 sm:p-5 shadow-sm">
@@ -290,7 +290,7 @@
   </div>
 
   <!-- Table Toolbar Bar (Matching Reference Screenshot) -->
-  <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
+  <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0 min-w-0">
     <div class="flex items-center gap-2">
       <div class="relative w-full sm:w-72">
         <Search class="absolute left-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
@@ -372,8 +372,8 @@
       {errorMessage}
     </div>
   {:else}
-    <div class="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
-      <Table containerClass="flex-1 min-h-0 overflow-y-auto">
+    <div class="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col flex-1 min-h-0 min-w-0">
+      <Table containerClass="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-auto">
         <TableHeader class="sticky top-0 bg-card z-10 shadow-xs border-b [&_tr]:bg-card">
           <TableRow>
             <TableHead class="w-28">
@@ -578,7 +578,7 @@
       </Table>
 
       <!-- Integrated Table Footer Pagination (Matching Reference Screenshot) -->
-      <div class="border-t border-border px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground bg-muted/20 shrink-0">
+      <div class="border-t border-border px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground bg-muted/20 shrink-0 min-w-0">
         <div class="flex items-center gap-2">
           <span>Rows per page</span>
           <select

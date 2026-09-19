@@ -201,7 +201,7 @@
   });
 </script>
 
-<div class="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
+<div class="flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
   <!-- Physician Header & Metrics Bar -->
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 shrink-0">
     <!-- Waiting Room Card -->
@@ -246,30 +246,31 @@
   </div>
 
   <!-- Workspace Tabs Navigation & Refresh -->
-  <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
+  <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0 min-w-0">
     <Tabs.Root
       value={activeTab}
+      class="min-w-0 max-w-full overflow-hidden shrink"
       onValueChange={(val) => {
         if (val) activeTab = val as DoctorTab;
       }}
     >
-      <Tabs.List class="h-10 p-1">
-        <Tabs.Trigger value="queue" class="px-3.5 text-xs font-medium gap-1.5">
+      <Tabs.List class="h-10 p-1 max-w-full overflow-x-auto no-scrollbar flex flex-nowrap">
+        <Tabs.Trigger value="queue" class="px-3.5 text-xs font-medium gap-1.5 shrink-0 whitespace-nowrap">
           <UserCheck class="size-3.5" />
           <span>Waiting Room ({checkedInQueue.length + inConsultationQueue.length})</span>
         </Tabs.Trigger>
-        <Tabs.Trigger value="schedule" class="px-3.5 text-xs font-medium gap-1.5">
+        <Tabs.Trigger value="schedule" class="px-3.5 text-xs font-medium gap-1.5 shrink-0 whitespace-nowrap">
           <Calendar class="size-3.5" />
           <span>Today's Schedule ({scheduledToday.length + checkedInQueue.length + inConsultationQueue.length + completedToday.length})</span>
         </Tabs.Trigger>
-        <Tabs.Trigger value="patients" class="px-3.5 text-xs font-medium gap-1.5">
+        <Tabs.Trigger value="patients" class="px-3.5 text-xs font-medium gap-1.5 shrink-0 whitespace-nowrap">
           <Users class="size-3.5" />
           <span>My Patients ({myPatients.length})</span>
         </Tabs.Trigger>
       </Tabs.List>
     </Tabs.Root>
 
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2 shrink-0">
       <Button
         variant="outline"
         size="sm"
@@ -434,8 +435,8 @@
 
   <!-- Tab 2: Today's Full Schedule -->
   {:else if activeTab === "schedule"}
-    <div class="rounded-xl border bg-card text-card-foreground shadow-xs overflow-hidden flex flex-col flex-1 min-h-0">
-      <Table containerClass="flex-1 min-h-0 overflow-y-auto">
+    <div class="rounded-xl border bg-card text-card-foreground shadow-xs overflow-hidden flex flex-col flex-1 min-h-0 min-w-0">
+      <Table containerClass="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-auto">
         <TableHeader class="sticky top-0 bg-card z-10 shadow-xs border-b [&_tr]:bg-card">
           <TableRow>
             <TableHead class="w-20">Appt #</TableHead>
@@ -450,13 +451,8 @@
           {#each [...inConsultationQueue, ...checkedInQueue, ...scheduledToday, ...completedToday] as item (item.id)}
             <TableRow>
               <TableCell class="font-mono text-xs text-muted-foreground">#{item.id}</TableCell>
-              <TableCell class="font-medium text-foreground">
-                {item.patient_name}
-                <span class="text-xs text-muted-foreground font-normal ml-1">(#{item.patient_id})</span>
-              </TableCell>
-              <TableCell class="font-mono text-xs text-muted-foreground">
-                {formatTime(item.app_time)}
-              </TableCell>
+              <TableCell class="font-medium text-foreground">{item.patient_name}</TableCell>
+              <TableCell class="text-xs text-muted-foreground font-mono">{formatTime(item.app_time)}</TableCell>
               <TableCell class="text-xs text-muted-foreground italic">
                 {item.reason_for_visit || "--"}
               </TableCell>
@@ -481,11 +477,12 @@
               </TableCell>
               <TableCell class="text-right">
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
                   class="h-7 text-xs px-2 cursor-pointer"
                   onclick={() => openChartFromAppointment(item)}
                 >
+                  <FileText class="size-3 mr-1" />
                   Chart
                 </Button>
               </TableCell>
@@ -497,8 +494,8 @@
 
   <!-- Tab 3: My Patients Roster -->
   {:else if activeTab === "patients"}
-    <div class="flex flex-col gap-3 flex-1 min-h-0 overflow-hidden">
-      <div class="flex items-center justify-between gap-3 shrink-0">
+    <div class="flex flex-col gap-3 flex-1 min-h-0 min-w-0 overflow-hidden">
+      <div class="flex items-center justify-between gap-3 shrink-0 min-w-0">
         <div class="relative w-full sm:w-72">
           <Search class="absolute left-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
           <Input
@@ -510,8 +507,8 @@
         </div>
       </div>
 
-      <div class="rounded-xl border bg-card text-card-foreground shadow-xs overflow-hidden flex flex-col flex-1 min-h-0">
-        <Table containerClass="flex-1 min-h-0 overflow-y-auto">
+      <div class="rounded-xl border bg-card text-card-foreground shadow-xs overflow-hidden flex flex-col flex-1 min-h-0 min-w-0">
+        <Table containerClass="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-auto">
           <TableHeader class="sticky top-0 bg-card z-10 shadow-xs border-b [&_tr]:bg-card">
             <TableRow>
               <TableHead class="w-20">ID</TableHead>

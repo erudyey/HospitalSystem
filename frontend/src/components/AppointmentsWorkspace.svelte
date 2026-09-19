@@ -432,7 +432,7 @@
   });
 </script>
 
-<div class="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
+<div class="flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
   <!-- Top Metrics Cards (5-State Clinical Lifecycle) -->
   <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 shrink-0">
     <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
@@ -482,10 +482,11 @@
   </div>
 
   <!-- Segmented Tabs & Toolbar Bar -->
-  <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 shrink-0">
+  <div class="flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3 shrink-0 min-w-0">
     <!-- Status Filter Tabs -->
     <Tabs.Root
       value={activeFilter}
+      class="min-w-0 max-w-full overflow-hidden shrink"
       onValueChange={(val) => {
         if (val) {
           activeFilter = val as StatusFilter;
@@ -493,7 +494,7 @@
         }
       }}
     >
-      <Tabs.List class="flex flex-nowrap items-center h-9 p-0.5 rounded-lg border bg-muted/60 text-muted-foreground overflow-x-auto no-scrollbar gap-0.5">
+      <Tabs.List class="flex flex-nowrap items-center h-9 p-0.5 rounded-lg border bg-muted/60 text-muted-foreground overflow-x-auto no-scrollbar gap-0.5 max-w-full">
         <Tabs.Trigger value="ALL" class="px-2.5 sm:px-3 text-xs shrink-0 whitespace-nowrap">
           All <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countAll})</span>
         </Tabs.Trigger>
@@ -516,9 +517,9 @@
     </Tabs.Root>
 
     <!-- Search, Refresh, and Action -->
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap min-w-0">
       {#if totalPages > 1}
-        <div class="hidden sm:flex items-center gap-1.5 mr-1 text-xs text-muted-foreground border-r border-border pr-2.5">
+        <div class="hidden sm:flex items-center gap-1.5 mr-1 text-xs text-muted-foreground border-r border-border pr-2.5 shrink-0">
           <span class="font-medium text-foreground tabular-nums">
             {currentPage}/{totalPages}
           </span>
@@ -547,7 +548,7 @@
         </div>
       {/if}
 
-      <div class="relative w-full md:w-64">
+      <div class="relative flex-1 sm:w-64 min-w-[160px]">
         <Search class="absolute left-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
         <Input
           type="text"
@@ -574,7 +575,7 @@
       <Button
         variant="outline"
         size="sm"
-        class="h-9 px-3 cursor-pointer"
+        class="h-9 px-3 cursor-pointer shrink-0"
         onclick={reloadAppointments}
         disabled={isLoading}
       >
@@ -585,7 +586,7 @@
         {/if}
         <span class="sr-only">Refresh</span>
       </Button>
-      <Button onclick={() => openBookingModal()} size="sm" class="h-9 px-3 cursor-pointer">
+      <Button onclick={() => openBookingModal()} size="sm" class="h-9 px-3 cursor-pointer shrink-0">
         <CalendarPlus class="size-3.5 mr-1.5" />
         <span>New Appointment</span>
       </Button>
@@ -598,8 +599,8 @@
       {errorMessage}
     </div>
   {:else}
-    <div class="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
-      <Table containerClass="flex-1 min-h-0 overflow-y-auto">
+    <div class="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col flex-1 min-h-0 min-w-0">
+      <Table containerClass="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-auto">
         <TableHeader class="sticky top-0 bg-card z-10 shadow-xs border-b [&_tr]:bg-card">
           <TableRow>
             <TableHead class="w-24">
@@ -901,7 +902,7 @@
       </Table>
 
       <!-- Integrated Table Footer Pagination (Matching Reference Screenshot) -->
-      <div class="border-t border-border px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground bg-muted/20 shrink-0">
+      <div class="border-t border-border px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground bg-muted/20 shrink-0 min-w-0">
         <div class="flex items-center gap-2">
           <span>Rows per page</span>
           <select
