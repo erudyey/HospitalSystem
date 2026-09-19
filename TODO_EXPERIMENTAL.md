@@ -10,15 +10,15 @@ all UI/UX workflows to use standard default shadcn-svelte components.
 ## Progress Overview
 
 - Total Tasks: 16
-- Completed: 0
+- Completed: 1
 - In Progress: 0
-- Remaining: 16
+- Remaining: 15
 
 ---
 
 ## Phase 1: Baseline Staff Seeding & Database Bootstrapping
 
-- [ ] **Task 1.1: Implement Default Staff Auto-Seeding Service**
+- [x] **Task 1.1: Implement Default Staff Auto-Seeding Service**
   - File: `backend/clinic/services.py`
   - Implement `ensure_default_staff()` wrapped in `transaction.atomic()`.
   - Automatically create baseline staff accounts (`maria`, `dreyes`, `dsantos`, `dtan`) if missing from database.

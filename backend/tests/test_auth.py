@@ -10,9 +10,10 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from backend.clinic.models import StaffRole, StaffUser
+from backend.clinic.models import Appointment, Patient, StaffRole, StaffUser
 from backend.clinic.services import (
     authenticate_staff,
+    ensure_default_staff,
     list_doctors,
     logout_staff,
     register_staff,
@@ -52,6 +53,38 @@ class StaffAuthServiceTests(TestCase):
                 role=StaffRole.DOCTOR,
             )
         self.assertIn("username", ctx.exception.message_dict)
+
+    def test_ensure_default_staff_creates_default_users(self) -> None:
+        StaffUser.objects.all().delete()
+        users = ensure_default_staff()
+        self.assertEqual(len(users), 4)
+        usernames = {u.username for u in users}
+        self.assertEqual(usernames, {"maria", "dreyes", "dsantos", "dtan"})
+        maria = StaffUser.objects.get(username="maria")
+        self.assertTrue(maria.check_password("password123"))
+        self.assertEqual(maria.role, StaffRole.RECEPTIONIST)
+
+    def test_ensure_default_staff_idempotent(self) -> None:
+        StaffUser.objects.all().delete()
+        first_run = ensure_default_staff()
+        second_run = ensure_default_staff()
+        self.assertEqual(len(first_run), len(second_run))
+        self.assertEqual(StaffUser.objects.count(), 4)
+
+    def test_ensure_default_staff_links_unassigned_appointments(self) -> None:
+        StaffUser.objects.all().delete()
+        patient = Patient.objects.create(full_name="Legacy Patient", age=30)
+        appt = Appointment.objects.create(
+            patient=patient,
+            doctor_name="Dr. Elena Reyes",
+            doctor=None,
+            app_date="2026-09-20",
+        )
+        self.assertIsNone(appt.doctor)
+        ensure_default_staff()
+        appt.refresh_from_db()
+        self.assertIsNotNone(appt.doctor)
+        self.assertEqual(appt.doctor.username, "dreyes")
 
     def test_authenticate_staff_issues_session(self) -> None:
         register_staff(

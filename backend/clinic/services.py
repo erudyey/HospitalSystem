@@ -539,6 +539,86 @@ def list_doctors() -> list[StaffUser]:
     )
 
 
+DEFAULT_STAFF_ACCOUNTS: list[dict[str, str]] = [
+    {
+        "username": "maria",
+        "password": "password123",
+        "full_name": "Maria Santos",
+        "role": StaffRole.RECEPTIONIST,
+        "specialty": "",
+        "license_number": "",
+        "contact": "09171234567",
+    },
+    {
+        "username": "dreyes",
+        "password": "password123",
+        "full_name": "Dr. Elena Reyes",
+        "role": StaffRole.DOCTOR,
+        "specialty": "General Medicine",
+        "license_number": "PRC-018245",
+        "contact": "09181234567",
+    },
+    {
+        "username": "dsantos",
+        "password": "password123",
+        "full_name": "Dr. Marco Santos",
+        "role": StaffRole.DOCTOR,
+        "specialty": "Pediatrics",
+        "license_number": "PRC-019382",
+        "contact": "09201234567",
+    },
+    {
+        "username": "dtan",
+        "password": "password123",
+        "full_name": "Dr. Chloe Tan",
+        "role": StaffRole.DOCTOR,
+        "specialty": "Cardiology",
+        "license_number": "PRC-020491",
+        "contact": "09221234567",
+    },
+]
+
+
+def ensure_default_staff() -> list[StaffUser]:
+    """Ensure baseline staff accounts exist and link unassigned legacy appointments.
+
+    Idempotent operation wrapped in transaction.atomic():
+    1. Checks if each default account ('maria', 'dreyes', 'dsantos', 'dtan') exists.
+       If missing, creates it with PBKDF2 password hashing.
+    2. Searches for unassigned appointments (doctor_id is None) and links them to
+       the matching doctor account if doctor_name matches full_name.
+    Returns list of all active staff accounts.
+    """
+    seeded_or_existing: list[StaffUser] = []
+    with transaction.atomic():
+        for fixture in DEFAULT_STAFF_ACCOUNTS:
+            staff = StaffUser.objects.filter(username=fixture["username"]).first()
+            if not staff:
+                staff = StaffUser(
+                    username=fixture["username"],
+                    full_name=fixture["full_name"],
+                    role=fixture["role"],
+                    specialty=fixture["specialty"],
+                    license_number=fixture["license_number"],
+                    contact=fixture["contact"],
+                )
+                staff.set_password(fixture["password"])
+                staff.save()
+            seeded_or_existing.append(staff)
+
+        # Link legacy unassigned appointments to doctors by name matching
+        doctors = [s for s in seeded_or_existing if s.role == StaffRole.DOCTOR]
+        doc_map = {d.full_name.strip().lower(): d for d in doctors}
+        unassigned_appts = Appointment.objects.filter(doctor__isnull=True).exclude(doctor_name="")
+        for appt in unassigned_appts:
+            doc = doc_map.get(appt.doctor_name.strip().lower())
+            if doc:
+                appt.doctor = doc
+                appt.save(update_fields=["doctor"])
+
+    return seeded_or_existing
+
+
 # Clinical Logic, Conflict Engine, and Medical Records
 
 
