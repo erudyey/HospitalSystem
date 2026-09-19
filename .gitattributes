@@ -1,0 +1,7 @@
+# Standardize line endings to LF across all platforms
+* text=auto eol=lf
+
+# Windows shell scripts preserve CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
