@@ -738,6 +738,18 @@ def create_medical_record(
             raise ValidationError(
                 {"appointment_id": f"Appointment #{appointment_id} belongs to a different patient."}
             )
+        appointment_matches_doctor = appointment.doctor_id == doctor.id or (
+            appointment.doctor_id is None
+            and appointment.doctor_name.strip().lower() == doctor.full_name.strip().lower()
+        )
+        if not appointment_matches_doctor:
+            raise ValidationError(
+                {
+                    "appointment_id": (
+                        f"Appointment #{appointment_id} is assigned to a different doctor."
+                    )
+                }
+            )
         if MedicalRecord.objects.filter(appointment_id=appointment_id).exists():
             raise ValidationError(
                 {
