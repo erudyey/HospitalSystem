@@ -3,7 +3,7 @@
 Active task tracking, architectural milestones, and decoupled feature slices
 have been organized into:
 
-- [ROADMAP.md](ROADMAP.md)
+- [TODO_EXPERIMENTAL.md](TODO_EXPERIMENTAL.md): Active stabilization and shadcn standardization tasks for the experimental branch.
+- [ROADMAP.md](ROADMAP.md): Decoupled milestone tracker and architectural strategy.
 
-Refer to [ROADMAP.md](ROADMAP.md) for the authoritative checklist, dependency
-graph, and verification criteria.
+Refer to [TODO_EXPERIMENTAL.md](TODO_EXPERIMENTAL.md) for immediate sequential work items on this branch.
