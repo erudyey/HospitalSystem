@@ -213,9 +213,9 @@
   });
 </script>
 
-<div class="h-screen bg-background text-foreground flex flex-row selection:bg-primary/10 selection:text-primary antialiased overflow-hidden">
+<div class="h-full w-full bg-background text-foreground flex flex-row selection:bg-primary/10 selection:text-primary antialiased overflow-hidden min-h-0 min-w-0">
   <!-- Left Sidebar Navigation -->
-  <aside class="w-64 border-r border-border bg-card flex flex-col shrink-0 h-screen select-none">
+  <aside class="w-64 border-r border-border bg-card flex flex-col shrink-0 h-full select-none min-h-0">
     <!-- Clinic Brand Header -->
     <div class="px-4 h-14 border-b border-border flex items-center">
       <div class="flex items-center gap-2.5">
@@ -358,9 +358,9 @@
   </aside>
 
   <!-- Right Main Area -->
-  <div class="flex-1 flex flex-col h-screen overflow-hidden min-h-0">
+  <div class="flex-1 flex flex-col h-full overflow-hidden min-h-0 min-w-0">
     <!-- Top Bar Header -->
-    <header class="border-b border-border bg-card/95 backdrop-blur shrink-0 z-40 h-14 flex items-center justify-between px-6 shadow-xs">
+    <header class="border-b border-border bg-card/95 backdrop-blur shrink-0 z-40 h-14 flex items-center justify-between px-4 sm:px-6 shadow-xs min-w-0">
       <!-- Breadcrumb / Active Workspace Title -->
       <div class="flex items-center gap-2 text-xs">
         <span class="text-muted-foreground font-normal">Hospital System</span>
@@ -465,7 +465,7 @@
     {/if}
 
     <!-- Main Workspace Content Canvas -->
-    <main class="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto flex flex-col overflow-hidden min-h-0">
+    <main class="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto flex flex-col overflow-hidden min-h-0 min-w-0">
       {#if isAuthChecking}
         <div class="flex flex-col items-center justify-center py-24 text-sm text-muted-foreground gap-2">
           <Loader2 class="size-6 animate-spin text-primary" />
