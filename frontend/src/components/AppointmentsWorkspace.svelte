@@ -102,6 +102,7 @@
   let conflictWarning = $state<string | null>(null);
   let isCheckingConflict = $state(false);
   let overrideConflict = $state(false);
+  let overrideReason = $state("");
   let conflictCheckTimer: ReturnType<typeof setTimeout> | null = null;
   let isSubmitting = $state(false);
   let bookingErrors = $state<Record<string, string[]>>({});
@@ -271,7 +272,7 @@
   function setQuickDate(daysOffset: number) {
     const d = new Date();
     d.setDate(d.getDate() + daysOffset);
-    appDate = d.toISOString().split("T")[0];
+    appDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
 
   function runConflictCheck() {
@@ -325,11 +326,14 @@
     }
     selectedDoctorId = doctorList.length > 0 ? doctorList[0].id : null;
     doctorName = doctorList.length > 0 ? doctorList[0].full_name : "";
-    appDate = new Date().toISOString().split("T")[0];
-    appTime = "09:00";
+    const next = new Date();
+    next.setMinutes(next.getMinutes() + (15 - (next.getMinutes() % 15)), 0, 0);
+    appDate = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+    appTime = `${String(next.getHours()).padStart(2, "0")}:${String(next.getMinutes()).padStart(2, "0")}`;
     reasonForVisit = "";
     conflictWarning = null;
     overrideConflict = false;
+    overrideReason = "";
     bookingErrors = {};
     isBookingModalOpen = true;
   }
@@ -347,7 +351,7 @@
     const trimmedDoctor = doctorName.trim();
     const localErrors: Record<string, string[]> = {};
     if (!trimmedDoctor && (!selectedDoctorId || selectedDoctorId <= 0)) {
-      localErrors.doctor_name = ["Doctor selection or doctor name is required."];
+      localErrors.doctor_id = ["Select an active registered physician."];
     }
     if (!appDate) localErrors.app_date = ["Appointment date is required."];
     if (!appTime) localErrors.app_time = ["Appointment time is required."];
@@ -357,6 +361,7 @@
         "A schedule conflict was detected. Check 'Emergency / Walk-in Override' to proceed.",
       ];
     }
+    if (overrideConflict && !overrideReason.trim()) localErrors.override_reason = ["Explain why this conflict is being overridden."];
 
     if (Object.keys(localErrors).length > 0) {
       bookingErrors = localErrors;
@@ -369,15 +374,14 @@
     try {
       const newApp = await api.bookAppointment({
         patient_id: selectedPatientId,
-        doctor_name:
-          trimmedDoctor ||
-          (doctorList.find((d) => d.id === selectedDoctorId)?.full_name ??
-            "Attending Physician"),
+        doctor_name: trimmedDoctor,
         doctor_id: selectedDoctorId && selectedDoctorId > 0 ? selectedDoctorId : null,
         app_date: appDate,
         app_time: appTime,
         reason_for_visit: reasonForVisit.trim(),
         initial_status: initialStatus,
+        allow_conflict: overrideConflict,
+        override_reason: overrideReason.trim(),
       });
 
       isBookingModalOpen = false;
@@ -393,6 +397,28 @@
     } finally {
       isSubmitting = false;
     }
+  }
+
+  async function handleWalkIn(e: Event) {
+    e.preventDefault();
+    if (!selectedPatientId || !selectedDoctorId) {
+      bookingErrors = { general: ["Select a patient and active physician."] };
+      return;
+    }
+    if (conflictWarning && (!overrideConflict || !overrideReason.trim())) {
+      bookingErrors = { override_reason: ["A reason is required to override an active conflict."] };
+      return;
+    }
+    isSubmitting = true;
+    try {
+      const appointment = await api.walkIn({ patient_id: selectedPatientId, doctor_id: selectedDoctorId, reason_for_visit: reasonForVisit.trim(), allow_conflict: overrideConflict, override_reason: overrideReason.trim() });
+      isBookingModalOpen = false;
+      toast.success(`Patient checked in as appointment #${appointment.id}.`);
+      await reloadAppointments();
+    } catch (err) {
+      const apiError = err as ApiError;
+      bookingErrors = apiError.fields || { general: [apiError.message] };
+    } finally { isSubmitting = false; }
   }
 
   async function handleStatusChange(
@@ -1059,6 +1085,9 @@
           <label for="modalDoctorSelect" class="block text-xs font-semibold text-foreground mb-1.5">
             Attending Physician <span class="text-destructive">*</span>
           </label>
+          {#if doctorList.length === 0}
+            <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">No active registered physicians. Register a physician in Settings, then return here.</div>
+          {:else}
           <select
             id="modalDoctorSelect"
             class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm w-full focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
@@ -1069,8 +1098,6 @@
               if (val > 0) {
                 const doc = doctorList.find((d) => d.id === val);
                 if (doc) doctorName = doc.full_name;
-              } else if (val === -1) {
-                doctorName = "";
               }
             }}
             disabled={isSubmitting}
@@ -1082,28 +1109,12 @@
                   Dr. {doc.full_name.replace(/^Dr\.\s*/i, "")} ({doc.specialty || "General Medicine"})
                 </option>
               {/each}
-              <option value={-1}>Other / Visiting Physician...</option>
-            {:else}
-              <option value={null}>No registered physicians found</option>
-              <option value={-1}>Custom Physician Name...</option>
             {/if}
           </select>
-
-          {#if selectedDoctorId === -1 || doctorList.length === 0}
-            <div class="mt-2">
-              <Input
-                id="modalCustomDoctor"
-                type="text"
-                placeholder="e.g. Dr. Maria Cruz"
-                bind:value={doctorName}
-                aria-invalid={!!bookingErrors.doctor_name}
-                disabled={isSubmitting}
-              />
-            </div>
           {/if}
 
-          {#if bookingErrors.doctor_name}
-            <p class="text-xs text-destructive mt-1">{bookingErrors.doctor_name.join(" ")}</p>
+          {#if bookingErrors.doctor_id}
+            <p class="text-xs text-destructive mt-1">{bookingErrors.doctor_id.join(" ")}</p>
           {/if}
         </div>
 
@@ -1114,6 +1125,10 @@
             <label for="modalDate" class="block text-xs font-semibold text-foreground mb-1.5">
               Appointment Date <span class="text-destructive">*</span>
             </label>
+            {#if overrideConflict}
+              <Input class="text-xs" placeholder="Required override reason" bind:value={overrideReason} maxlength="255" />
+              {#if bookingErrors.override_reason}<p class="text-xs text-destructive">{bookingErrors.override_reason.join(" ")}</p>{/if}
+            {/if}
             <Input
               id="modalDate"
               type="date"
@@ -1200,7 +1215,7 @@
           <Button
             type="button"
             variant="secondary"
-            onclick={(e) => handleCreateBooking(e, "Checked In")}
+            onclick={(e) => handleWalkIn(e)}
             disabled={isSubmitting || patientList.length === 0 || (!!conflictWarning && !overrideConflict)}
             class="cursor-pointer"
           >
@@ -1209,7 +1224,7 @@
             {:else}
               <UserCheck class="size-4 mr-1" />
             {/if}
-            Book & Check In
+            Walk-in / Check in now
           </Button>
           <Button
             type="submit"

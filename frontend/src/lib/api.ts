@@ -140,36 +140,34 @@ function getSessionToken(): string {
   }
 }
 
-export function getUserToken(): string {
+let userToken = "";
+const nativeHost = () => (window as unknown as {
+  pywebview?: { api?: {
+    load_remembered_token?: () => Promise<string>;
+    save_remembered_token?: (token: string) => Promise<boolean>;
+    clear_remembered_token?: () => Promise<void>;
+  } };
+}).pywebview?.api;
+
+export function getUserToken(): string { return userToken; }
+
+export async function restoreRememberedToken(): Promise<string> {
   try {
-    return localStorage.getItem("user_token") ||
-      sessionStorage.getItem("user_token") || "";
-  } catch {
-    return "";
-  }
+    const token = await nativeHost()?.load_remembered_token?.();
+    userToken = token || "";
+    return userToken;
+  } catch { return ""; }
 }
 
-export function setUserToken(token: string, remember: boolean = true): void {
-  try {
-    if (remember) {
-      localStorage.setItem("user_token", token);
-      sessionStorage.removeItem("user_token");
-    } else {
-      sessionStorage.setItem("user_token", token);
-      localStorage.removeItem("user_token");
-    }
-  } catch {
-    // Ignore storage restrictions
-  }
+export async function setUserToken(token: string, remember: boolean = false): Promise<boolean> {
+  userToken = token;
+  if (!remember) return true;
+  try { return await nativeHost()?.save_remembered_token?.(token) === true; } catch { return false; }
 }
 
 export function clearUserToken(): void {
-  try {
-    localStorage.removeItem("user_token");
-    sessionStorage.removeItem("user_token");
-  } catch {
-    // Ignore storage restrictions
-  }
+  userToken = "";
+  try { void nativeHost()?.clear_remembered_token?.(); } catch { /* native storage unavailable */ }
 }
 
 export async function switchApplicationMode(
@@ -308,12 +306,17 @@ export const api = {
       reason_for_visit?: string;
       doctor_id?: number | null;
       initial_status?: AppointmentStatus;
+      allow_conflict?: boolean;
+      override_reason?: string;
     },
   ) =>
     request<Appointment>("/api/appointments/", {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  walkIn: (data: { patient_id: number; doctor_id: number; reason_for_visit?: string; allow_conflict?: boolean; override_reason?: string }) =>
+    request<Appointment>("/api/appointments/walk-in/", { method: "POST", body: JSON.stringify(data) }),
 
   /** Reschedule or update an appointment */
   updateAppointment: (
@@ -324,6 +327,8 @@ export const api = {
       app_time?: string;
       reason_for_visit?: string;
       doctor_id?: number | null;
+      allow_conflict?: boolean;
+      override_reason?: string;
     },
   ) =>
     request<Appointment>(`/api/appointments/${appointmentId}/`, {
@@ -383,6 +388,7 @@ export const api = {
     register: (data: {
       username: string;
       password: string;
+      password_confirmation: string;
       full_name: string;
       role?: StaffRole;
       specialty?: string;
@@ -397,7 +403,7 @@ export const api = {
     login: async (
       usernameOrCredentials: string | { username: string; password: string },
       passwordOrRemember?: string | boolean,
-      remember: boolean = true,
+      remember: boolean = false,
     ) => {
       let payload: { username: string; password: string };
       let shouldRemember = remember;
@@ -421,7 +427,7 @@ export const api = {
         body: JSON.stringify(payload),
       });
       if (resp?.token) {
-        setUserToken(resp.token, shouldRemember);
+        await setUserToken(resp.token, shouldRemember);
       }
       return resp;
     },
@@ -438,7 +444,10 @@ export const api = {
       }
     },
 
+    status: () => request<{ initial_setup_required: boolean }>("/api/auth/status/"),
+
     updateProfile: async (data: {
+      username?: string;
       full_name?: string;
       contact?: string;
       specialty?: string;
@@ -446,10 +455,11 @@ export const api = {
       current_password?: string;
       new_password?: string;
     }): Promise<StaffUser> => {
-      const res = await request<{ user: StaffUser }>("/api/auth/profile/", {
+      const res = await request<{ user: StaffUser; token?: string }>("/api/auth/profile/", {
         method: "PUT",
         body: JSON.stringify(data),
       });
+      if (res.token) await setUserToken(res.token, false);
       return res.user;
     },
 

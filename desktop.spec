@@ -41,6 +41,7 @@ hiddenimports = (
     + collect_submodules('django.core.management')
     + collect_submodules('waitress')
     + collect_submodules('webview')
+    + collect_submodules('keyring')
     + platform_imports
 )
 
@@ -70,6 +71,7 @@ exe = EXE(
     a.datas,
     [],
     name='HospitalSystem',
+    icon=str(REPO_ROOT / 'assets' / 'hospital-icon.ico') if sys.platform == 'win32' else None,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -86,7 +88,7 @@ if sys.platform == 'darwin':
     app = BUNDLE(
         exe,
         name='HospitalSystem.app',
-        icon=None,
+        icon=str(REPO_ROOT / 'assets' / 'hospital-icon.icns'),
         bundle_identifier='com.hospitalsystem.clinic',
         info_plist={
             'CFBundleShortVersionString': '0.1.0-beta.1',

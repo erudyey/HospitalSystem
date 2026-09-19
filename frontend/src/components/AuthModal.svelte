@@ -46,11 +46,12 @@
   // Login form
   let loginUsername = $state("");
   let loginPassword = $state("");
-  let keepSignedIn = $state(true);
+  let keepSignedIn = $state(false);
 
   // Register form
   let regUsername = $state("");
   let regPassword = $state("");
+  let regPasswordConfirmation = $state("");
   let regFullName = $state("");
   let regRole = $state<StaffRole>("receptionist");
   let regSpecialty = $state("");
@@ -138,6 +139,7 @@
       await api.auth.register({
         username: trimmedUser,
         password: regPassword,
+        password_confirmation: regPasswordConfirmation,
         full_name: trimmedName,
         role: regRole,
         specialty: regSpecialty.trim(),
@@ -317,6 +319,14 @@
                 bind:value={regUsername}
                 disabled={isSubmitting}
                 class="h-8 text-xs"
+              />
+              <Input
+                id="regPassConfirm"
+                type="password"
+                placeholder="Confirm password"
+                bind:value={regPasswordConfirmation}
+                disabled={isSubmitting}
+                class="h-8 text-xs mt-2"
               />
             </div>
             <div>

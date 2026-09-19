@@ -48,11 +48,13 @@
 
   // Profile Form State
   let fullName = $state("");
+  let username = $state("");
   let contact = $state("");
   let specialty = $state("");
   let licenseNumber = $state("");
   let newPassword = $state("");
   let confirmPassword = $state("");
+  let currentPassword = $state("");
 
   let isSaving = $state(false);
   let isLoggingOut = $state(false);
@@ -65,11 +67,13 @@
       } else {
         activeTab = initialTab || "profile";
         fullName = currentUser.full_name || "";
+        username = currentUser.username || "";
         contact = currentUser.contact || "";
         specialty = currentUser.specialty || "";
         licenseNumber = currentUser.license_number || "";
         newPassword = "";
         confirmPassword = "";
+        currentPassword = "";
         formErrors = {};
       }
     }
@@ -96,21 +100,28 @@
       };
       return;
     }
+    if ((username.trim() !== currentUser?.username || newPassword) && !currentPassword) {
+      formErrors = { current_password: ["Enter your current password to change credentials."] };
+      return;
+    }
 
     isSaving = true;
     try {
       const updated = await api.auth.updateProfile({
+        username: username.trim(),
         full_name: fullName.trim(),
         contact: contact.trim(),
         specialty: specialty.trim(),
         license_number: licenseNumber.trim(),
         new_password: newPassword || undefined,
+        current_password: currentPassword || undefined,
       });
 
       toast.success("Profile updated successfully.");
       onProfileUpdated?.((updated as any).user || updated);
       newPassword = "";
       confirmPassword = "";
+      currentPassword = "";
     } catch (err) {
       const e = err as ApiError;
       formErrors = e.fields || { general: [e.message] };
@@ -196,9 +207,9 @@
               <Input
                 id="profUser"
                 type="text"
-                value={currentUser?.username || ""}
-                disabled
-                class="h-8 text-xs bg-muted/50 cursor-not-allowed"
+                bind:value={username}
+                disabled={isSaving}
+                class="h-8 text-xs"
               />
             </div>
             <div>
@@ -264,6 +275,7 @@
               <span>Change Password (optional)</span>
             </p>
             <div class="grid grid-cols-2 gap-2.5">
+              <Input type="password" placeholder="Current password" bind:value={currentPassword} disabled={isSaving} class="h-8 text-xs" />
               <Input
                 type="password"
                 placeholder="New password"
@@ -281,10 +293,10 @@
             </div>
           </div>
 
-          {#if formErrors.general || formErrors.password}
+          {#if formErrors.general || formErrors.password || formErrors.current_password || formErrors.username}
             <div class="rounded-lg bg-destructive/10 border border-destructive/20 p-2 text-xs text-destructive flex items-center gap-2">
               <AlertCircle class="size-4 shrink-0" />
-              <span>{(formErrors.general || formErrors.password)?.join(" ")}</span>
+              <span>{(formErrors.general || formErrors.password || formErrors.current_password || formErrors.username)?.join(" ")}</span>
             </div>
           {/if}
 

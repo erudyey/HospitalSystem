@@ -217,6 +217,38 @@ class Appointment(models.Model):
         )
 
 
+class AppointmentAudit(models.Model):
+    """Immutable event trail for booking, overrides, rescheduling, and restoration."""
+
+    appointment = models.ForeignKey(
+        Appointment, on_delete=models.CASCADE, related_name="audit_events"
+    )
+    actor = models.ForeignKey(
+        StaffUser, on_delete=models.SET_NULL, null=True, blank=True, related_name="appointment_audits"
+    )
+    event = models.CharField(max_length=40)
+    reason = models.CharField(max_length=255, blank=True, default="")
+    before = models.JSONField(default=dict, blank=True)
+    after = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "clinic_appointment_audits"
+        ordering = ["id"]
+
+
+class DemoSeedState(models.Model):
+    """Version marker and stable account identifiers for the isolated demo database."""
+
+    key = models.CharField(max_length=40, primary_key=True, default="default")
+    version = models.PositiveIntegerField(default=1)
+    account_ids = models.JSONField(default=dict, blank=True)
+    seeded_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "clinic_demo_seed_state"
+
+
 class MedicalRecord(models.Model):
     """Clinical documentation recorded by an attending physician."""
 

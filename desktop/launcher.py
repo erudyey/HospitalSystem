@@ -233,10 +233,10 @@ def main() -> None:
         call_command("migrate", interactive=False)
 
         if IS_DEMO_MODE:
-            from backend.clinic.services import ensure_default_staff
+            from backend.clinic.services import ensure_demo_data
 
-            logger.info("Ensuring demo staff accounts exist...")
-            ensure_default_staff()
+            logger.info("Ensuring versioned demo fixtures exist...")
+            ensure_demo_data()
 
         from waitress.server import create_server
 
@@ -335,12 +335,41 @@ def main() -> None:
         sys.exit(1)
 
     pending_mode: str | None = None
+    credential_service = f"HospitalSystem/{APP_DIR.resolve()}/{os.environ['HOSPITAL_MODE']}"
 
     class DesktopHostApi:
         """Expose safe, minimal JS bridge."""
 
         def get_session_token(self) -> str:
             return session_token
+
+        def load_remembered_token(self) -> str:
+            try:
+                import keyring
+
+                return keyring.get_password(credential_service, "staff-session") or ""
+            except Exception as exc:
+                logger.info("Secure credential storage is unavailable: %s", exc)
+                return ""
+
+        def save_remembered_token(self, token: str) -> bool:
+            try:
+                import keyring
+
+                keyring.set_password(credential_service, "staff-session", token)
+                return True
+            except Exception as exc:
+                logger.info("Could not persist secure credential: %s", exc)
+                return False
+
+        def clear_remembered_token(self) -> None:
+            try:
+                import keyring
+
+                with contextlib.suppress(keyring.errors.PasswordDeleteError):
+                    keyring.delete_password(credential_service, "staff-session")
+            except Exception as exc:
+                logger.info("Could not clear secure credential: %s", exc)
 
         def switch_mode(self, mode: str) -> None:
             nonlocal pending_mode
