@@ -1,6 +1,6 @@
 [project]
 name = "hospitalsystem"
-version = "0.1.0b1"
+version = "0.1.0a1"
 description = "Modern Hospital Management Desktop Application"
 readme = "README.md"
 requires-python = ">=3.12"

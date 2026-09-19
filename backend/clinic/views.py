@@ -200,7 +200,7 @@ def health_check(_request: HttpRequest) -> JsonResponse:
     return JsonResponse(
         {
             "status": "ok",
-            "version": "0.1.0-beta.1",
+            "version": "0.1.0-alpha.1",
             "mode": os.environ.get("HOSPITAL_MODE", "clinic"),
             **services.clinic_context(),
         }
