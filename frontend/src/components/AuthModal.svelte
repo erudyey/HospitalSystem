@@ -161,8 +161,8 @@
     <!-- Modal Header -->
     <div class="px-6 pt-6 pb-4 border-b border-border bg-card">
       <div class="flex items-center gap-2.5">
-        <div class="size-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center">
-          <ShieldCheck class="size-4.5" />
+        <div class="size-8 rounded-lg bg-muted text-foreground flex items-center justify-center">
+          <ShieldCheck class="size-4.5 text-muted-foreground" />
         </div>
         <div>
           <Dialog.Title class="text-base font-semibold">
@@ -198,9 +198,9 @@
       {#if activeTab === "login"}
         <!-- Demo Mode Quick Fill Chips -->
         {#if demoMode}
-          <div class="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs">
-            <div class="flex items-center gap-1.5 font-semibold text-primary mb-2">
-              <Sparkles class="size-3.5" />
+          <div class="mb-4 rounded-lg border border-border bg-muted/40 p-3 text-xs">
+            <div class="flex items-center gap-1.5 font-medium text-foreground mb-2">
+              <Sparkles class="size-3.5 text-muted-foreground" />
               <span>Demo Mode -- Quick Fill Credentials</span>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
@@ -210,10 +210,10 @@
                   variant="outline"
                   size="sm"
                   onclick={() => quickFill(p)}
-                  class="h-auto py-1.5 px-2.5 justify-between font-normal text-[11px] text-left border-border/80 hover:bg-muted/70 cursor-pointer"
+                  class="h-auto py-1.5 px-2.5 justify-between font-normal text-[11px] text-left border bg-background hover:bg-muted/70 cursor-pointer"
                 >
                   <span class="font-medium text-foreground truncate">{p.label}</span>
-                  <Badge variant="secondary" class="text-[9px] px-1 py-0 uppercase ml-1 shrink-0">
+                  <Badge variant="secondary" class="text-[9px] px-1 py-0 uppercase ml-1 shrink-0 font-normal">
                     {p.role}
                   </Badge>
                 </Button>

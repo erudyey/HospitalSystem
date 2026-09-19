@@ -105,8 +105,17 @@
         }
       }
 
-      // If no valid session and in demo mode, auto-activate receptionist for zero-friction start
-      if (demoMode) {
+      // Check if user explicitly logged out in this session
+      let hasExplicitLogout = false;
+      try {
+        hasExplicitLogout = sessionStorage.getItem("hospitalsystem_explicit_logout") === "true";
+      } catch {
+        // Ignore storage restrictions
+      }
+
+      // If no valid session and in demo mode AND user did not explicitly log out,
+      // auto-activate receptionist for zero-friction start
+      if (demoMode && !hasExplicitLogout) {
         try {
           const session = await api.auth.login("maria", "password123");
           currentUser = session.user;
@@ -127,6 +136,11 @@
     try {
       const session = await api.auth.login(username, "password123");
       currentUser = session.user;
+      try {
+        sessionStorage.removeItem("hospitalsystem_explicit_logout");
+      } catch {
+        // Ignore storage restrictions
+      }
       if (currentUser.role === "doctor") {
         activeWorkspace = "doctor_workspace";
       } else {
@@ -143,11 +157,12 @@
   function handleLogout() {
     clearUserToken();
     currentUser = null;
-    if (demoMode) {
-      switchDemoUser("maria");
-    } else {
-      isAuthModalOpen = true;
+    try {
+      sessionStorage.setItem("hospitalsystem_explicit_logout", "true");
+    } catch {
+      // Ignore storage restrictions
     }
+    isAuthModalOpen = true;
   }
 
   onMount(() => {
@@ -455,6 +470,19 @@
           <Loader2 class="size-6 animate-spin text-primary" />
           <span>Initializing clinical environment...</span>
         </div>
+      {:else if !currentUser}
+        <div class="flex-1 flex flex-col items-center justify-center text-center p-8">
+          <div class="size-12 rounded-xl bg-muted flex items-center justify-center mb-3">
+            <Shield class="size-6 text-muted-foreground" />
+          </div>
+          <h3 class="text-base font-semibold text-foreground">Staff Authentication Required</h3>
+          <p class="text-xs text-muted-foreground max-w-sm mt-1 mb-4">
+            Please sign in with your receptionist or physician credentials to access clinical records and scheduling.
+          </p>
+          <Button size="sm" onclick={() => (isAuthModalOpen = true)} class="cursor-pointer">
+            Sign In to Clinical Core
+          </Button>
+        </div>
       {:else if activeWorkspace === "doctor_workspace" && currentUser?.role === "doctor"}
         <DoctorWorkspace activeDoctor={currentUser} />
       {:else if activeWorkspace === "patients"}
@@ -489,6 +517,11 @@
     demoMode={demoMode}
     onSuccess={(user) => {
       currentUser = user;
+      try {
+        sessionStorage.removeItem("hospitalsystem_explicit_logout");
+      } catch {
+        // Ignore storage restrictions
+      }
       if (user.role === "doctor") {
         activeWorkspace = "doctor_workspace";
       } else {
