@@ -1,12 +1,36 @@
 #!/usr/bin/env python
 """One-command standalone executable packaging script."""
 
+import argparse
 import contextlib
 import subprocess
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command line arguments for packaging automation."""
+    parser = argparse.ArgumentParser(
+        description="One-command standalone executable packaging script."
+    )
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Fast packaging: reuse PyInstaller build cache and skip frontend if dist/ exists.",
+    )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Force clean PyInstaller build cache before freezing.",
+    )
+    parser.add_argument(
+        "--no-frontend",
+        action="store_true",
+        help="Skip Svelte frontend compilation step.",
+    )
+    return parser.parse_args()
 
 
 def run_command(cmd: list[str], cwd: Path) -> None:
@@ -40,13 +64,20 @@ def ensure_executable_unlocked() -> None:
 
 
 def main() -> None:
+    args = parse_args()
     platform_name = "macOS" if sys.platform == "darwin" else "Windows"
     print(f"=== Packaging HospitalSystem for {platform_name} Desktop ===")
 
-    # 1. Build frontend using Deno
+    # 1. Build frontend using Deno (skipped if --no-frontend or (--quick and dist/ exists))
     frontend_dir = REPO_ROOT / "frontend"
-    print("\n[Step 1/3] Compiling Svelte frontend with Deno...")
-    run_command(["deno", "task", "build"], cwd=frontend_dir)
+    frontend_dist = frontend_dir / "dist" / "index.html"
+    should_build_frontend = not args.no_frontend and not (args.quick and frontend_dist.exists())
+
+    if should_build_frontend:
+        print("\n[Step 1/3] Compiling Svelte frontend with Deno...")
+        run_command(["deno", "task", "build"], cwd=frontend_dir)
+    else:
+        print("\n[Step 1/3] Reusing existing frontend build in frontend/dist/...")
 
     # 2. Run PyInstaller
     ensure_executable_unlocked()
@@ -58,8 +89,11 @@ def main() -> None:
         "PyInstaller",
         "desktop.spec",
         "--noconfirm",
-        "--clean",
     ]
+    # Default to --clean for pristine builds unless --quick is passed
+    if args.clean or not args.quick:
+        pyinstaller_cmd.append("--clean")
+
     run_command(pyinstaller_cmd, cwd=REPO_ROOT)
 
     # 3. Report generated output

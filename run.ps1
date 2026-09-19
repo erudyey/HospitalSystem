@@ -11,7 +11,10 @@
 param (
     [Parameter(Position = 0, Mandatory = $true)]
     [ValidateSet("dev", "desktop", "test", "format", "package", "setup", "test-package")]
-    [string]$Command
+    [string]$Command,
+
+    [Parameter(Mandatory = $false)]
+    [switch]$Quick
 )
 
 $ErrorActionPreference = "Stop"
@@ -77,9 +80,12 @@ switch ($Command) {
     }
 
     "test" {
-        Write-Host "Running basedpyright strict type checks..." -ForegroundColor Cyan
-        & $VenvPython -m basedpyright
-        Write-Host "`nRunning backend automated test suite..." -ForegroundColor Cyan
+        if (-not $Quick) {
+            Write-Host "Running basedpyright strict type checks..." -ForegroundColor Cyan
+            & $VenvPython -m basedpyright
+            Write-Host ""
+        }
+        Write-Host "Running backend automated test suite..." -ForegroundColor Cyan
         $env:TESTING = "True"
         & $VenvPytest "$RepoRoot\backend\tests"
     }
@@ -103,7 +109,11 @@ switch ($Command) {
 
     "package" {
         Write-Host "Packaging HospitalSystem as Windows .exe..." -ForegroundColor Cyan
-        & $VenvPython "$RepoRoot\package.py"
+        $packageArgs = @()
+        if ($Quick) {
+            $packageArgs += "--quick"
+        }
+        & $VenvPython "$RepoRoot\package.py" @packageArgs
         Write-Host "`nRunning automated standalone verification..." -ForegroundColor Cyan
         & $VenvPython "$RepoRoot\desktop\verify_bundle.py"
     }

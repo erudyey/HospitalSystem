@@ -15,9 +15,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$REPO_ROOT"
 
 COMMAND="${1:-}"
+OPTION="${2:-}"
 
 if [ -z "$COMMAND" ]; then
-    echo "Usage: ./run.sh [setup|dev|desktop|test|format|package|test-package]"
+    echo "Usage: ./run.sh [setup|dev|desktop|test|format|package|test-package] [--quick]"
     exit 1
 fi
 
@@ -74,9 +75,11 @@ case "$COMMAND" in
         ;;
 
     test)
-        echo "Running basedpyright strict type checks..."
-        "$VENV_PYTHON" -m basedpyright
-        echo ""
+        if [ "$OPTION" != "--quick" ]; then
+            echo "Running basedpyright strict type checks..."
+            "$VENV_PYTHON" -m basedpyright
+            echo ""
+        fi
         echo "Running backend automated test suite..."
         TESTING="True" "$VENV_PYTEST" "$REPO_ROOT/backend/tests"
         ;;
@@ -90,7 +93,11 @@ case "$COMMAND" in
 
     package)
         echo "Packaging HospitalSystem desktop bundle..."
-        "$VENV_PYTHON" "$REPO_ROOT/package.py"
+        PACKAGE_ARGS=()
+        if [ "$OPTION" = "--quick" ]; then
+            PACKAGE_ARGS+=("--quick")
+        fi
+        "$VENV_PYTHON" "$REPO_ROOT/package.py" "${PACKAGE_ARGS[@]}"
         echo ""
         echo "Running automated bundle verification..."
         "$VENV_PYTHON" "$REPO_ROOT/desktop/verify_bundle.py"
