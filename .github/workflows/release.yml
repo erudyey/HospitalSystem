@@ -24,6 +24,8 @@ jobs:
     runs-on: windows-latest
     outputs:
       tag_name: ${{ steps.resolve-tag.outputs.tag_name }}
+      is_prerelease: ${{ steps.resolve-tag.outputs.is_prerelease }}
+      make_latest: ${{ steps.resolve-tag.outputs.make_latest }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -45,6 +47,16 @@ jobs:
 
           echo "tag_name=$TAG" >> $GITHUB_OUTPUT
           echo "Resolved release tag: $TAG"
+
+          if [[ "$TAG" =~ - ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "make_latest=false" >> $GITHUB_OUTPUT
+            echo "Detected pre-release tag: marking as pre-release and not latest."
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "make_latest=true" >> $GITHUB_OUTPUT
+            echo "Detected production tag: marking as latest release."
+          fi
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -266,7 +278,7 @@ jobs:
             release_assets/SHA256SUMS.txt
           generate_release_notes: true
           draft: false
-          prerelease: false
-          make_latest: true
+          prerelease: ${{ needs.pre-flight-check.outputs.is_prerelease == 'true' }}
+          make_latest: ${{ needs.pre-flight-check.outputs.make_latest == 'true' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

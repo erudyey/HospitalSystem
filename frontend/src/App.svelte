@@ -45,7 +45,13 @@
   let isAuthChecking = $state(true);
   let isAuthModalOpen = $state(false);
   let isSettingsOpen = $state(false);
+  let settingsInitialTab = $state<"profile" | "system">("profile");
   let demoMode = $state(true);
+
+  function openSettings(tab: "profile" | "system" = "profile") {
+    settingsInitialTab = tab;
+    isSettingsOpen = true;
+  }
 
   // Trigger modal flags for quick actions in the sidebar
   let triggerPatientRegister = $state(false);
@@ -211,7 +217,7 @@
   <!-- Left Sidebar Navigation -->
   <aside class="w-64 border-r border-border bg-card flex flex-col shrink-0 h-screen select-none">
     <!-- Clinic Brand Header -->
-    <div class="px-4 h-14 border-b border-border flex items-center justify-between">
+    <div class="px-4 h-14 border-b border-border flex items-center">
       <div class="flex items-center gap-2.5">
         <div class="size-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shrink-0 shadow-xs">
           <SquarePlus class="size-4" />
@@ -223,17 +229,6 @@
           <p class="text-[10px] text-muted-foreground font-medium">Clinical Core</p>
         </div>
       </div>
-
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        onclick={() => (isSettingsOpen = true)}
-        class="size-7 text-muted-foreground hover:text-foreground cursor-pointer"
-        title="Settings & Profile"
-      >
-        <Settings class="size-4" />
-      </Button>
     </div>
 
     <!-- Quick Action CTA Button (Sidebar) -->
@@ -303,29 +298,51 @@
       {/if}
     </div>
 
-    <!-- Active User Card (Sidebar Bottom) -->
+    <!-- User / Session Footer (Sidebar Bottom) -->
     <div class="p-3 border-t border-border mt-auto flex flex-col gap-2">
       {#if currentUser}
-        <div class="rounded-lg bg-muted/40 p-2 text-xs flex items-center justify-between border border-border/40">
+        <button
+          type="button"
+          onclick={() => openSettings("profile")}
+          class="w-full rounded-lg bg-muted/40 hover:bg-muted/70 p-2 text-xs flex items-center justify-between border border-border/40 transition-colors cursor-pointer group text-left"
+          title="Staff Profile & Settings"
+        >
           <div class="flex items-center gap-2 min-w-0">
-            <div class="size-6 rounded-full bg-muted text-foreground font-semibold text-[10px] flex items-center justify-center shrink-0 border border-border/70">
+            <div class="size-6 rounded-full bg-muted text-foreground font-semibold text-[10px] flex items-center justify-center shrink-0 border border-border/70 group-hover:border-primary/50 transition-colors">
               {currentUser.full_name?.charAt(0) || currentUser.username.charAt(0).toUpperCase()}
             </div>
             <div class="min-w-0">
-              <p class="font-semibold text-foreground truncate">{currentUser.full_name || currentUser.username}</p>
-              <p class="text-[10px] text-muted-foreground capitalize truncate">{currentUser.role}</p>
+              <p class="font-semibold text-foreground truncate leading-tight group-hover:text-primary transition-colors">
+                {currentUser.full_name || currentUser.username}
+              </p>
+              <p class="text-[10px] text-muted-foreground capitalize truncate leading-tight mt-0.5">
+                {currentUser.role}
+              </p>
             </div>
           </div>
 
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onclick={() => (isSettingsOpen = true)}
-            class="size-6 text-muted-foreground hover:text-foreground cursor-pointer"
-            title="Profile Settings"
-          >
+          <div class="size-6 rounded-md flex items-center justify-center text-muted-foreground group-hover:text-foreground shrink-0">
             <Settings class="size-3.5" />
+          </div>
+        </button>
+      {:else}
+        <div class="rounded-lg bg-muted/30 p-2 text-xs flex items-center justify-between border border-border/40">
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="size-6 rounded-full bg-muted text-muted-foreground flex items-center justify-center shrink-0 border border-border/70">
+              <Lock class="size-3" />
+            </div>
+            <div class="min-w-0">
+              <p class="font-medium text-muted-foreground truncate leading-tight">Not Signed In</p>
+              <p class="text-[10px] text-muted-foreground truncate leading-tight mt-0.5">Staff Access</p>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onclick={() => (isAuthModalOpen = true)}
+            class="h-6 px-2 text-[11px] font-medium cursor-pointer"
+          >
+            Sign In
           </Button>
         </div>
       {/if}
@@ -399,18 +416,28 @@
       {/if}
 
       <!-- Top Right Controls -->
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-2">
         {#if currentUser}
           <Button
             variant="outline"
             size="sm"
             class="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer gap-1.5"
-            onclick={() => (isSettingsOpen = true)}
+            onclick={() => openSettings("profile")}
           >
             <Settings class="size-3.5" />
             <span>Settings</span>
           </Button>
         {:else}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            class="size-8 text-muted-foreground hover:text-foreground cursor-pointer"
+            onclick={() => openSettings("system")}
+            title="System & Demo Settings"
+          >
+            <Settings class="size-4" />
+          </Button>
           <Button
             size="sm"
             class="h-8 px-3 text-xs cursor-pointer"
@@ -479,10 +506,12 @@
     bind:open={isSettingsOpen}
     currentUser={currentUser}
     bind:demoMode={demoMode}
+    initialTab={settingsInitialTab}
     onProfileUpdated={(updated) => {
       currentUser = updated;
     }}
     onLogout={handleLogout}
+    onOpenAuth={() => (isAuthModalOpen = true)}
   />
 
   <!-- Auth Gateway Modal -->

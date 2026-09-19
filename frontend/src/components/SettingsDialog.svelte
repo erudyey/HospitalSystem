@@ -27,16 +27,20 @@
     open?: boolean;
     currentUser?: StaffUser | null;
     demoMode?: boolean;
+    initialTab?: "profile" | "system";
     onProfileUpdated?: (user: StaffUser) => void;
     onLogout?: () => void;
+    onOpenAuth?: () => void;
   }
 
   let {
     open = $bindable(false),
     currentUser = null,
     demoMode = $bindable(true),
+    initialTab = "profile",
     onProfileUpdated,
     onLogout,
+    onOpenAuth,
   }: Props = $props();
 
   type SettingsTab = "profile" | "system";
@@ -55,14 +59,19 @@
   let formErrors = $state<Record<string, string[]>>({});
 
   $effect(() => {
-    if (open && currentUser) {
-      fullName = currentUser.full_name || "";
-      contact = currentUser.contact || "";
-      specialty = currentUser.specialty || "";
-      licenseNumber = currentUser.license_number || "";
-      newPassword = "";
-      confirmPassword = "";
-      formErrors = {};
+    if (open) {
+      if (!currentUser) {
+        activeTab = "system";
+      } else {
+        activeTab = initialTab || "profile";
+        fullName = currentUser.full_name || "";
+        contact = currentUser.contact || "";
+        specialty = currentUser.specialty || "";
+        licenseNumber = currentUser.license_number || "";
+        newPassword = "";
+        confirmPassword = "";
+        formErrors = {};
+      }
     }
   });
 
@@ -146,39 +155,43 @@
           </div>
           <div>
             <Dialog.Title class="text-base font-semibold">
-              System Settings & Profile
+              {currentUser ? "System Settings & Profile" : "System Settings"}
             </Dialog.Title>
             <Dialog.Description class="text-xs text-muted-foreground">
-              Manage your staff credentials and runtime configuration.
+              {currentUser
+                ? "Manage your staff credentials and runtime configuration."
+                : "Runtime configuration and database status."}
             </Dialog.Description>
           </div>
         </div>
 
-        <Badge variant="outline" class="text-xs capitalize font-medium">
-          {currentUser?.role || "Staff"}
+        <Badge variant={currentUser ? "outline" : "secondary"} class="text-xs capitalize font-medium">
+          {currentUser ? currentUser.role : "Guest"}
         </Badge>
       </div>
 
-      <!-- Tab Navigation -->
-      <div class="mt-4">
-        <Tabs.Root
-          value={activeTab}
-          onValueChange={(val) => {
-            if (val) activeTab = val as SettingsTab;
-          }}
-        >
-          <Tabs.List class="w-full grid grid-cols-2">
-            <Tabs.Trigger value="profile" class="text-xs gap-1.5">
-              <User class="size-3.5" />
-              <span>Staff Profile</span>
-            </Tabs.Trigger>
-            <Tabs.Trigger value="system" class="text-xs gap-1.5">
-              <Database class="size-3.5" />
-              <span>System & Demo Mode</span>
-            </Tabs.Trigger>
-          </Tabs.List>
-        </Tabs.Root>
-      </div>
+      <!-- Tab Navigation (only when logged in with profile) -->
+      {#if currentUser}
+        <div class="mt-4">
+          <Tabs.Root
+            value={activeTab}
+            onValueChange={(val) => {
+              if (val) activeTab = val as SettingsTab;
+            }}
+          >
+            <Tabs.List class="w-full grid grid-cols-2">
+              <Tabs.Trigger value="profile" class="text-xs gap-1.5">
+                <User class="size-3.5" />
+                <span>Staff Profile</span>
+              </Tabs.Trigger>
+              <Tabs.Trigger value="system" class="text-xs gap-1.5">
+                <Database class="size-3.5" />
+                <span>System & Demo Mode</span>
+              </Tabs.Trigger>
+            </Tabs.List>
+          </Tabs.Root>
+        </div>
+      {/if}
     </div>
 
     <!-- Body -->
@@ -187,7 +200,7 @@
         <form onsubmit={handleSaveProfile} class="flex flex-col gap-3.5">
           <div class="grid grid-cols-2 gap-2.5">
             <div>
-              <label for="profUser" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+              <label for="profUser" class="block text-xs font-medium text-foreground mb-1">
                 Username
               </label>
               <Input
@@ -199,7 +212,7 @@
               />
             </div>
             <div>
-              <label for="profName" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+              <label for="profName" class="block text-xs font-medium text-foreground mb-1">
                 Full Name
               </label>
               <Input
@@ -215,7 +228,7 @@
           {#if currentUser?.role === "doctor"}
             <div class="grid grid-cols-2 gap-2.5">
               <div>
-                <label for="profSpec" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
+                <label for="profSpec" class="block text-xs font-medium text-foreground mb-1">
                   Specialty
                 </label>
                 <Input
@@ -227,8 +240,8 @@
                 />
               </div>
               <div>
-                <label for="profLic" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                  License #
+                <label for="profLic" class="block text-xs font-medium text-foreground mb-1">
+                  License Number
                 </label>
                 <Input
                   id="profLic"
@@ -242,8 +255,8 @@
           {/if}
 
           <div>
-            <label for="profContact" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-              Contact Detail
+            <label for="profContact" class="block text-xs font-medium text-foreground mb-1">
+              Contact Details
             </label>
             <Input
               id="profContact"
@@ -359,7 +372,7 @@
       {/if}
     </div>
 
-    <!-- Footer: Sign Out -->
+    <!-- Footer -->
     <div class="px-6 py-3 border-t border-border bg-card flex items-center justify-between">
       <Button
         type="button"
@@ -371,21 +384,35 @@
         Close
       </Button>
 
-      <Button
-        type="button"
-        variant="destructive"
-        size="sm"
-        onclick={handleLogout}
-        disabled={isLoggingOut}
-        class="h-8 text-xs cursor-pointer gap-1.5"
-      >
-        {#if isLoggingOut}
-          <Loader2 class="size-3.5 animate-spin" />
-        {:else}
-          <LogOut class="size-3.5" />
-        {/if}
-        Log Out Staff Session
-      </Button>
+      {#if currentUser}
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          onclick={handleLogout}
+          disabled={isLoggingOut}
+          class="h-8 text-xs cursor-pointer gap-1.5"
+        >
+          {#if isLoggingOut}
+            <Loader2 class="size-3.5 animate-spin" />
+          {:else}
+            <LogOut class="size-3.5" />
+          {/if}
+          Log Out Staff Session
+        </Button>
+      {:else}
+        <Button
+          type="button"
+          size="sm"
+          onclick={() => {
+            open = false;
+            onOpenAuth?.();
+          }}
+          class="h-8 text-xs cursor-pointer gap-1.5"
+        >
+          Sign In to Staff Account
+        </Button>
+      {/if}
     </div>
   </Dialog.Content>
 </Dialog.Root>

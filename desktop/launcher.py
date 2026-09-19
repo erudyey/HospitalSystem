@@ -170,10 +170,9 @@ def wait_for_server(url: str, timeout_sec: float = 10.0) -> bool:
             with urlopen(url, timeout=0.5) as resp:
                 resp.read()
                 if resp.status == 200:
-                    time.sleep(0.05)
                     return True
         except Exception:
-            time.sleep(0.1)
+            time.sleep(0.01)
     return False
 
 
@@ -303,8 +302,10 @@ def main() -> None:
         window.events.loaded += on_window_loaded
         window.events.closing += on_window_closing
 
-        logger.info("Starting pywebview desktop event loop...")
-        webview.start(debug=False)
+        cache_dir = APP_DIR / "webview_cache"
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        logger.info("Starting pywebview desktop event loop (cache: %s)...", cache_dir)
+        webview.start(debug=False, private_mode=False, storage_path=str(cache_dir))
         logger.info("pywebview event loop finished cleanly.")
     except Exception as exc:
         logger.exception("Fatal error during desktop window lifecycle: %s", exc)
