@@ -2,22 +2,34 @@ name: CI
 
 on:
   push:
-    branches: [master, modern, feature/*]
+    branches: [master, experimental, "feature/**"]
   pull_request:
-    branches: [master]
+    branches: [master, experimental]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
-    runs-on: windows-latest
+    name: Quality Gate (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v3
+        uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
+          enable-cache: true
 
-      - name: Set up Python
+      - name: Set up Python 3.12
         run: uv python install 3.12
 
       - name: Install Deno
@@ -25,26 +37,31 @@ jobs:
         with:
           deno-version: v2.x
 
-      - name: Install Python Dependencies
+      - name: Set up virtual environment and install dependencies
         run: |
           uv venv .venv
-          uv pip install --python .venv\Scripts\python.exe -e ".[dev]"
+          uv pip install -e ".[dev]"
+
+      - name: Zero Em/En Dash Compliance
+        run: |
+          uv run python -c "import os, sys; errors = [f'{os.path.join(r, fn)}: contains dash' for r, _, fs in os.walk('.') if not any(ign in r for ign in ['.git', '.venv', 'dist', 'build', 'node_modules', '.gemini']) for fn in fs if fn.endswith(('.py', '.svelte', '.ts', '.css', '.ps1', '.sh', '.md', '.json', '.html', '.yml', '.yaml')) for f in [os.path.join(r, fn)] if '\u2014' in open(f, 'r', encoding='utf-8', errors='ignore').read() or '\u2013' in open(f, 'r', encoding='utf-8', errors='ignore').read()]; (print('\n'.join(errors)) or sys.exit(1)) if errors else print('Zero em/en dashes found.')"
 
       - name: Check Formatting & Linting
         run: |
-          .venv\Scripts\ruff.exe check backend desktop package.py
-          .venv\Scripts\ruff.exe format --check backend desktop package.py
+          uv run ruff check backend desktop package.py
+          uv run ruff format --check backend desktop package.py
 
-      - name: Strict Type Check
-        run: |
-          .venv\Scripts\python.exe -m basedpyright
+      - name: Strict Python Type Check
+        run: uv run python -m basedpyright
 
-      - name: Install Frontend Dependencies & Build
+      - name: Check Workflow Formatting
+        run: deno fmt --check .github/workflows/
+
+      - name: Compile Frontend
         working-directory: ./frontend
         run: |
           deno install
           deno task build
 
       - name: Run Backend Tests
-        run: |
-          .venv\Scripts\pytest.exe backend/tests/
+        run: uv run pytest backend/tests/ -v

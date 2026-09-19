@@ -40,6 +40,7 @@ contributors working on the HospitalSystem codebase.
 | **Desktop**     | `pywebview` 6.x (WebView2 / WebKit)        | `desktop/launcher.py` | Single-instance lock, loopback token auth |
 | **Persistence** | SQLite with WAL mode & foreign keys        | OS AppData / Library  | Production database: `clinic.sqlite3`     |
 | **Packaging**   | PyInstaller 6.x, `package.py`              | `desktop.spec`        | Generates `.exe` (Win) or `.app` (macOS), supports `--quick` / `--clean` |
+| **CI/CD**       | GitHub Actions (`ci.yml`, `release.yml`)   | `.github/workflows/`  | Multi-OS quality gates, pre-flight checks, SHA-256 release assets |
 | **Task Runner** | PowerShell 7+ (`run.ps1`), Bash (`run.sh`) | Repo Root             | Unified CLI automation with `-Quick` / `--quick` iteration modes         |
 
 ---
@@ -105,6 +106,20 @@ contributors working on the HospitalSystem codebase.
   (PowerShell, WebView2, Win32 mutex) and macOS (Bash, Apple WebKit, POSIX
   flock). Never hardcode Windows-only path separators or commands without
   platform checks.
+- **CI/CD Pipeline and Release Invariants**:
+  - **Release Naming Convention**: All releases published via GitHub Actions must
+    be named `Release vX.Y.Z` (e.g. `Release v0.0.1`), never `(Project Name) vx.x.x`.
+  - **Mandatory Pre-Flight Gate**: The `release.yml` pipeline executes all 6 quality
+    gates and verifies SemVer tag compliance (`^v[0-9]+\.[0-9]+\.[0-9]+.*$`) before
+    invoking multi-platform build runners.
+  - **Cross-Platform Bundle Verification**:
+    - Windows builds are verified via `desktop/verify_bundle.py`.
+    - macOS application bundles are verified via `dist/HospitalSystem.app/Contents/MacOS/HospitalSystem --verify`.
+  - **Artifact Integrity & Checksums**: Every release must generate `SHA256SUMS.txt`
+    containing SHA-256 digests for all attached binaries, accompanied by an inline
+    verification markdown table in the release notes.
+  - **Concurrency Protection**: Releases serialize on `release-${{ github.ref_name }}`
+    to eliminate parallel publishing races and duplicated release notes.
 
 ---
 

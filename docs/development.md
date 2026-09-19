@@ -311,7 +311,51 @@ This verification script tests:
 
 ---
 
-## 6. Database Seeding
+## 6. Continuous Integration & Release Automation
+
+The repository utilizes GitHub Actions to enforce quality gates and automate
+cross-platform desktop releases:
+
+### Continuous Integration (`.github/workflows/ci.yml`)
+
+- **Trigger Scope**: Executes automatically on pushes to `master`, `experimental`,
+  and `feature/**` branches, and on pull requests targeting `master` or
+  `experimental`.
+- **Multi-OS Quality Matrix**: Runs across both `windows-latest` and `macos-latest`
+  to ensure cross-platform compatibility.
+- **Concurrency Control**: Automatically cancels outdated in-progress runs when
+  new commits are pushed (`cancel-in-progress: true`).
+- **Pipeline Stages**:
+  1. Sets up `uv` package manager with persistent dependency caching.
+  2. Verifies zero em/en dash policy across code and documentation.
+  3. Verifies Ruff code formatting and linting rules.
+  4. Runs strict Python static type checking with `basedpyright`.
+  5. Validates GitHub workflow formatting with Deno (`deno fmt`).
+  6. Compiles Svelte 5 frontend with Deno 2.
+  7. Executes the full 76-test unit and integration test suite with `pytest`.
+
+### Release Workflow (`.github/workflows/release.yml`)
+
+- **Trigger Scope**: Executes on version tag pushes (`v*`) or manual execution via
+  `workflow_dispatch`.
+- **Naming Standard**: All releases are published with the title `Release vX.Y.Z`
+  (e.g. `Release v0.0.1`).
+- **Pre-Flight Quality Gate**: Before allocating build machines, the workflow runs
+  all 6 quality gates and validates SemVer tag compliance. If any check fails, the
+  release aborts immediately.
+- **Cross-Platform Bundling & Verification**:
+  - Windows: Freezes `dist/HospitalSystem-Windows-x64.exe` and verifies via
+    `desktop/verify_bundle.py`.
+  - macOS: Freezes `dist/HospitalSystem.app`, verifies bootstrapping via
+    `dist/HospitalSystem.app/Contents/MacOS/HospitalSystem --verify`, and zips to
+    `HospitalSystem-macOS.zip`.
+- **Integrity Checksums**: Computes SHA-256 hashes for all binaries, creates an
+  attached `SHA256SUMS.txt`, and embeds a markdown verification table directly in
+  the release notes.
+
+---
+
+## 7. Database Seeding
 
 The `seed` management command populates your local database with realistic
 sample patients and appointments so the application looks and behaves like a
