@@ -10,9 +10,9 @@ all UI/UX workflows to use standard default shadcn-svelte components.
 ## Progress Overview
 
 - Total Tasks: 30
-- Completed: 26
+- Completed: 29
 - In Progress: 1
-- Remaining: 3
+- Remaining: 0
 
 ---
 
@@ -197,7 +197,7 @@ all UI/UX workflows to use standard default shadcn-svelte components.
 
 ## Phase 10: Authoritative 6-Gate Verification & Desktop Packaging
 
-- [ ] **Task 10.1: Full Repository Quality Gates**
+- [x] **Task 10.1: Full Repository Quality Gates**
   - Execute backend pytest suite: `uv run pytest backend/tests/ -v` (100% pass rate).
   - Execute strict type checking: `.venv/Scripts/python.exe -m basedpyright` (0 errors).
   - Execute style checks: `uv run ruff check` and `uv run ruff format --check`.
@@ -205,7 +205,7 @@ all UI/UX workflows to use standard default shadcn-svelte components.
   - Execute zero em/en dash verification script across repository.
   - Execute standalone bundle verification: `.venv/Scripts/python.exe desktop/verify_bundle.py`.
 
-- [ ] **Task 10.2: Clean Standalone Desktop Packaging**
+- [x] **Task 10.2: Clean Standalone Desktop Packaging**
   - Run packaging script: `python package.py --clean`.
   - Verify generated `dist/HospitalSystem.exe` launches instantly, respects persistent cache, displays single-track filter tabs, and provides unified contextual settings.
 
@@ -219,7 +219,7 @@ all UI/UX workflows to use standard default shadcn-svelte components.
   - In `publish-release`, conditionally set `prerelease` and `make_latest` flags based on pre-flight detection so experimental releases never overwrite the `latest` production release (`v0.0.1`).
   - Format with `deno fmt .github/workflows/` and verify zero em/en dashes.
 
-- [ ] **Task 11.2: Tag and Trigger Experimental Pre-Release**
+- [x] **Task 11.2: Tag and Trigger Experimental Pre-Release**
   - Tag verified commit on `experimental` branch as `v0.0.2-rc`.
   - Push tag to origin: `git push origin v0.0.2-rc` (or trigger workflow dispatch on `experimental`).
 
