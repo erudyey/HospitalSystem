@@ -465,6 +465,14 @@ export const api = {
 
     listDoctors: () => request<StaffUser[]>("/api/doctors/"),
   },
+  demo: {
+    accounts: () => request<StaffUser[]>("/api/demo/accounts/"),
+    login: async (accountId: number) => {
+      const session = await request<UserSession>("/api/demo/login/", { method: "POST", body: JSON.stringify({ account_id: accountId }) });
+      await setUserToken(session.token, false);
+      return session;
+    },
+  },
 
   // Clinical & Doctor Methods
   clinical: {

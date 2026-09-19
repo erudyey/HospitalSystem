@@ -224,7 +224,11 @@ class AppointmentAudit(models.Model):
         Appointment, on_delete=models.CASCADE, related_name="audit_events"
     )
     actor = models.ForeignKey(
-        StaffUser, on_delete=models.SET_NULL, null=True, blank=True, related_name="appointment_audits"
+        StaffUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="appointment_audits",
     )
     event = models.CharField(max_length=40)
     reason = models.CharField(max_length=255, blank=True, default="")

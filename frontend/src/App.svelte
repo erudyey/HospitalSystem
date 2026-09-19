@@ -52,7 +52,7 @@
   let isSwitchingMode = $state(false);
 
   async function handleSwitchMode() {
-    if (currentUser || isSwitchingMode) return;
+    if (isSwitchingMode) return;
     isSwitchingMode = true;
     try {
       await switchApplicationMode(demoMode ? "clinic" : "demo");
@@ -134,25 +134,6 @@
       isAuthModalOpen = true;
     } finally {
       isAuthChecking = false;
-    }
-  }
-
-  async function switchDemoUser(username: string) {
-    try {
-      // Preserve current persistence preference (if user has token in localStorage, keep remembered)
-      const isPersistent = Boolean(localStorage.getItem("user_token"));
-      const session = await api.auth.login(username, "password123", isPersistent);
-      currentUser = session.user;
-      if (currentUser.role === "doctor") {
-        activeWorkspace = "doctor_workspace";
-      } else {
-        activeWorkspace = "appointments";
-      }
-      toast.success(
-        `Switched account to ${currentUser.full_name || currentUser.username} (${currentUser.role}).`
-      );
-    } catch {
-      toast.error("Failed to switch demo account.");
     }
   }
 
@@ -378,7 +359,7 @@
         </span>
       </div>
 
-      <!-- Center: 1-Click Passwordless Demo Switcher (if Demo Mode ON) -->
+      <!-- Demo account switcher -->
       {#if demoMode}
         <div class="hidden lg:flex items-center bg-muted/60 p-0.5 rounded-lg border border-border/60 text-xs shadow-2xs">
           <span class="text-[11px] font-medium text-muted-foreground px-2 flex items-center gap-1">
@@ -386,34 +367,7 @@
             <span>Demo:</span>
           </span>
 
-          <button
-            type="button"
-            onclick={() => switchDemoUser("maria")}
-            class="h-7 px-2.5 rounded-md text-xs font-medium transition-colors cursor-pointer {currentUser?.username === 'maria' ? 'bg-background text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'}"
-          >
-            Receptionist
-          </button>
-          <button
-            type="button"
-            onclick={() => switchDemoUser("dreyes")}
-            class="h-7 px-2.5 rounded-md text-xs font-medium transition-colors cursor-pointer {currentUser?.username === 'dreyes' ? 'bg-background text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'}"
-          >
-            Dr. Reyes
-          </button>
-          <button
-            type="button"
-            onclick={() => switchDemoUser("dsantos")}
-            class="h-7 px-2.5 rounded-md text-xs font-medium transition-colors cursor-pointer {currentUser?.username === 'dsantos' ? 'bg-background text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'}"
-          >
-            Dr. Santos
-          </button>
-          <button
-            type="button"
-            onclick={() => switchDemoUser("dtan")}
-            class="h-7 px-2.5 rounded-md text-xs font-medium transition-colors cursor-pointer {currentUser?.username === 'dtan' ? 'bg-background text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground'}"
-          >
-            Dr. Tan
-          </button>
+          <button type="button" onclick={() => (isAuthModalOpen = true)} class="h-7 px-2.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer">Switch account</button>
         </div>
       {/if}
 
@@ -488,7 +442,7 @@
           <Button variant="outline" size="sm" class="mt-3" disabled={isSwitchingMode} onclick={handleSwitchMode}>
             {isSwitchingMode ? "Switching mode..." : demoMode ? "Return to clinic mode" : "Try demo"}
           </Button>
-          <p class="text-xs text-muted-foreground mt-2">The app restarts when switching modes. Demo data is separate from clinic records.</p>
+          <p class="text-xs text-muted-foreground mt-2">Demo data is separate from clinic records.</p>
         </div>
       {:else if activeWorkspace === "doctor_workspace" && currentUser?.role === "doctor"}
         <DoctorWorkspace activeDoctor={currentUser} />
@@ -518,6 +472,7 @@
     }}
     onLogout={handleLogout}
     onOpenAuth={() => (isAuthModalOpen = true)}
+    onSwitchMode={handleSwitchMode}
   />
 
   <!-- Auth Gateway Modal -->
