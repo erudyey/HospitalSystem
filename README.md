@@ -115,7 +115,11 @@ On macOS / Linux:
 ./run.sh desktop
 ```
 
-For the isolated evaluation data set and sample accounts, launch with `--demo`:
+On the desktop sign-in screen, select **Try demo** to restart with the separate
+demo database and sample accounts. Sign out and select **Return to clinic mode**
+to switch back. Switching modes leaves you signed out.
+
+You can also launch with `--demo`:
 
 ```bash
 ./run.sh desktop --demo

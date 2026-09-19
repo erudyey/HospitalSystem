@@ -76,7 +76,7 @@
   });
 
   function toggleDemoMode() {
-    toast.info("Demo mode is selected when HospitalSystem starts. Relaunch with --demo to use the separate demo database.");
+    toast.info("Sign out and choose Try demo on the sign-in screen. To leave demo mode, sign out and choose Return to clinic mode.");
   }
 
   async function handleSaveProfile(e: SubmitEvent) {
@@ -317,7 +317,7 @@
                 </Badge>
               </div>
               <p class="text-xs text-muted-foreground leading-relaxed">
-                Demo mode uses a separate database and provides the sample accounts for evaluation. Select it when starting HospitalSystem with the --demo option.
+                Demo mode uses a separate database and sample accounts. Sign out to switch modes from the sign-in screen.
               </p>
             </div>
 

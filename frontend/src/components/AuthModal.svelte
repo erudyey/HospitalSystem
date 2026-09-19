@@ -27,12 +27,16 @@
   interface Props {
     open?: boolean;
     demoMode?: boolean;
+    isSwitchingMode?: boolean;
+    onSwitchMode?: () => void;
     onSuccess?: (user: StaffUser) => void;
   }
 
   let {
     open = $bindable(false),
-    demoMode = true,
+    demoMode = false,
+    isSwitchingMode = false,
+    onSwitchMode,
     onSuccess,
   }: Props = $props();
 
@@ -196,6 +200,17 @@
 
     <!-- Modal Body -->
     <div class="px-6 py-4">
+      {#if onSwitchMode}
+        <div class="mb-4 rounded-lg border border-border p-3">
+          <p class="text-xs text-muted-foreground mb-2">
+            {demoMode ? "You are using the separate demo database." : "Explore with sample accounts in a separate demo database."}
+            The app restarts when switching modes.
+          </p>
+          <Button type="button" variant="outline" size="sm" class="w-full" disabled={isSubmitting || isSwitchingMode} onclick={onSwitchMode}>
+            {isSwitchingMode ? "Switching mode..." : demoMode ? "Return to clinic mode" : "Try demo"}
+          </Button>
+        </div>
+      {/if}
       {#if activeTab === "login"}
         <!-- Demo Mode Quick Fill Chips -->
         {#if demoMode}

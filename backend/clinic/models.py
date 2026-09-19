@@ -147,6 +147,7 @@ class Appointment(models.Model):
     id: int
     patient_id: int
     doctor_id: int | None
+    conflict_overridden_by_id: int | None
     patient = models.ForeignKey(
         Patient,
         on_delete=models.CASCADE,

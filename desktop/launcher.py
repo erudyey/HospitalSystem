@@ -66,13 +66,15 @@ def get_app_dir(*, create: bool = False) -> Path:
 
 
 IS_VERIFY_MODE = "--verify" in sys.argv
-IS_DEMO_MODE = "--demo" in sys.argv
+IS_DEMO_MODE = "--clinic" not in sys.argv and (
+    "--demo" in sys.argv or os.environ.get("HOSPITAL_MODE") == "demo"
+)
 if IS_VERIFY_MODE and not os.environ.get("HOSPITAL_DATA_DIR"):
     _verification_dir = Path(tempfile.mkdtemp(prefix="hospitalsystem-verify-"))
     os.environ["HOSPITAL_DATA_DIR"] = str(_verification_dir)
 else:
     _verification_dir = None
-os.environ.setdefault("HOSPITAL_MODE", "demo" if IS_DEMO_MODE else "clinic")
+os.environ["HOSPITAL_MODE"] = "demo" if IS_DEMO_MODE else "clinic"
 
 APP_DIR = (
     Path(os.environ["HOSPITAL_DATA_DIR"])
@@ -246,7 +248,16 @@ def main() -> None:
 
     try:
         server = create_server(application, host="127.0.0.1", port=port, threads=4)
-        server_thread = threading.Thread(target=server.run, daemon=True)
+        server_stopping = threading.Event()
+
+        def run_server():
+            try:
+                server.run()
+            except OSError:
+                if not server_stopping.is_set():
+                    raise
+
+        server_thread = threading.Thread(target=run_server, daemon=True)
         server_thread.start()
         logger.info("Waitress WSGI server started on 127.0.0.1:%d", port)
     except Exception as exc:
@@ -266,11 +277,19 @@ def main() -> None:
     with contextlib.suppress(Exception):
         STATE_FILE.write_text(json.dumps(state_data), encoding="utf-8")
 
-    # Clean shutdown hook
+    # Cleanup can be called by both window closure and process exit.
+    cleaned_up = False
+
     def cleanup_server():
+        nonlocal cleaned_up
+        if cleaned_up:
+            return
+        cleaned_up = True
         logger.info("Executing server cleanup...")
+        server_stopping.set()
         with contextlib.suppress(Exception):
             server.close()
+        server_thread.join(timeout=2)
         with contextlib.suppress(Exception):
             if STATE_FILE.exists():
                 STATE_FILE.unlink()
@@ -315,18 +334,31 @@ def main() -> None:
         )
         sys.exit(1)
 
+    pending_mode: str | None = None
+
     class DesktopHostApi:
         """Expose safe, minimal JS bridge."""
 
         def get_session_token(self) -> str:
             return session_token
 
+        def switch_mode(self, mode: str) -> None:
+            nonlocal pending_mode
+            if mode not in ("clinic", "demo"):
+                raise ValueError("Unknown application mode.")
+            if pending_mode is not None:
+                return
+            pending_mode = mode
+            if window is not None:
+                window.destroy()
+
     api = DesktopHostApi()
 
     try:
         window = webview.create_window(
             title="Hospital Management System",
-            url=f"http://127.0.0.1:{port}/?token={session_token}",
+            url=f"http://127.0.0.1:{port}/?token={session_token}"
+            + ("&signed_out=1" if "--signed-out" in sys.argv else ""),
             width=1320,
             height=840,
             min_size=(1024, 700),
@@ -351,6 +383,11 @@ def main() -> None:
         logger.info("Starting pywebview desktop event loop (cache: %s)...", cache_dir)
         webview.start(debug=False, private_mode=False, storage_path=str(cache_dir))
         logger.info("pywebview event loop finished cleanly.")
+        cleanup_server()
+        if pending_mode is not None:
+            from desktop.relaunch import restart_application
+
+            restart_application(pending_mode)
     except Exception as exc:
         logger.exception("Fatal error during desktop window lifecycle: %s", exc)
         show_error_dialog("Desktop Window Error", f"Fatal error during desktop execution:\n\n{exc}")
