@@ -56,11 +56,15 @@ def _appointment_snapshot(appointment: Appointment) -> dict[str, str | int | Non
         "app_date": appointment.app_date.isoformat(),
         "app_time": appointment.app_time.strftime("%H:%M"),
         "status": appointment.status,
-        "checked_in_at": appointment.checked_in_at.isoformat() if appointment.checked_in_at else None,
+        "checked_in_at": appointment.checked_in_at.isoformat()
+        if appointment.checked_in_at
+        else None,
     }
 
 
-def _audit(appointment: Appointment, event: str, actor_id: int | None, reason: str = "", before=None) -> None:
+def _audit(
+    appointment: Appointment, event: str, actor_id: int | None, reason: str = "", before=None
+) -> None:
     AppointmentAudit.objects.create(
         appointment=appointment,
         actor_id=actor_id,
@@ -222,7 +226,8 @@ def book_appointment(
         try:
             _validate_future_slot(parsed_date, parsed_time)
         except ValidationError as exc:
-            errors.update(exc.message_dict)
+            for field, messages in exc.message_dict.items():
+                errors[field] = " ".join(messages)
     if errors or parsed_date is None or patient is None:
         raise ValidationError(errors)
 
@@ -701,7 +706,11 @@ def update_staff_profile(
                 errors["new_password"] = "New password must be at least 6 characters long."
             elif len(clean_username) > 50:
                 errors["username"] = "Username must be at most 50 characters long."
-            elif StaffUser.objects.filter(username__iexact=clean_username).exclude(id=staff.id).exists():
+            elif (
+                StaffUser.objects.filter(username__iexact=clean_username)
+                .exclude(id=staff.id)
+                .exists()
+            ):
                 errors["username"] = "This username is already taken."
 
         if errors:
@@ -787,16 +796,38 @@ def ensure_demo_data() -> None:
             return
         patients = []
         names = [
-            "Alex Rivera", "Jamie Lim", "Morgan Cruz", "Taylor Reyes", "Casey Flores", "Avery Santos",
-            "Riley Garcia", "Jordan Tan", "Parker Diaz", "Quinn Ramos", "Skyler Navarro", "Drew Torres",
-            "Cameron Aquino", "Emerson Go", "Finley Chua", "Hayden Ong", "Rowan Bautista", "Sage Villanueva",
+            "Alex Rivera",
+            "Jamie Lim",
+            "Morgan Cruz",
+            "Taylor Reyes",
+            "Casey Flores",
+            "Avery Santos",
+            "Riley Garcia",
+            "Jordan Tan",
+            "Parker Diaz",
+            "Quinn Ramos",
+            "Skyler Navarro",
+            "Drew Torres",
+            "Cameron Aquino",
+            "Emerson Go",
+            "Finley Chua",
+            "Hayden Ong",
+            "Rowan Bautista",
+            "Sage Villanueva",
         ]
         for index, name in enumerate(names, start=1):
-            patients.append(Patient.objects.create(full_name=name, contact=f"0917000{index:04d}", age=18 + index))
+            patients.append(
+                Patient.objects.create(
+                    full_name=name, contact=f"0917000{index:04d}", age=18 + index
+                )
+            )
         doctors = [user for user in staff if user.role == StaffRole.DOCTOR]
         statuses = [
-            AppointmentStatus.SCHEDULED, AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_CONSULTATION,
-            AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED,
+            AppointmentStatus.SCHEDULED,
+            AppointmentStatus.CHECKED_IN,
+            AppointmentStatus.IN_CONSULTATION,
+            AppointmentStatus.COMPLETED,
+            AppointmentStatus.CANCELLED,
         ]
         anchor = clinic_now().date()
         for index in range(24):
@@ -804,20 +835,75 @@ def ensure_demo_data() -> None:
             doctor = doctors[index % len(doctors)]
             day = anchor + timedelta(days=(index % 8) - 3)
             appointment = Appointment.objects.create(
-                patient=patients[index % len(patients)], doctor=doctor, doctor_name=doctor.full_name,
-                app_date=day, app_time=time(9 + (index % 6), (index // 3 % 4) * 15),
-                reason_for_visit="Sample consultation", status=status,
-                checked_in_at=timezone.now() if status in (AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_CONSULTATION, AppointmentStatus.COMPLETED) else None,
+                patient=patients[index % len(patients)],
+                doctor=doctor,
+                doctor_name=doctor.full_name,
+                app_date=day,
+                app_time=time(9 + (index % 6), (index // 3 % 4) * 15),
+                reason_for_visit="Sample consultation",
+                status=status,
+                checked_in_at=timezone.now()
+                if status
+                in (
+                    AppointmentStatus.CHECKED_IN,
+                    AppointmentStatus.IN_CONSULTATION,
+                    AppointmentStatus.COMPLETED,
+                )
+                else None,
             )
             if status == AppointmentStatus.COMPLETED:
                 record = MedicalRecord.objects.create(
-                    patient=appointment.patient, doctor=doctor, appointment=appointment,
-                    diagnosis="Sample follow-up", clinical_notes="Demo clinical history.",
+                    patient=appointment.patient,
+                    doctor=doctor,
+                    appointment=appointment,
+                    diagnosis="Sample follow-up",
+                    clinical_notes="Demo clinical history.",
                 )
-                MedicalRecordRevision.objects.create(record=record, revision=1, correction_reason="Initial demo record", diagnosis=record.diagnosis, symptoms="", clinical_notes=record.clinical_notes, prescription="", follow_up_advice="", changed_by=doctor)
+                MedicalRecordRevision.objects.create(
+                    record=record,
+                    revision=1,
+                    correction_reason="Initial demo record",
+                    diagnosis=record.diagnosis,
+                    symptoms="",
+                    clinical_notes=record.clinical_notes,
+                    prescription="",
+                    follow_up_advice="",
+                    changed_by=doctor,
+                )
         DemoSeedState.objects.update_or_create(
-            key="default", defaults={"version": DEMO_SEED_VERSION, "account_ids": {u.username: u.id for u in staff}}
+            key="default",
+            defaults={
+                "version": DEMO_SEED_VERSION,
+                "account_ids": {u.username: u.id for u in staff},
+            },
         )
+
+
+def list_demo_accounts() -> list[StaffUser]:
+    """Return active fixture accounts by their persistent seeded IDs."""
+    if os.environ.get("HOSPITAL_MODE") != "demo":
+        raise ValidationError({"mode": "Demo accounts are only available in demo mode."})
+    state = DemoSeedState.objects.filter(key="default").first()
+    if state is None:
+        return []
+    ids = [value for value in state.account_ids.values() if isinstance(value, int)]
+    return list(StaffUser.objects.filter(id__in=ids, is_active=True).order_by("role", "full_name"))
+
+
+def authenticate_demo_account(
+    account_id: int, previous_token: str = ""
+) -> tuple[StaffUser, UserSession]:
+    """Issue an in-memory demo session for a seeded account without credentials."""
+    accounts = {account.id: account for account in list_demo_accounts()}
+    staff = accounts.get(account_id)
+    if staff is None:
+        raise ValidationError({"account_id": "This demo account is unavailable."})
+    with transaction.atomic():
+        if previous_token:
+            UserSession.objects.filter(token=previous_token).delete()
+        session = UserSession(token=secrets.token_urlsafe(48), user=staff)
+        session.save()
+    return staff, session
 
 
 def ensure_default_staff() -> list[StaffUser]:

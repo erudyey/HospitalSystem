@@ -61,38 +61,28 @@
   let isSubmitting = $state(false);
   let formErrors = $state<Record<string, string[]>>({});
 
-  // Quick Demo Fill Profiles
-  const demoProfiles = [
-    {
-      username: "maria",
-      password: "password123",
-      label: "Receptionist (Maria)",
-      role: "receptionist",
-    },
-    {
-      username: "dreyes",
-      password: "password123",
-      label: "Dr. Elena Reyes (General Medicine)",
-      role: "doctor",
-    },
-    {
-      username: "dsantos",
-      password: "password123",
-      label: "Dr. Marco Santos (Pediatrics)",
-      role: "doctor",
-    },
-    {
-      username: "dtan",
-      password: "password123",
-      label: "Dr. Chloe Tan (Cardiology)",
-      role: "doctor",
-    },
-  ];
+  let demoAccounts = $state<StaffUser[]>([]);
+  let isLoadingDemo = $state(false);
 
-  function quickFill(profile: (typeof demoProfiles)[0]) {
-    loginUsername = profile.username;
-    loginPassword = profile.password;
+  async function loadDemoAccounts() {
+    if (!demoMode) return;
+    isLoadingDemo = true;
+    try { demoAccounts = await api.demo.accounts(); }
+    catch (err) { const error = err as ApiError; formErrors = error.fields || { general: [error.message] }; }
+    finally { isLoadingDemo = false; }
+  }
+
+  $effect(() => { if (open && demoMode) void loadDemoAccounts(); });
+
+  async function chooseDemoAccount(account: StaffUser) {
+    isSubmitting = true;
     formErrors = {};
+    try {
+      const session = await api.demo.login(account.id);
+      open = false;
+      onSuccess?.(session.user);
+    } catch (err) { const error = err as ApiError; formErrors = error.fields || { general: [error.message] }; }
+    finally { isSubmitting = false; }
   }
 
   async function handleLogin(e: SubmitEvent) {
@@ -214,28 +204,29 @@
         </div>
       {/if}
       {#if activeTab === "login"}
-        <!-- Demo Mode Quick Fill Chips -->
+        <!-- Demo account chooser -->
         {#if demoMode}
           <div class="mb-4 rounded-lg border border-border bg-muted/40 p-3 text-xs">
             <div class="flex items-center gap-1.5 font-medium text-foreground mb-2">
               <Sparkles class="size-3.5 text-muted-foreground" />
-              <span>Demo Mode -- Quick Fill Credentials</span>
+              <span>Choose a demo account</span>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-              {#each demoProfiles as p}
+              {#each demoAccounts as account (account.id)}
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  onclick={() => quickFill(p)}
+                  onclick={() => chooseDemoAccount(account)}
                   class="h-auto py-1.5 px-2.5 justify-between font-normal text-[11px] text-left border bg-background hover:bg-muted/70 cursor-pointer"
                 >
-                  <span class="font-medium text-foreground truncate">{p.label}</span>
+                  <span class="font-medium text-foreground truncate">{account.full_name}{account.specialty ? ` (${account.specialty})` : ""}</span>
                   <Badge variant="secondary" class="text-[9px] px-1 py-0 uppercase ml-1 shrink-0 font-normal">
-                    {p.role}
+                    {account.role_label}
                   </Badge>
                 </Button>
               {/each}
+              {#if isLoadingDemo}<span class="text-muted-foreground">Loading demo accounts...</span>{/if}
             </div>
           </div>
         {/if}

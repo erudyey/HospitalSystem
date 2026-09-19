@@ -270,7 +270,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.pre-flight-check.outputs.tag_name }}
-          name: Release ${{ needs.pre-flight-check.outputs.tag_name }}
+          name: ${{ needs.pre-flight-check.outputs.tag_name }}
           body_path: release_notes.md
           files: |
             release_assets/HospitalSystem-Windows-x64.exe

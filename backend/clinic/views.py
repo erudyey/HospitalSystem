@@ -200,7 +200,7 @@ def health_check(_request: HttpRequest) -> JsonResponse:
     return JsonResponse(
         {
             "status": "ok",
-            "version": "0.1.0-alpha.1",
+            "version": "0.1.0-beta.1",
             "mode": os.environ.get("HOSPITAL_MODE", "clinic"),
             **services.clinic_context(),
         }
@@ -356,10 +356,14 @@ def appointment_walk_in(request: HttpRequest) -> JsonResponse:
     """Check a patient in immediately using the server's clinic-local clock."""
     user, response = receptionist_required(request)
     if response is not None or user is None:
-        return response or JsonResponse(format_error("UNAUTHENTICATED", "Active session required."), status=401)
+        return response or JsonResponse(
+            format_error("UNAUTHENTICATED", "Active session required."), status=401
+        )
     data, err_response = parse_json(request)
     if err_response or data is None:
-        return err_response or JsonResponse(format_error("BAD_REQUEST", "Request body must not be empty."), status=400)
+        return err_response or JsonResponse(
+            format_error("BAD_REQUEST", "Request body must not be empty."), status=400
+        )
     now = services.clinic_now()
     try:
         appointment = services.book_appointment(
@@ -514,7 +518,11 @@ def auth_register(request: HttpRequest) -> JsonResponse:
     try:
         username = get_string(data, "username")
         password = get_string(data, "password")
-        confirmation = get_string(data, "password_confirmation") if "password_confirmation" in data else password
+        confirmation = (
+            get_string(data, "password_confirmation")
+            if "password_confirmation" in data
+            else password
+        )
         if password != confirmation:
             raise ValidationError({"password_confirmation": "Passwords do not match."})
         payload = {
@@ -561,6 +569,34 @@ def auth_login(request: HttpRequest) -> JsonResponse:
         )
     except ValidationError as err:
         return validation_error_response(err, "Authentication failed.")
+
+
+@require_GET
+def demo_accounts(_request: HttpRequest) -> JsonResponse:
+    """Expose active seeded demo accounts only inside the isolated demo database."""
+    try:
+        return JsonResponse(
+            [serialize_staff_user(user) for user in services.list_demo_accounts()], safe=False
+        )
+    except ValidationError as err:
+        return validation_error_response(err, "Demo accounts are unavailable.")
+
+
+@require_http_methods(["POST"])
+def demo_login(request: HttpRequest) -> JsonResponse:
+    """Sign into a seeded demo account using its stable fixture identifier."""
+    data, err_response = parse_json(request)
+    if err_response or data is None:
+        return err_response or JsonResponse(
+            format_error("BAD_REQUEST", "Request body must not be empty."), status=400
+        )
+    try:
+        account_id = get_int(data, "account_id", required=True)
+        token = request.headers.get("X-User-Token", "")
+        user, session = services.authenticate_demo_account(account_id or 0, token)
+        return JsonResponse({"token": session.token, "user": serialize_staff_user(user)})
+    except ValidationError as err:
+        return validation_error_response(err, "Demo sign-in failed.")
 
 
 @require_GET

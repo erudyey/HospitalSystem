@@ -31,6 +31,7 @@
     onProfileUpdated?: (user: StaffUser) => void;
     onLogout?: () => void;
     onOpenAuth?: () => void;
+    onSwitchMode?: () => void;
   }
 
   let {
@@ -41,6 +42,7 @@
     onProfileUpdated,
     onLogout,
     onOpenAuth,
+    onSwitchMode,
   }: Props = $props();
 
   type SettingsTab = "profile" | "system";
@@ -80,7 +82,7 @@
   });
 
   function toggleDemoMode() {
-    toast.info("Sign out and choose Try demo on the sign-in screen. To leave demo mode, sign out and choose Return to clinic mode.");
+    onSwitchMode?.();
   }
 
   async function handleSaveProfile(e: SubmitEvent) {
@@ -340,7 +342,7 @@
               class="h-8 text-xs shrink-0 cursor-pointer"
               onclick={toggleDemoMode}
             >
-              How to launch demo
+              {demoMode ? "Return to clinic" : "Try demo"}
             </Button>
           </div>
 

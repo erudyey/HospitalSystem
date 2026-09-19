@@ -365,8 +365,9 @@ def main() -> None:
         def clear_remembered_token(self) -> None:
             try:
                 import keyring
+                from keyring.errors import PasswordDeleteError
 
-                with contextlib.suppress(keyring.errors.PasswordDeleteError):
+                with contextlib.suppress(PasswordDeleteError):
                     keyring.delete_password(credential_service, "staff-session")
             except Exception as exc:
                 logger.info("Could not clear secure credential: %s", exc)

@@ -5,39 +5,64 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('clinic', '0004_beta_stabilization'),
+        ("clinic", "0004_beta_stabilization"),
     ]
 
     operations = [
         migrations.CreateModel(
-            name='DemoSeedState',
+            name="DemoSeedState",
             fields=[
-                ('key', models.CharField(default='default', max_length=40, primary_key=True, serialize=False)),
-                ('version', models.PositiveIntegerField(default=1)),
-                ('account_ids', models.JSONField(blank=True, default=dict)),
-                ('seeded_at', models.DateTimeField(auto_now=True)),
+                (
+                    "key",
+                    models.CharField(
+                        default="default", max_length=40, primary_key=True, serialize=False
+                    ),
+                ),
+                ("version", models.PositiveIntegerField(default=1)),
+                ("account_ids", models.JSONField(blank=True, default=dict)),
+                ("seeded_at", models.DateTimeField(auto_now=True)),
             ],
             options={
-                'db_table': 'clinic_demo_seed_state',
+                "db_table": "clinic_demo_seed_state",
             },
         ),
         migrations.CreateModel(
-            name='AppointmentAudit',
+            name="AppointmentAudit",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('event', models.CharField(max_length=40)),
-                ('reason', models.CharField(blank=True, default='', max_length=255)),
-                ('before', models.JSONField(blank=True, default=dict)),
-                ('after', models.JSONField(blank=True, default=dict)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('actor', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='appointment_audits', to='clinic.staffuser')),
-                ('appointment', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='audit_events', to='clinic.appointment')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("event", models.CharField(max_length=40)),
+                ("reason", models.CharField(blank=True, default="", max_length=255)),
+                ("before", models.JSONField(blank=True, default=dict)),
+                ("after", models.JSONField(blank=True, default=dict)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                (
+                    "actor",
+                    models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="appointment_audits",
+                        to="clinic.staffuser",
+                    ),
+                ),
+                (
+                    "appointment",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="audit_events",
+                        to="clinic.appointment",
+                    ),
+                ),
             ],
             options={
-                'db_table': 'clinic_appointment_audits',
-                'ordering': ['id'],
+                "db_table": "clinic_appointment_audits",
+                "ordering": ["id"],
             },
         ),
     ]
