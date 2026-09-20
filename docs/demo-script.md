@@ -1,70 +1,73 @@
-# Demo script and runbook
+# Demo instructions
 
-This is an eight-minute presentation for three speakers. Keep one minute free for delays so the presentation stays under ten minutes. The spoken lines are prompts, not lines that must be memorized.
+## Before you start
 
-## Part 1: Introduction (Speaker 1, about 60 seconds)
+- Open the `0.1.0-beta.1` build, choose **Try demo**, and wait for the app to restart.
+- Check that **Maria Santos** and **Dr. Chloe Tan** appear in the demo account chooser.
+- Use a fictional patient: **Jordan Lee**, age **29**, contact **0917 555 0142**.
+- Pick a future date and two available appointment times at least 15 minutes apart.
+- Keep these sample consultation details ready:
+  - Symptoms: Headache and sore throat for two days.
+  - Diagnosis: Acute upper respiratory tract infection.
+  - Notes: Stable vital signs. Mild throat redness observed.
+  - Prescription: Paracetamol 500 mg as needed for fever.
+  - Follow-up: Return in seven days if symptoms persist.
 
-### Prepare before presenting
+## Speaker 1: Introduce the app
 
-- Launch the `0.1.0-beta.1` build and confirm it opens normally.
-- Choose **Try demo** from the sign-in screen. The app restarts when moving between clinic and demo mode. Wait for the demo sign-in screen.
-- Confirm the chooser lists **Maria Santos** and the physician you will use. Use Dr. Chloe Tan if available.
-- Prepare one fictional patient: **Jordan Lee**, age 29, contact `0917 555 0142`.
-- Prepare notes for the consultation: symptoms "Headache and sore throat for two days"; diagnosis "Acute upper respiratory tract infection"; notes "Stable vital signs. Mild throat redness observed."; prescription "Paracetamol 500 mg as needed for fever"; follow-up "Return in seven days if symptoms persist."
-- Choose a future appointment time and a second time at least 15 minutes away. Record Jordan's generated patient ID during rehearsal.
+Briefly explain that HospitalSystem is a local desktop app for a small clinic.
+Receptionists register patients, book appointments, and check them in. Doctors
+handle consultations and sign medical records. Clinic and demo data use separate
+local databases.
 
-### Say this
+Introduce Jordan as the patient you will follow through the demo, then hand over
+to the receptionist speaker.
 
-"Good day. We are presenting HospitalSystem, a desktop application for a small clinic. It follows a patient from the front desk to the consultation room and into their clinical record.
+## Speaker 2: Show the receptionist workflow
 
-The receptionist workspace handles patient registration, appointment scheduling, and check-in. The physician workspace handles the waiting room, consultations, and signed medical records. We will use one fictional patient so the handoff between the two roles is easy to follow.
+1. Sign in as **Maria Santos**. Open **Patients** and point out search, sorting,
+   pagination, and appointment counts.
+2. Select **Register Patient**, enter Jordan's details, and save. Search for
+   Jordan and note the generated patient ID.
+3. Open **Edit Details**, change the contact to **0917 555 0199**, and save.
+4. Open **Appointments** and select **New Appointment**. Choose Jordan and
+   **Dr. Chloe Tan**, use your prepared date and first time, and enter
+   **Routine follow-up** as the reason. Book the appointment.
+5. Try another booking for the same doctor within 15 minutes of the first.
+   Show the conflict warning, switch to your second available time, and book it.
+6. Cancel the first appointment, then select **Reopen as Scheduled** to show
+   that a cancelled booking can be restored after validation.
+7. Create a walk-in for Jordan with Dr. Chloe Tan. Enter a reason and choose
+   **Walk-in / Check in now**. This uses the current date and time.
+8. Filter to **Waiting Room**, show Jordan's checked-in visit, and hand over
+   to the doctor speaker.
 
-The application runs locally on the computer. Clinic records are stored in a local SQLite database, and demo records use a separate database. [Receptionist speaker], please start with the front-desk workflow."
+## Speaker 3: Show the consultation
 
-Talking points: local desktop app; receptionist and physician roles; one patient will move through the full workflow.
+1. Sign out and choose **Dr. Chloe Tan** from the demo account chooser.
+2. Briefly show **Waiting Room**, **Today's Schedule**, and **My Patients**.
+   Return to **Waiting Room** and start Jordan's consultation.
+3. Open the consultation form, show prior history if available, and enter the
+   prepared consultation details.
+4. Select **Complete Consultation & Sign Record**. Open Jordan's patient chart
+   and show the signed record and completed visit.
+5. Open **Settings** and point out the staff profile fields without saving
+   changes. Mention that credential changes require the current password.
+6. Sign out, return to **Maria Santos**, and show Jordan's completed appointment.
+   Explain that completed visits and patients with clinical history are
+   protected from deletion.
+7. Sign out and show that the app stays on the sign-in screen. Recap Jordan's
+   registration, check-in, consultation, and signed record, then close the app.
 
-## Part 2: Receptionist demo (Speaker 2, about 3 minutes 30 seconds)
+## If something goes wrong
 
-| Time | Action | Say | Expected result |
-| --- | --- | --- | --- |
-| 0:00 | Choose **Maria Santos** on the demo sign-in screen. | "Demo accounts let us enter a prepared role without typing sample credentials." | The receptionist workspace opens. |
-| 0:15 | Open **Patients**. Point out search, sortable columns, pagination, and appointment counts. Select **Register Patient**. | "This is the front-desk registry." | Patient list and registration action are visible. |
-| 0:35 | Register Jordan Lee. Save, then search for "Jordan". | "The record is created first, so the appointment has a registered patient behind it." | Jordan appears in the filtered list. |
-| 0:55 | Open Jordan's menu, choose **Edit Details**, change the contact to `0917 555 0199`, and save. | "Reception can correct contact information without changing clinical history." | Updated contact is shown. |
-| 1:15 | Open **Appointments** and select **New Appointment**. Choose Jordan and Dr. Chloe Tan. Set the prepared future date and first time. Add "Routine follow-up" and book it. | "Scheduling uses registered physicians and checks active appointments around the selected time." | A scheduled appointment appears. |
-| 1:45 | Create another appointment for the same doctor within 15 minutes. Let the warning appear. Change it to the prepared available time, then book. | "The warning appears before submission, and the server checks the same rule when it saves." | Warning clears after the time changes. |
-| 2:15 | Cancel the first scheduled appointment, then choose **Reopen as Scheduled**. | "Cancelled appointments stay in the record and can be restored after validation." | Status changes to Cancelled, then Scheduled. |
-| 2:40 | Create another appointment for Jordan and Dr. Chloe Tan. Enter a short reason and choose **Walk-in / Check in now**. | "A walk-in uses the clinic's current date and time, then enters the waiting room." | Jordan has a Checked In appointment. |
-| 3:05 | Filter to **Waiting Room**. | "Jordan Lee is checked in for Dr. Chloe Tan." | Jordan is visible in the waiting-room filter. |
+- **Missing demo account:** Return to clinic mode and choose **Try demo** again.
+- **Schedule conflict:** Choose a time at least 15 minutes from the conflicting
+  appointment. Skip overrides for this demo.
+- **Jordan missing from the queue:** Check that the walk-in belongs to
+  Dr. Chloe Tan. Create another walk-in if needed.
+- **Restart stalls:** Relaunch the app and select the demo account again.
 
-Optional cue: filters, search, sorting, and pagination help reception find an active visit.
-
-Handoff: "Jordan Lee is checked in with Dr. Chloe Tan. [Doctor speaker] will continue the visit."
-
-## Part 3: Doctor demo and closing (Speaker 3, about 3 minutes 30 seconds)
-
-| Time | Action | Say | Expected result |
-| --- | --- | --- | --- |
-| 0:00 | Sign out. Choose **Dr. Chloe Tan** from the demo account chooser. | "The doctor sees a workspace for their own queue and patients." | Doctor workspace opens. |
-| 0:20 | Open **Waiting Room**, **Today's Schedule**, and **My Patients**. Return to Waiting Room. | "The doctor has a queue, today's schedule, and a patient roster." | The three tabs and counts are visible. |
-| 0:40 | Find Jordan and begin the consultation. | "Starting the consultation changes the visit from checked in to in consultation." | Jordan enters the active consultation state. |
-| 1:00 | Open the consultation form. Expand prior history if available. Enter the prepared symptoms, diagnosis, notes, prescription, and follow-up advice. | "The physician records the consultation here, with prior history available for context." | Required fields contain the prepared details. |
-| 1:45 | Choose **Complete Consultation & Sign Record**. | "Signing completes the appointment and creates the clinical record." | Jordan's appointment is Completed. |
-| 2:05 | Open Jordan's patient chart. | "The chart keeps the completed visit with the patient's medical history." | Jordan's signed record is visible. |
-| 2:25 | Open **Settings** and point to Staff Profile fields. Do not save changes. | "Staff can maintain their own profile. Credential changes ask for the current password." | Profile fields are visible. |
-| 2:45 | Sign out, return to Maria Santos, and show Jordan's completed appointment or patient record. | "The completed record protects the patient's clinical history from ordinary deletion." | Completed status and protected-history behavior are visible. |
-| 3:10 | Sign out and close the app. | "That completes the patient journey from registration to a signed clinical record." | The sign-in screen remains visible after logout. |
-
-### Recovery notes
-
-- If a demo account is unavailable, return to clinic mode, choose **Try demo** again, and wait for the chooser.
-- If a conflict warning remains, choose a time at least 15 minutes away from the conflicting active appointment. Do not use an override in this short presentation.
-- If Jordan is missing from Waiting Room, confirm the walk-in was assigned to Dr. Chloe Tan. Create a new walk-in if needed.
-- If a transition takes too long, wait for the sign-in screen after the restart. If it does not return, relaunch the app and choose the demo account again.
-
-### Rehearsal checklist
-
-- Time the full route. It should take eight minutes and leave one minute before the ten-minute limit.
-- Confirm visible labels against the current build before presenting.
-- Use disposable demo data for rehearsal. Demo changes persist until reset.
-- Keep screenshots of the doctor queue and completed patient chart in case a live transition fails.
+Rehearse with disposable demo data; changes persist until reset. Check the button
+labels against the build and keep screenshots of the doctor queue and completed
+chart as a backup.
