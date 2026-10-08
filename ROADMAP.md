@@ -16,7 +16,8 @@ slices for the Hospital Management System.
 - [x] Six quality gates and isolated Windows bundle verification in clinic and demo modes.
 
 Native Save dialog interactions are covered with mocks and disposable file writes.
-Native Windows dialog interaction and macOS runtime verification remain manual checks.
+Native dialog interaction and interactive macOS UI verification remain manual checks.
+Release builds verify bundle bootstrapping on native Windows and macOS runners.
 
 ---
 

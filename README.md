@@ -18,6 +18,7 @@ Daily reports show a selected date's current schedule and can be saved as CSV
 with doctor subtotals and an independently calculated overall patient count.
 Desktop exports use a native Save dialog; browser development uses a download.
 See [API contracts](docs/api-contracts.md) for the report's data and access rules.
+See the [v0.1.0 changelog](CHANGELOG.md) for this release's changes and verification scope.
 
 [![CI Status](https://github.com/erudyey/HospitalSystem/actions/workflows/ci.yml/badge.svg)](https://github.com/erudyey/HospitalSystem/actions/workflows/ci.yml)
 [![Type Checked with basedpyright](https://img.shields.io/badge/types-basedpyright-blue.svg)](https://github.com/DetachHead/basedpyright)
