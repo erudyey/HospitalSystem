@@ -2,14 +2,14 @@
 
 import json
 import os
-from datetime import date, time
+from datetime import UTC, date, datetime, time
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from backend.clinic.models import AppointmentStatus, StaffRole
+from backend.clinic.models import Appointment, AppointmentStatus, StaffRole
 from backend.clinic.services import (
     authenticate_staff,
     book_appointment,
@@ -189,6 +189,11 @@ class ClinicalLifecycleAndQueueTests(TestCase):
     """Tests for 5-state lifecycle transitions and doctor queue triage."""
 
     def setUp(self) -> None:
+        clock = patch(
+            "backend.clinic.services.clinic_now", return_value=datetime(2026, 10, 5, 8, tzinfo=UTC)
+        )
+        clock.start()
+        self.addCleanup(clock.stop)
         self.doctor = register_staff(
             username="dr.house",
             password="password123",
@@ -338,11 +343,38 @@ class ClinicalLifecycleAndQueueTests(TestCase):
         self.assertEqual(len(filtered), 1)
         self.assertEqual(filtered[0].id, p1.id)
 
+    def test_legacy_appointments_included_in_doctor_queue_and_roster(self) -> None:
+        target_date = date(2026, 10, 7)
+        legacy_patient = register_patient("Legacy Patient", "0917009", 50)
+        # Create unassigned appointment matching doctor name only (doctor_id is None)
+        legacy_appt = Appointment.objects.create(
+            patient=legacy_patient,
+            doctor_name=self.doctor.full_name,
+            doctor=None,
+            app_date=target_date,
+            app_time=time(11, 0),
+            status=AppointmentStatus.SCHEDULED,
+            reason_for_visit="Legacy migration follow-up",
+        )
+
+        queue = get_doctor_queue(doctor_id=self.doctor.id, target_date=target_date)
+        scheduled_ids = [a.id for a in queue["scheduled"]]
+        self.assertIn(legacy_appt.id, scheduled_ids)
+
+        roster = get_doctor_patients(doctor_id=self.doctor.id)
+        roster_ids = [p.id for p in roster]
+        self.assertIn(legacy_patient.id, roster_ids)
+
 
 class MedicalRecordClinicalTests(TestCase):
     """Tests for clinical diagnosis and SOAP note authoring."""
 
     def setUp(self) -> None:
+        clock = patch(
+            "backend.clinic.services.clinic_now", return_value=datetime(2026, 10, 10, 8, tzinfo=UTC)
+        )
+        clock.start()
+        self.addCleanup(clock.stop)
         self.doctor = register_staff(
             username="dr.watson",
             password="password123",
@@ -371,6 +403,8 @@ class MedicalRecordClinicalTests(TestCase):
             app_time_str="11:00",
             doctor_id=self.doctor.id,
         )
+        update_appointment_status(self.appt.id, AppointmentStatus.CHECKED_IN)
+        update_appointment_status(self.appt.id, AppointmentStatus.IN_CONSULTATION)
 
     def test_create_medical_record_success(self) -> None:
         record = create_medical_record(
@@ -419,6 +453,7 @@ class MedicalRecordClinicalTests(TestCase):
             doctor_id=self.doctor.id,
             diagnosis="Allergic Rhinitis",
             prescription="Cetirizine 10mg once daily.",
+            correction_reason="Clarified final diagnosis.",
         )
         self.assertEqual(updated.diagnosis, "Allergic Rhinitis")
         self.assertEqual(updated.prescription, "Cetirizine 10mg once daily.")
@@ -528,7 +563,13 @@ class ClinicalApiIntegrationTests(TestCase):
             )
 
             # Query conflict check for conflicting time (14:10)
-            resp = self.auth_client.get(
+            receptionist_client = Client(
+                headers={
+                    "X-Session-Token": self.session_token,
+                    "X-User-Token": self.rec_session.token,
+                }
+            )
+            resp = receptionist_client.get(
                 reverse("api-appointment-conflict-check"),
                 {"doctor_id": self.doctor.id, "date": "2026-10-15", "time": "14:10"},
             )
@@ -538,7 +579,7 @@ class ClinicalApiIntegrationTests(TestCase):
             self.assertEqual(len(data["conflicts"]), 1)
 
             # Query conflict check for non-conflicting time (15:00)
-            clear_resp = self.auth_client.get(
+            clear_resp = receptionist_client.get(
                 reverse("api-appointment-conflict-check"),
                 {"doctor_id": self.doctor.id, "date": "2026-10-15", "time": "15:00"},
             )
@@ -605,6 +646,8 @@ class ClinicalApiIntegrationTests(TestCase):
                 "clinical_notes": "BP: 125/80 mmHg.",
                 "prescription": "Continue Losartan 50mg once daily.",
                 "follow_up_advice": "Check in 3 months.",
+                "correction_reason": "Updated after follow-up review.",
+                "expected_revision": 1,
             }
             update_resp = doc_client.put(
                 reverse("api-medical-record-detail", kwargs={"record_id": record_id}),

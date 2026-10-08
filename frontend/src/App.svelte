@@ -1,23 +1,107 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { api, type Patient } from "$lib/api";
+  import {
+    api,
+    type Patient,
+    type StaffUser,
+    getUserToken,
+    restoreRememberedToken,
+    clearUserToken,
+    switchApplicationMode,
+  } from "$lib/api";
   import { cn } from "$lib/utils";
+  import { toast } from "$lib/toast.svelte";
   import PatientsWorkspace from "./components/PatientsWorkspace.svelte";
   import AppointmentsWorkspace from "./components/AppointmentsWorkspace.svelte";
+  import DoctorWorkspace from "./components/DoctorWorkspace.svelte";
+  import WelcomeBanner from "./components/WelcomeBanner.svelte";
+  import DailyReportWorkspace from "./components/DailyReportWorkspace.svelte";
+  import AuthModal from "./components/AuthModal.svelte";
+  import SettingsDialog from "./components/SettingsDialog.svelte";
   import ToastContainer from "$lib/components/ToastContainer.svelte";
+  import { Button } from "$lib/components/ui/button";
+  import { Badge } from "$lib/components/ui/badge";
+  import * as Dialog from "$lib/components/ui/dialog";
   import {
     Users,
     Calendar,
     SquarePlus,
     UserPlus,
+    CalendarPlus,
+    Stethoscope,
+    Shield,
+    Settings,
+    LogOut,
+    Sparkles,
+    UserCheck,
+    Lock,
+    Loader2,
+    ClipboardList,
   } from "lucide-svelte";
 
-  type Workspace = "patients" | "appointments";
-  let activeWorkspace = $state<Workspace>("patients");
+  type Workspace = "patients" | "appointments" | "doctor_workspace" | "daily_report";
+  let activeWorkspace = $state<Workspace>("appointments");
   let selectedPatientForBooking = $state<Patient | null>(null);
 
   let isOnline = $state(false);
+  let clinicNow = $state("");
   let globalError = $state<string | null>(null);
+
+  // Authentication & Demo State
+  let currentUser = $state<StaffUser | null>(null);
+  let isAuthChecking = $state(true);
+  let isAuthModalOpen = $state(false);
+  let isRegisteringStaff = $state(false);
+  let staffRevision = $state(0);
+  let isSettingsOpen = $state(false);
+  let settingsInitialTab = $state<"profile" | "system">("profile");
+  let demoMode = $state(false);
+  let isSwitchingMode = $state(false);
+  let isResetDemoOpen = $state(false);
+  let isResettingDemo = $state(false);
+
+  $effect(() => { if (!isAuthModalOpen) isRegisteringStaff = false; });
+
+  function showSignIn() {
+    currentUser = null;
+    activeWorkspace = "appointments";
+    isSettingsOpen = false;
+    isResetDemoOpen = false;
+    isRegisteringStaff = false;
+    selectedPatientForBooking = null;
+    triggerPatientRegister = false;
+    triggerAppointmentBook = false;
+    isAuthModalOpen = true;
+  }
+
+  async function handleResetDemo() {
+    if (!demoMode || isResettingDemo) return;
+    isResettingDemo = true;
+    try {
+      await api.demo.reset();
+      await clearUserToken();
+      showSignIn();
+      toast.success("Demo appointments refreshed for today.");
+    } catch (err) {
+      toast.error((err as { message?: string }).message || "Unable to reset demo data.");
+    } finally { isResettingDemo = false; }
+  }
+
+  async function handleSwitchMode() {
+    if (isSwitchingMode) return;
+    isSwitchingMode = true;
+    try {
+      await switchApplicationMode(demoMode ? "clinic" : "demo");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to switch mode.");
+      isSwitchingMode = false;
+    }
+  }
+
+  function openSettings(tab: "profile" | "system" = "profile") {
+    settingsInitialTab = tab;
+    isSettingsOpen = true;
+  }
 
   // Trigger modal flags for quick actions in the sidebar
   let triggerPatientRegister = $state(false);
@@ -47,14 +131,80 @@
       const res = await api.healthCheck();
       if (res.status === "ok") {
         isOnline = true;
+        demoMode = res.mode === "demo";
+        clinicNow = res.now;
       }
     } catch {
       isOnline = false;
+      clinicNow = "";
+    }
+  }
+
+  async function initAuth() {
+    isAuthChecking = true;
+    try {
+      const startupUrl = new URL(window.location.href);
+      if (startupUrl.searchParams.get("signed_out") === "1") {
+        await clearUserToken();
+        startupUrl.searchParams.delete("signed_out");
+        window.history.replaceState({}, "", startupUrl);
+      } else {
+        // Explicit sign-out must never restore a remembered session.
+        await restoreRememberedToken();
+      }
+      const token = getUserToken();
+      if (token) {
+        try {
+          const res = await api.auth.me();
+          currentUser = res.user;
+          if (currentUser.role === "doctor") {
+            activeWorkspace = "doctor_workspace";
+          } else {
+            activeWorkspace = "appointments";
+          }
+          return;
+        } catch {
+          await clearUserToken();
+          currentUser = null;
+        }
+      }
+
+      currentUser = null;
+      isAuthModalOpen = true;
+    } finally {
+      isAuthChecking = false;
+    }
+  }
+
+  async function handleLogout() {
+    isRegisteringStaff = false;
+    try {
+      await api.auth.logout();
+    } catch {
+      // Non-blocking logout cleanup
+    } finally {
+      await clearUserToken();
+      showSignIn();
+      try {
+        sessionStorage.removeItem("hospitalsystem_explicit_logout");
+      } catch {
+        // Ignore storage restrictions
+      }
     }
   }
 
   onMount(() => {
     checkHealth();
+    initAuth();
+    const clockInterval = setInterval(() => void checkHealth(), 60_000);
+    const refreshClock = () => { if (!document.hidden) void checkHealth(); };
+    document.addEventListener("visibilitychange", refreshClock);
+
+    const sessionExpired = () => {
+      showSignIn();
+      toast.info("Your staff session ended. Please sign in again.");
+    };
+    window.addEventListener("staff-session-expired", sessionExpired);
 
     // Global Error Boundary listener
     window.addEventListener("error", (event) => {
@@ -67,13 +217,13 @@
 
     // Global keyboard shortcuts
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Alt+1: Patients, Alt+2: Appointments
+      // Alt+1: Patients, Alt+2: Appointments, Alt+3: Doctor Workspace
       if (e.altKey && e.key === "1") {
         e.preventDefault();
         activeWorkspace = "patients";
       } else if (e.altKey && e.key === "2") {
         e.preventDefault();
-        activeWorkspace = "appointments";
+        activeWorkspace = currentUser?.role === "doctor" ? "doctor_workspace" : "appointments";
       } else if (
         ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") ||
         (e.key === "/" && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement))
@@ -89,99 +239,242 @@
 
     window.addEventListener("keydown", handleKeyDown);
     return () => {
+      clearInterval(clockInterval);
+      document.removeEventListener("visibilitychange", refreshClock);
       window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("staff-session-expired", sessionExpired);
     };
   });
 </script>
 
-<div class="h-screen bg-background text-foreground flex flex-row selection:bg-primary/10 selection:text-primary antialiased overflow-hidden">
+<div class="h-screen w-full bg-background text-foreground flex flex-row selection:bg-accent selection:text-accent-foreground antialiased overflow-hidden min-h-0 min-w-0">
   <!-- Left Sidebar Navigation -->
-  <aside class="w-64 border-r border-border bg-card flex flex-col shrink-0 h-screen select-none">
-    <!-- Clinic Brand Header (Cross in a Box Icon) -->
-    <div class="px-4 h-14 border-b border-border flex items-center gap-2.5">
-      <div class="size-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shrink-0 shadow-xs">
-        <SquarePlus class="size-4" />
-      </div>
-      <div>
-        <h1 class="text-sm font-semibold tracking-tight text-foreground leading-tight">
-          Hospital System
-        </h1>
+  <aside class="w-64 border-r border-border bg-card flex flex-col shrink-0 h-full select-none min-h-0">
+    <!-- Clinic Brand Header -->
+    <div class="px-4 h-14 border-b border-border flex items-center">
+      <div class="flex items-center gap-2.5">
+        <div class="size-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shrink-0 shadow-xs">
+          <SquarePlus class="size-4" />
+        </div>
+        <div>
+          <h1 class="text-sm font-semibold tracking-tight text-foreground leading-tight">
+            Hospital System
+          </h1>
+          <p class="text-[10px] text-muted-foreground font-medium">Clinical Core</p>
+        </div>
       </div>
     </div>
 
     <!-- Quick Action CTA Button (Sidebar) -->
-    <div class="p-3 border-b border-border">
-      <button
-        onclick={handleQuickRegisterPatient}
-        class="w-full inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-xs font-medium h-8 px-3 bg-primary text-primary-foreground shadow hover:bg-primary/90 transition-colors cursor-pointer"
-      >
-        <UserPlus class="size-3.5" />
-        <span>+ Register Patient</span>
-      </button>
-    </div>
+    {#if currentUser?.role === "receptionist"}
+      <div class="p-3 border-b border-border">
+        <Button
+          variant="default"
+          size="sm"
+          onclick={handleQuickRegisterPatient}
+          class="w-full justify-center gap-2 text-xs font-medium cursor-pointer shadow-xs"
+        >
+          <UserPlus class="size-3.5" />
+          <span>+ Register Patient</span>
+        </Button>
+      </div>
+    {/if}
 
     <!-- Navigation Workspace Switcher -->
     <div class="flex-1 py-3 px-2 flex flex-col gap-1 overflow-y-auto">
       <p class="text-[11px] font-medium text-muted-foreground px-2.5 py-1">
-        Clinical Records
+        Clinical Modules
       </p>
-      <button
-        onclick={() => (activeWorkspace = "patients")}
-        class={cn(
-          "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer",
-          activeWorkspace === "patients"
-            ? "bg-muted text-foreground font-semibold shadow-xs"
-            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-        )}
-      >
-        <Users class="size-4 {activeWorkspace === 'patients' ? 'text-primary' : 'text-muted-foreground'}" />
-        <span>Patients Directory</span>
-      </button>
-      <button
-        onclick={() => (activeWorkspace = "appointments")}
-        class={cn(
-          "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer",
-          activeWorkspace === "appointments"
-            ? "bg-muted text-foreground font-semibold shadow-xs"
-            : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-        )}
-      >
-        <Calendar class="size-4 {activeWorkspace === 'appointments' ? 'text-primary' : 'text-muted-foreground'}" />
-        <span>Appointments Schedule</span>
-      </button>
+
+      {#if currentUser?.role === "doctor"}
+        <!-- Doctor Navigation Items -->
+        <Button
+          variant="navigation"
+          data-active={activeWorkspace === "doctor_workspace"}
+          aria-current={activeWorkspace === "doctor_workspace" ? "page" : undefined}
+          size="sm"
+          onclick={() => (activeWorkspace = "doctor_workspace")}
+          class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer"
+        >
+          <Stethoscope data-icon="inline-start" />
+          <span>Doctor Workspace</span>
+        </Button>
+
+        <Button
+          variant="navigation"
+          data-active={activeWorkspace === "patients"}
+          aria-current={activeWorkspace === "patients" ? "page" : undefined}
+          size="sm"
+          onclick={() => (activeWorkspace = "patients")}
+          class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer"
+        >
+          <Users data-icon="inline-start" />
+          <span>Patient Directory</span>
+        </Button>
+
+      {:else}
+        <!-- Receptionist Navigation Items -->
+        <Button
+          variant="navigation"
+          data-active={activeWorkspace === "appointments"}
+          aria-current={activeWorkspace === "appointments" ? "page" : undefined}
+          size="sm"
+          onclick={() => (activeWorkspace = "appointments")}
+          class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer"
+        >
+          <Calendar data-icon="inline-start" />
+          <span>Appointments & Triage</span>
+        </Button>
+
+        <Button
+          variant="navigation"
+          data-active={activeWorkspace === "patients"}
+          aria-current={activeWorkspace === "patients" ? "page" : undefined}
+          size="sm"
+          onclick={() => (activeWorkspace = "patients")}
+          class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer"
+        >
+          <Users data-icon="inline-start" />
+          <span>Patients Directory</span>
+        </Button>
+      {/if}
     </div>
 
-    <!-- Sidebar Bottom Footer: Unversioned Pre-release Alpha -->
-    <div class="p-3 border-t border-border mt-auto">
+    {#if currentUser}
+      <div class="px-3 pb-3">
+        <Button variant="navigation" size="sm" data-active={activeWorkspace === "daily_report"}
+          aria-current={activeWorkspace === "daily_report" ? "page" : undefined}
+          onclick={() => activeWorkspace = "daily_report"}
+          class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs">
+          <ClipboardList data-icon="inline-start" />
+          Daily report
+        </Button>
+      </div>
+    {/if}
+
+    <!-- User / Session Footer (Sidebar Bottom) -->
+    <div class="p-3 border-t border-border mt-auto flex flex-col gap-2">
+      {#if currentUser}
+        <button
+          type="button"
+          onclick={() => openSettings("profile")}
+          class="w-full rounded-lg bg-accent/40 hover:bg-accent p-2 text-xs flex items-center justify-between border border-border/40 transition-colors duration-150 cursor-pointer group text-left"
+          title="Staff Profile & Settings"
+        >
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="size-6 rounded-full bg-accent text-accent-foreground font-semibold text-[10px] flex items-center justify-center shrink-0 border border-clinic/20 transition-colors">
+              {currentUser.full_name?.charAt(0) || currentUser.username.charAt(0).toUpperCase()}
+            </div>
+            <div class="min-w-0">
+              <p class="font-semibold text-foreground truncate leading-tight group-hover:text-accent-foreground transition-colors">
+                {currentUser.full_name || currentUser.username}
+              </p>
+              <p class="text-[10px] text-muted-foreground capitalize truncate leading-tight mt-0.5">
+                {currentUser.role}
+              </p>
+            </div>
+          </div>
+
+          <div class="size-6 rounded-md flex items-center justify-center text-muted-foreground group-hover:text-foreground shrink-0">
+            <Settings class="size-3.5" />
+          </div>
+        </button>
+      {:else}
+        <div class="rounded-lg bg-muted/30 p-2 text-xs flex items-center justify-between border border-border/40">
+          <div class="flex items-center gap-2 min-w-0">
+            <div class="size-6 rounded-full bg-muted text-muted-foreground flex items-center justify-center shrink-0 border border-border/70">
+              <Lock class="size-3" />
+            </div>
+            <div class="min-w-0">
+              <p class="font-medium text-muted-foreground truncate leading-tight">Not Signed In</p>
+              <p class="text-[10px] text-muted-foreground truncate leading-tight mt-0.5">Staff Access</p>
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onclick={() => (isAuthModalOpen = true)}
+            class="h-6 px-2 text-[11px] font-medium cursor-pointer"
+          >
+            Sign In
+          </Button>
+        </div>
+      {/if}
+
       <div class="flex items-center justify-between text-xs text-muted-foreground px-1">
         <span class="inline-flex items-center gap-1.5 text-[11px]">
           <span class="size-1.5 rounded-full {isOnline ? 'bg-emerald-500' : 'bg-amber-500'}"></span>
           {isOnline ? "Core Online" : "Connecting..."}
         </span>
-        <span class="text-[10px] font-mono text-muted-foreground">Alpha</span>
+        <span class="text-[10px] font-mono text-muted-foreground">SQLite WAL</span>
       </div>
     </div>
   </aside>
 
   <!-- Right Main Area -->
-  <div class="flex-1 flex flex-col h-screen overflow-hidden min-h-0">
+  <div class="flex-1 flex flex-col h-full overflow-hidden min-h-0 min-w-0">
     <!-- Top Bar Header -->
-    <header class="border-b border-border bg-card/95 backdrop-blur shrink-0 z-40 h-14 flex items-center justify-between px-6 shadow-xs">
+    <header class="border-b border-border bg-card/95 backdrop-blur shrink-0 z-40 h-14 flex items-center justify-between px-4 sm:px-6 shadow-xs min-w-0">
       <!-- Breadcrumb / Active Workspace Title -->
       <div class="flex items-center gap-2 text-xs">
         <span class="text-muted-foreground font-normal">Hospital System</span>
         <span class="text-muted-foreground">/</span>
         <span class="font-semibold text-foreground">
-          {activeWorkspace === "patients" ? "Patients Directory" : "Appointments Schedule"}
+          {#if activeWorkspace === "doctor_workspace"}
+            Doctor Workspace (Physician Dashboard)
+          {:else if activeWorkspace === "daily_report"}
+            Daily report
+          {:else if activeWorkspace === "patients"}
+            Patients Directory
+          {:else}
+            Appointments & Front-Desk Triage
+          {/if}
         </span>
       </div>
 
+      <!-- Demo account switcher -->
+      {#if demoMode}
+        <div class="hidden lg:flex items-center bg-demo/5 p-0.5 rounded-lg border border-demo/20 text-xs shadow-2xs">
+          <span class="text-[11px] font-medium text-demo px-2 flex items-center gap-1">
+            <Sparkles class="size-3" />
+            <span>Demo:</span>
+          </span>
+
+          <button type="button" onclick={() => (isAuthModalOpen = true)} class="h-7 px-2.5 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground cursor-pointer">Switch account</button>
+        </div>
+      {/if}
+
       <!-- Top Right Controls -->
-      <div class="flex items-center gap-3">
-        <span class="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span class="size-2 rounded-full {isOnline ? 'bg-emerald-500' : 'bg-amber-500'}"></span>
-          <span>{isOnline ? "Connected" : "Reconnecting..."}</span>
-        </span>
+      <div class="flex items-center gap-2">
+        {#if currentUser}
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer gap-1.5"
+            onclick={() => openSettings("profile")}
+          >
+            <Settings class="size-3.5" />
+            <span>Settings</span>
+          </Button>
+        {:else}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            class="size-8 text-muted-foreground hover:text-foreground cursor-pointer"
+            onclick={() => openSettings("system")}
+            title="System & Demo Settings"
+          >
+            <Settings class="size-4" />
+          </Button>
+          <Button
+            size="sm"
+            class="h-8 px-3 text-xs cursor-pointer"
+            onclick={() => (isAuthModalOpen = true)}
+          >
+            Sign In
+          </Button>
+        {/if}
       </div>
     </header>
 
@@ -189,28 +482,122 @@
     {#if globalError}
       <div class="bg-destructive/10 border-b border-destructive/20 text-destructive px-6 py-2.5 text-xs flex items-center justify-between shrink-0">
         <span><strong>System Alert:</strong> {globalError}</span>
-        <button onclick={() => (globalError = null)} class="text-destructive font-bold underline ml-4 cursor-pointer">
+        <Button
+          variant="ghost"
+          size="sm"
+          onclick={() => (globalError = null)}
+          class="h-6 text-destructive font-semibold hover:bg-destructive/10 px-2 cursor-pointer"
+        >
           Dismiss
-        </button>
+        </Button>
       </div>
     {/if}
 
     <!-- Main Workspace Content Canvas -->
-    <main class="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto flex flex-col overflow-hidden min-h-0">
-      {#if activeWorkspace === "patients"}
+    <main class="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto flex flex-col overflow-hidden min-h-0 min-w-0">
+      {#if currentUser && !isAuthChecking}
+        <WelcomeBanner user={currentUser} {clinicNow} {demoMode} />
+      {/if}
+      {#if isAuthChecking}
+        <div class="flex flex-col items-center justify-center py-24 text-sm text-muted-foreground gap-2">
+          <Loader2 class="size-6 animate-spin text-primary" />
+          <span>Initializing clinical environment...</span>
+        </div>
+      {:else if !currentUser}
+        <div class="flex-1 flex flex-col items-center justify-center text-center p-8">
+          <div class="size-12 rounded-xl bg-muted flex items-center justify-center mb-3">
+            <Shield class="size-6 text-muted-foreground" />
+          </div>
+          <h3 class="text-base font-semibold text-foreground">Staff Authentication Required</h3>
+          <p class="text-xs text-muted-foreground max-w-sm mt-1 mb-4">
+            Please sign in with your receptionist or physician credentials to access clinical records and scheduling.
+          </p>
+          <Button size="sm" onclick={() => (isAuthModalOpen = true)} class="cursor-pointer">
+            Sign In to Clinical Core
+          </Button>
+          <Button variant="outline" size="sm" class="mt-3" disabled={isSwitchingMode} onclick={handleSwitchMode}>
+            {isSwitchingMode ? "Switching mode..." : demoMode ? "Return to clinic mode" : "Try demo"}
+          </Button>
+          <p class="text-xs text-muted-foreground mt-2">Demo data is separate from clinic records.</p>
+        </div>
+      {:else if activeWorkspace === "daily_report"}
+        {#key currentUser.id}
+          <DailyReportWorkspace user={currentUser} {clinicNow} />
+        {/key}
+      {:else if activeWorkspace === "doctor_workspace" && currentUser?.role === "doctor"}
+        {#key currentUser.id}
+          <DoctorWorkspace activeDoctor={currentUser} />
+        {/key}
+      {:else if activeWorkspace === "patients"}
         <PatientsWorkspace
+          readOnly={currentUser.role === "doctor"}
           bind:isRegisterDialogOpen={triggerPatientRegister}
           onSelectPatientForBooking={handleSelectPatientForBooking}
         />
-      {:else if activeWorkspace === "appointments"}
-        <AppointmentsWorkspace
+      {:else}
+        {#key currentUser.id + ":" + staffRevision}
+          <AppointmentsWorkspace
+            {clinicNow}
           bind:isBookingModalOpen={triggerAppointmentBook}
           preselectedPatient={selectedPatientForBooking}
           onClearPreselectedPatient={handleClearSelectedPatient}
         />
+        {/key}
       {/if}
     </main>
   </div>
+
+  <!-- Settings & Profile Dialog -->
+  <SettingsDialog
+    bind:open={isSettingsOpen}
+    currentUser={currentUser}
+    bind:demoMode={demoMode}
+    initialTab={settingsInitialTab}
+    onProfileUpdated={(updated) => {
+      currentUser = updated;
+    }}
+    onLogout={handleLogout}
+    onRegisterStaff={() => { isRegisteringStaff = true; isAuthModalOpen = true; }}
+    onResetDemo={() => (isResetDemoOpen = true)}
+    onOpenAuth={() => (isAuthModalOpen = true)}
+    onSwitchMode={handleSwitchMode}
+  />
+
+  <!-- Auth Gateway Modal -->
+  <AuthModal
+    bind:open={isAuthModalOpen}
+    demoMode={demoMode}
+    registerOnly={isRegisteringStaff}
+    onStaffCreated={() => { isRegisteringStaff = false; staffRevision += 1; }}
+    isSwitchingMode={isSwitchingMode}
+    onSwitchMode={handleSwitchMode}
+    onSuccess={(user) => {
+      currentUser = user;
+      try {
+        sessionStorage.removeItem("hospitalsystem_explicit_logout");
+      } catch {
+        // Ignore storage restrictions
+      }
+      if (user.role === "doctor") {
+        activeWorkspace = "doctor_workspace";
+      } else {
+        activeWorkspace = "appointments";
+      }
+    }}
+  />
+
+  <Dialog.Root bind:open={isResetDemoOpen}>
+    <Dialog.Content class="sm:max-w-md">
+      <Dialog.Header>
+        <Dialog.Title>Reset demo data?</Dialog.Title>
+        <Dialog.Description>Replace demo patients, appointments, and clinical records with current samples. Demo staff profiles are kept. Everyone using this demo database will be signed out.</Dialog.Description>
+      </Dialog.Header>
+      <Dialog.Footer>
+        <Button variant="outline" disabled={isResettingDemo} onclick={() => (isResetDemoOpen = false)}>Cancel</Button>
+        <Button disabled={isResettingDemo} onclick={handleResetDemo}>{isResettingDemo ? "Resetting..." : "Reset demo data"}</Button>
+      </Dialog.Footer>
+    </Dialog.Content>
+  </Dialog.Root>
 
   <ToastContainer />
 </div>

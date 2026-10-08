@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master, experimental, "feature/**"]
+    branches: [master, experimental, "feature/**", "codex/**"]
   pull_request:
     branches: [master, experimental]
 
@@ -51,7 +51,7 @@ jobs:
           uv run ruff check backend desktop package.py
           uv run ruff format --check backend desktop package.py
 
-      - name: Strict Python Type Check
+      - name: Python Type Check
         run: uv run python -m basedpyright
 
       - name: Check Workflow Formatting
@@ -61,6 +61,7 @@ jobs:
         working-directory: ./frontend
         run: |
           deno install
+          deno task test
           deno task build
 
       - name: Run Backend Tests

@@ -1,7 +1,9 @@
 {
   "tasks": {
     "dev": "deno run -A npm:vite",
-    "build": "deno run -A npm:vite build",
+    "build": "deno task check && deno run -A npm:vite build",
+    "check": "deno run -A --node-modules-dir=manual npm:svelte-check --tsconfig ./tsconfig.json",
+    "test": "deno test src/lib/api.test.ts src/lib/calendar.test.ts src/lib/schedule.test.ts src/lib/report.test.ts",
     "preview": "deno run -A npm:vite preview"
   },
   "compilerOptions": {

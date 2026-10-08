@@ -4,6 +4,22 @@
 > appointment scheduling, built with Svelte 5, `shadcn-svelte`, Tailwind CSS,
 > Django, SQLite, Waitress, and `pywebview`.
 
+Staff workspaces include a welcome banner with the clinic-local date, consistent
+summary cards, and a **Daily report** view. Receptionists see the whole clinic;
+doctors see their assigned appointments. Appointment summaries can cover all
+dates, a single day, or an inclusive date range.
+
+Teal navigation, blue information accents, and amber demo indicators add color
+while keeping clinical summary cards neutral. Short workspace transitions and
+staggered card entrances respect the system's reduced-motion preference and do
+not replay when live data refreshes.
+
+Daily reports show a selected date's current schedule and can be saved as CSV
+with doctor subtotals and an independently calculated overall patient count.
+Desktop exports use a native Save dialog; browser development uses a download.
+See [API contracts](docs/api-contracts.md) for the report's data and access rules.
+See the [v0.1.0 changelog](CHANGELOG.md) for this release's changes and verification scope.
+
 [![CI Status](https://github.com/erudyey/HospitalSystem/actions/workflows/ci.yml/badge.svg)](https://github.com/erudyey/HospitalSystem/actions/workflows/ci.yml)
 [![Type Checked with basedpyright](https://img.shields.io/badge/types-basedpyright-blue.svg)](https://github.com/DetachHead/basedpyright)
 [![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
@@ -115,13 +131,34 @@ On macOS / Linux:
 ./run.sh desktop
 ```
 
+On the desktop sign-in screen, select **Try demo** to restart with the separate
+demo database and sample accounts. Sign out and select **Return to clinic mode**
+to switch back. Switching modes leaves you signed out.
+
+You can also launch with `--demo`:
+
+```bash
+./run.sh desktop --demo
+```
+
+Clinic data and demo data are stored in separate SQLite databases. Standard desktop
+launches do not create sample accounts.
+
+Demo edits persist between launches. To refresh old sample dates, use
+**Settings > System > Reset demo data**. This replaces demo clinical data,
+retains staff profiles, and signs out demo sessions.
+
+For a fresh clinic, register the first receptionist on the sign-in screen.
+That receptionist can add physicians through **Settings > System > Register staff**
+while staying signed in.
+
 ---
 
 ## Common Developer Tasks
 
 ### Run Automated Tests and Type Checks
 
-Run full quality gate (`basedpyright` strict type check + full `pytest` suite):
+Run backend tests and the configured Python type check:
 
 On Windows:
 
@@ -228,7 +265,7 @@ HospitalSystem/
 │   ├── src/
 │   │   ├── components/       # PatientsWorkspace and AppointmentsWorkspace
 │   │   ├── lib/              # shadcn-svelte UI components, API client, and toast system
-│   │   ├── app.css           # Inter typography and Swiss Medical Red design tokens
+│   │   ├── app.css           # Inter typography, clinical colors, and motion tokens
 │   │   └── App.svelte        # Application shell and global error boundary
 │   ├── deno.json             # Deno tasks and compiler options
 │   ├── tsconfig.json         # TypeScript configuration for editor LSP
@@ -241,7 +278,7 @@ HospitalSystem/
 ├── package.py                # Standalone PyInstaller build script
 ├── desktop.spec              # PyInstaller Windows/macOS build specification
 ├── pyproject.toml            # Ruff linter, formatter, and pytest configuration
-├── pyrightconfig.json        # basedpyright strict type configuration
+├── pyrightconfig.json        # basedpyright type configuration
 ├── run.ps1                   # Windows PowerShell task runner
 └── run.sh                    # macOS and Linux Bash task runner
 ```

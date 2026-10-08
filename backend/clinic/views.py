@@ -5,10 +5,12 @@ These views act as thin adapters mapping HTTP requests to pure Python service fu
 
 import contextlib
 import json
+import os
 from datetime import date
 from typing import Any
 
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods
@@ -73,6 +75,7 @@ def serialize_patient(patient: Patient) -> dict[str, Any]:
         "age": patient.age,
         "appointment_count": getattr(patient, "appointment_count", 0),
         "active_appointment_count": getattr(patient, "active_appointment_count", 0),
+        "doctor_appointment_count": getattr(patient, "doctor_appointment_count", 0),
     }
 
 
@@ -88,6 +91,10 @@ def serialize_appointment(appointment: Appointment) -> dict[str, Any]:
         "app_time": appointment.app_time.strftime("%H:%M"),
         "reason_for_visit": appointment.reason_for_visit,
         "status": appointment.status,
+        "checked_in_at": appointment.checked_in_at.isoformat()
+        if appointment.checked_in_at
+        else None,
+        "conflict_override_reason": appointment.conflict_override_reason,
     }
 
 
@@ -124,6 +131,7 @@ def serialize_medical_record(record: MedicalRecord) -> dict[str, Any]:
         "follow_up_advice": record.follow_up_advice,
         "created_at": record.created_at.isoformat(),
         "updated_at": record.updated_at.isoformat(),
+        "revision": record.revision,
     }
 
 
@@ -136,22 +144,85 @@ def get_authenticated_user(request: HttpRequest) -> StaffUser | None:
     return services.validate_session(token)
 
 
+def authentication_required(request: HttpRequest) -> tuple[StaffUser | None, JsonResponse | None]:
+    """Return the active staff member or the standard unauthenticated response."""
+    user = get_authenticated_user(request)
+    if user is None:
+        return None, JsonResponse(
+            format_error("UNAUTHENTICATED", "Active session required. Please sign in."), status=401
+        )
+    return user, None
+
+
+def receptionist_required(request: HttpRequest) -> tuple[StaffUser | None, JsonResponse | None]:
+    """Require an active receptionist account for front-desk write operations."""
+    user, response = authentication_required(request)
+    if response is not None:
+        return None, response
+    if user is None or user.role != StaffRole.RECEPTIONIST:
+        return None, JsonResponse(
+            format_error("FORBIDDEN", "Only receptionist accounts can manage front-desk records."),
+            status=403,
+        )
+    return user, None
+
+
+def get_int(data: dict[str, Any], field: str, *, required: bool = False) -> int | None:
+    """Read a scalar integer from JSON without accepting bools or containers."""
+    value = data.get(field)
+    if value is None and not required:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int | str):
+        raise ValidationError(
+            {field: f"{field.replace('_', ' ').capitalize()} must be an integer."}
+        )
+    try:
+        return int(value)
+    except ValueError:
+        raise ValidationError(
+            {field: f"{field.replace('_', ' ').capitalize()} must be an integer."}
+        ) from None
+
+
+def get_string(data: dict[str, Any], field: str, default: str = "") -> str:
+    """Read a scalar string from JSON with a stable validation response."""
+    value = data.get(field, default)
+    if value is None:
+        return default
+    if not isinstance(value, str):
+        raise ValidationError({field: f"{field.replace('_', ' ').capitalize()} must be a string."})
+    return value
+
+
 @ensure_csrf_cookie
 @require_GET
 def health_check(_request: HttpRequest) -> JsonResponse:
     """Readiness probe and CSRF cookie setter."""
-    return JsonResponse({"status": "ok", "version": "0.0.1"})
+    return JsonResponse(
+        {
+            "status": "ok",
+            "version": "0.1.0-beta.1",
+            "mode": os.environ.get("HOSPITAL_MODE", "clinic"),
+            **services.clinic_context(),
+        }
+    )
 
 
 @require_http_methods(["GET", "POST"])
 def patients_collection(request: HttpRequest) -> JsonResponse:
     """List/search patients (GET) or register a new patient (POST)."""
     if request.method == "GET":
+        _user, response = authentication_required(request)
+        if response is not None:
+            return response
         query = request.GET.get("q", "").strip() or None
         patients = services.list_patients(query=query)
         return JsonResponse([serialize_patient(p) for p in patients], safe=False, status=200)
 
     # POST: register patient
+    _user, response = receptionist_required(request)
+    if response is not None:
+        return response
     data, err_response = parse_json(request)
     if err_response or data is None:
         return err_response or JsonResponse(
@@ -160,9 +231,9 @@ def patients_collection(request: HttpRequest) -> JsonResponse:
 
     try:
         patient = services.register_patient(
-            full_name=data.get("full_name", ""),
-            contact=data.get("contact", ""),
-            age=data.get("age", 0),
+            full_name=get_string(data, "full_name"),
+            contact=get_string(data, "contact"),
+            age=get_int(data, "age", required=True) or 0,
         )
         return JsonResponse(serialize_patient(patient), status=201)
     except ValidationError as err:
@@ -174,10 +245,16 @@ def patient_detail(request: HttpRequest, patient_id: int) -> JsonResponse:
     """Retrieve (GET), update (PUT), or delete (DELETE) a single patient."""
     try:
         if request.method == "GET":
+            _user, response = authentication_required(request)
+            if response is not None:
+                return response
             patient = services.get_patient(patient_id=patient_id)
             return JsonResponse(serialize_patient(patient), status=200)
 
         elif request.method == "PUT":
+            _user, response = receptionist_required(request)
+            if response is not None:
+                return response
             data, err_response = parse_json(request)
             if err_response or data is None:
                 return err_response or JsonResponse(
@@ -185,13 +262,16 @@ def patient_detail(request: HttpRequest, patient_id: int) -> JsonResponse:
                 )
             patient = services.update_patient(
                 patient_id=patient_id,
-                full_name=data.get("full_name", ""),
-                contact=data.get("contact", ""),
-                age=data.get("age", 0),
+                full_name=get_string(data, "full_name"),
+                contact=get_string(data, "contact"),
+                age=get_int(data, "age", required=True) or 0,
             )
             return JsonResponse(serialize_patient(patient), status=200)
 
         elif request.method == "DELETE":
+            _user, response = receptionist_required(request)
+            if response is not None:
+                return response
             services.delete_patient(patient_id=patient_id)
             return JsonResponse({}, status=204)
 
@@ -209,6 +289,9 @@ def patient_detail(request: HttpRequest, patient_id: int) -> JsonResponse:
 @require_GET
 def patient_appointments(request: HttpRequest, patient_id: int) -> JsonResponse:
     """Retrieve all appointments for a given patient ID."""
+    _user, response = authentication_required(request)
+    if response is not None:
+        return response
     try:
         appointments = services.list_patient_appointments(patient_id=patient_id)
         return JsonResponse(
@@ -225,60 +308,80 @@ def patient_appointments(request: HttpRequest, patient_id: int) -> JsonResponse:
 def appointments_collection(request: HttpRequest) -> JsonResponse:
     """List all appointments (GET) or book a new appointment (POST)."""
     if request.method == "GET":
+        _user, response = authentication_required(request)
+        if response is not None:
+            return response
         appointments = services.list_all_appointments()
         return JsonResponse(
             [serialize_appointment(a) for a in appointments], safe=False, status=200
         )
 
     # POST: book appointment
+    user, response = receptionist_required(request)
+    if response is not None or user is None:
+        return response or JsonResponse(
+            format_error("UNAUTHENTICATED", "Active session required."), status=401
+        )
     data, err_response = parse_json(request)
     if err_response or data is None:
         return err_response or JsonResponse(
             format_error("BAD_REQUEST", "Request body must not be empty."), status=400
         )
 
-    patient_id = data.get("patient_id")
-    if patient_id is None:
-        return JsonResponse(
-            format_error(
-                "VALIDATION_ERROR",
-                "Missing required field.",
-                {"patient_id": ["Patient ID is required."]},
-            ),
-            status=400,
-        )
-
     try:
-        patient_id_int = int(patient_id)
-    except (ValueError, TypeError):
-        return JsonResponse(
-            format_error(
-                "VALIDATION_ERROR",
-                "Invalid field format.",
-                {"patient_id": ["Patient ID must be an integer."]},
-            ),
-            status=400,
-        )
-
-    try:
-        raw_doc_id = data.get("doctor_id")
-        doc_id_val: int | None = int(raw_doc_id) if raw_doc_id is not None else None
-    except (ValueError, TypeError):
-        doc_id_val = None
-
-    try:
+        patient_id_int = get_int(data, "patient_id", required=True)
+        doc_id_val = get_int(data, "doctor_id", required=True)
+        if patient_id_int is None or doc_id_val is None:
+            raise ValidationError(
+                {"patient_id": "Patient ID is required.", "doctor_id": "Doctor ID is required."}
+            )
         appointment = services.book_appointment(
             patient_id=patient_id_int,
-            doctor_name=data.get("doctor_name", ""),
-            app_date_str=data.get("app_date", ""),
-            app_time_str=data.get("app_time", "09:00"),
-            reason_for_visit=data.get("reason_for_visit", ""),
+            doctor_name=get_string(data, "doctor_name"),
+            app_date_str=get_string(data, "app_date"),
+            app_time_str=get_string(data, "app_time", "09:00"),
+            reason_for_visit=get_string(data, "reason_for_visit"),
             doctor_id=doc_id_val,
-            initial_status=data.get("initial_status", AppointmentStatus.SCHEDULED),
+            initial_status=get_string(data, "initial_status", AppointmentStatus.SCHEDULED),
+            allow_conflict=data.get("allow_conflict") is True,
+            override_reason=get_string(data, "override_reason"),
+            override_by_id=user.id,
         )
         return JsonResponse(serialize_appointment(appointment), status=201)
     except ValidationError as err:
         return validation_error_response(err, "Appointment booking failed validation.")
+
+
+@require_http_methods(["POST"])
+def appointment_walk_in(request: HttpRequest) -> JsonResponse:
+    """Check a patient in immediately using the server's clinic-local clock."""
+    user, response = receptionist_required(request)
+    if response is not None or user is None:
+        return response or JsonResponse(
+            format_error("UNAUTHENTICATED", "Active session required."), status=401
+        )
+    data, err_response = parse_json(request)
+    if err_response or data is None:
+        return err_response or JsonResponse(
+            format_error("BAD_REQUEST", "Request body must not be empty."), status=400
+        )
+    now = services.clinic_now()
+    try:
+        appointment = services.book_appointment(
+            patient_id=get_int(data, "patient_id", required=True) or 0,
+            doctor_name="",
+            doctor_id=get_int(data, "doctor_id", required=True),
+            app_date_str=now.date().isoformat(),
+            app_time_str=now.strftime("%H:%M"),
+            reason_for_visit=get_string(data, "reason_for_visit"),
+            initial_status=AppointmentStatus.CHECKED_IN,
+            allow_conflict=data.get("allow_conflict") is True,
+            override_reason=get_string(data, "override_reason"),
+            override_by_id=user.id,
+        )
+        return JsonResponse(serialize_appointment(appointment), status=201)
+    except ValidationError as err:
+        return validation_error_response(err, "Walk-in check-in failed validation.")
 
 
 @require_http_methods(["GET", "PUT", "DELETE"])
@@ -286,30 +389,43 @@ def appointment_detail(request: HttpRequest, appointment_id: int) -> JsonRespons
     """Retrieve (GET), update/reschedule (PUT), or delete (DELETE) a single appointment."""
     try:
         if request.method == "GET":
+            _user, response = authentication_required(request)
+            if response is not None:
+                return response
             appointment = Appointment.objects.select_related("patient").get(id=appointment_id)
             return JsonResponse(serialize_appointment(appointment), status=200)
 
         elif request.method == "PUT":
+            user, response = receptionist_required(request)
+            if response is not None or user is None:
+                return response or JsonResponse(
+                    format_error("UNAUTHENTICATED", "Active session required."), status=401
+                )
             data, err_response = parse_json(request)
             if err_response or data is None:
                 return err_response or JsonResponse(
                     format_error("BAD_REQUEST", "Request body must not be empty."), status=400
                 )
 
-            raw_doc_id = data.get("doctor_id")
-            doc_id_val = int(raw_doc_id) if raw_doc_id is not None else None
-
             appointment = services.update_appointment(
                 appointment_id=appointment_id,
-                doctor_name=data.get("doctor_name"),
-                app_date_str=data.get("app_date"),
-                app_time_str=data.get("app_time"),
-                reason_for_visit=data.get("reason_for_visit"),
-                doctor_id=doc_id_val,
+                doctor_name=get_string(data, "doctor_name") if "doctor_name" in data else None,
+                app_date_str=get_string(data, "app_date") if "app_date" in data else None,
+                app_time_str=get_string(data, "app_time") if "app_time" in data else None,
+                reason_for_visit=get_string(data, "reason_for_visit")
+                if "reason_for_visit" in data
+                else None,
+                doctor_id=get_int(data, "doctor_id") if "doctor_id" in data else None,
+                allow_conflict=data.get("allow_conflict") is True,
+                override_reason=get_string(data, "override_reason"),
+                override_by_id=user.id,
             )
             return JsonResponse(serialize_appointment(appointment), status=200)
 
         elif request.method == "DELETE":
+            _user, response = receptionist_required(request)
+            if response is not None:
+                return response
             services.delete_appointment(appointment_id=appointment_id)
             return JsonResponse({}, status=204)
 
@@ -327,14 +443,47 @@ def appointment_detail(request: HttpRequest, appointment_id: int) -> JsonRespons
 @require_http_methods(["PATCH"])
 def appointment_status(request: HttpRequest, appointment_id: int) -> JsonResponse:
     """Update an appointment's status following state machine rules."""
+    user, response = authentication_required(request)
+    if response is not None or user is None:
+        return response or JsonResponse(
+            format_error("UNAUTHENTICATED", "Active session required."), status=401
+        )
     data, err_response = parse_json(request)
     if err_response or data is None:
         return err_response or JsonResponse(
             format_error("BAD_REQUEST", "Request body must not be empty."), status=400
         )
 
-    new_status = data.get("status", "")
     try:
+        new_status = get_string(data, "status")
+    except ValidationError as err:
+        return validation_error_response(err, "Status update failed validation.")
+    try:
+        appointment_for_authorization = Appointment.objects.get(id=appointment_id)
+        doctor_transition = (
+            appointment_for_authorization.status == AppointmentStatus.CHECKED_IN
+            and new_status == AppointmentStatus.IN_CONSULTATION
+        ) or (
+            appointment_for_authorization.status == AppointmentStatus.IN_CONSULTATION
+            and new_status == AppointmentStatus.CHECKED_IN
+        )
+        if user.role == StaffRole.DOCTOR:
+            if appointment_for_authorization.doctor_id != user.id or not doctor_transition:
+                return JsonResponse(
+                    format_error(
+                        "FORBIDDEN", "Doctors may only manage their own active consultations."
+                    ),
+                    status=403,
+                )
+        elif user.role == StaffRole.RECEPTIONIST and new_status not in (
+            AppointmentStatus.SCHEDULED,
+            AppointmentStatus.CHECKED_IN,
+            AppointmentStatus.CANCELLED,
+        ):
+            return JsonResponse(
+                format_error("FORBIDDEN", "Receptionists cannot start or complete consultations."),
+                status=403,
+            )
         appointment = services.update_appointment_status(
             appointment_id=appointment_id,
             new_status=new_status,
@@ -352,6 +501,12 @@ def appointment_status(request: HttpRequest, appointment_id: int) -> JsonRespons
 # Authentication and Staff Views
 
 
+@require_GET
+def auth_status(_request: HttpRequest) -> JsonResponse:
+    """Describe whether this database needs its one-time initial receptionist."""
+    return JsonResponse({"initial_setup_required": not StaffUser.objects.exists()})
+
+
 @require_http_methods(["POST"])
 def auth_register(request: HttpRequest) -> JsonResponse:
     """Register a new staff account (Receptionist or Doctor)."""
@@ -362,15 +517,31 @@ def auth_register(request: HttpRequest) -> JsonResponse:
         )
 
     try:
-        staff = services.register_staff(
-            username=data.get("username", ""),
-            password=data.get("password", ""),
-            full_name=data.get("full_name", ""),
-            role=data.get("role", StaffRole.RECEPTIONIST),
-            specialty=data.get("specialty", ""),
-            license_number=data.get("license_number", ""),
-            contact=data.get("contact", ""),
+        username = get_string(data, "username")
+        password = get_string(data, "password")
+        confirmation = (
+            get_string(data, "password_confirmation")
+            if "password_confirmation" in data
+            else password
         )
+        if password != confirmation:
+            raise ValidationError({"password_confirmation": "Passwords do not match."})
+        payload = {
+            "username": username,
+            "password": password,
+            "full_name": get_string(data, "full_name"),
+            "role": get_string(data, "role", StaffRole.RECEPTIONIST),
+            "specialty": get_string(data, "specialty"),
+            "license_number": get_string(data, "license_number"),
+            "contact": get_string(data, "contact"),
+        }
+        if not StaffUser.objects.exists():
+            staff = services.bootstrap_receptionist(**payload)
+        else:
+            user, response = receptionist_required(request)
+            if response is not None:
+                return response
+            staff = services.register_staff(**payload)
         return JsonResponse(serialize_staff_user(staff), status=201)
     except ValidationError as err:
         return validation_error_response(err, "Staff registration failed validation.")
@@ -388,6 +559,11 @@ def auth_login(request: HttpRequest) -> JsonResponse:
     username = data.get("username", "")
     password = data.get("password", "")
 
+    if not isinstance(username, str) or not isinstance(password, str):
+        return JsonResponse(
+            format_error("VALIDATION_ERROR", "Username and password must be text."), status=400
+        )
+
     try:
         staff, session = services.authenticate_staff(username=username, password=password)
         return JsonResponse(
@@ -399,6 +575,51 @@ def auth_login(request: HttpRequest) -> JsonResponse:
         )
     except ValidationError as err:
         return validation_error_response(err, "Authentication failed.")
+
+
+@require_GET
+def demo_accounts(_request: HttpRequest) -> JsonResponse:
+    """Expose active seeded demo accounts only inside the isolated demo database."""
+    try:
+        return JsonResponse(
+            [serialize_staff_user(user) for user in services.list_demo_accounts()], safe=False
+        )
+    except ValidationError as err:
+        return validation_error_response(err, "Demo accounts are unavailable.")
+
+
+@require_http_methods(["POST"])
+def demo_login(request: HttpRequest) -> JsonResponse:
+    """Sign into a seeded demo account using its stable fixture identifier."""
+    data, err_response = parse_json(request)
+    if err_response or data is None:
+        return err_response or JsonResponse(
+            format_error("BAD_REQUEST", "Request body must not be empty."), status=400
+        )
+    try:
+        account_id = get_int(data, "account_id", required=True)
+        token = request.headers.get("X-User-Token", "")
+        user, session = services.authenticate_demo_account(account_id or 0, token)
+        return JsonResponse({"token": session.token, "user": serialize_staff_user(user)})
+    except ValidationError as err:
+        return validation_error_response(err, "Demo sign-in failed.")
+
+
+@require_http_methods(["POST"])
+def demo_reset(request: HttpRequest) -> JsonResponse:
+    """Reset only the demo database after explicit confirmation."""
+    data, response = parse_json(request)
+    if response is not None:
+        return response
+    if not data or data.get("confirm") is not True:
+        return JsonResponse(
+            format_error("VALIDATION_ERROR", "Confirm demo reset explicitly."), status=400
+        )
+    try:
+        services.reset_demo_data()
+        return JsonResponse({"status": "reset"})
+    except ValidationError as err:
+        return validation_error_response(err, "Demo reset failed.")
 
 
 @require_GET
@@ -440,16 +661,26 @@ def auth_profile(request: HttpRequest) -> JsonResponse:
         )
 
     try:
+        token = request.headers.get("X-User-Token", "").strip()
+        clean_username = get_string(data, "username", user.username).strip().lower()
+        changing_credentials = clean_username != user.username or bool(
+            get_string(data, "new_password")
+        )
         updated_user = services.update_staff_profile(
             user_id=user.id,
-            full_name=data.get("full_name", user.full_name),
-            contact=data.get("contact", user.contact),
-            specialty=data.get("specialty", user.specialty),
-            license_number=data.get("license_number", user.license_number),
-            current_password=data.get("current_password") or None,
-            new_password=data.get("new_password") or None,
+            full_name=get_string(data, "full_name", user.full_name),
+            contact=get_string(data, "contact", user.contact),
+            specialty=get_string(data, "specialty", user.specialty),
+            license_number=get_string(data, "license_number", user.license_number),
+            current_password=get_string(data, "current_password") or None,
+            new_password=get_string(data, "new_password") or None,
+            username=clean_username,
+            session_token=token,
         )
-        return JsonResponse({"user": serialize_staff_user(updated_user)}, status=200)
+        payload = {"user": serialize_staff_user(updated_user)}
+        if changing_credentials:
+            payload["token"] = services.rotate_session(token, updated_user).token
+        return JsonResponse(payload, status=200)
     except ValidationError as err:
         return validation_error_response(err, "Profile update failed validation.")
 
@@ -457,6 +688,9 @@ def auth_profile(request: HttpRequest) -> JsonResponse:
 @require_GET
 def doctors_collection(_request: HttpRequest) -> JsonResponse:
     """Return list of active physician accounts for appointment scheduling."""
+    _user, response = authentication_required(_request)
+    if response is not None:
+        return response
     doctors = services.list_doctors()
     return JsonResponse([serialize_staff_user(d) for d in doctors], safe=False, status=200)
 
@@ -467,6 +701,9 @@ def doctors_collection(_request: HttpRequest) -> JsonResponse:
 @require_GET
 def check_conflict(request: HttpRequest) -> JsonResponse:
     """Check for schedule conflicts for a doctor on a given date and time."""
+    _user, response = receptionist_required(request)
+    if response is not None:
+        return response
     raw_doc_id = request.GET.get("doctor_id")
     if not raw_doc_id:
         return JsonResponse(
@@ -560,6 +797,22 @@ def doctor_queue(request: HttpRequest) -> JsonResponse:
 
 
 @require_GET
+def daily_report(request: HttpRequest) -> JsonResponse:
+    """Return a role-scoped snapshot of the selected date's schedule."""
+    user = get_authenticated_user(request)
+    if not user:
+        return JsonResponse(
+            format_error("UNAUTHENTICATED", "Active session required. Please sign in."),
+            status=401,
+        )
+    try:
+        report = services.get_daily_report(user, request.GET.get("date"))
+    except ValidationError as err:
+        return validation_error_response(err, "Daily report could not be generated.")
+    return JsonResponse(report)
+
+
+@require_GET
 def doctor_patients(request: HttpRequest) -> JsonResponse:
     """Return the roster of patients under the authenticated physician's care."""
     user = get_authenticated_user(request)
@@ -596,7 +849,7 @@ def doctor_appointments(request: HttpRequest) -> JsonResponse:
 
     appointments = list(
         Appointment.objects.select_related("patient")
-        .filter(doctor_id=user.id)
+        .filter(Q(doctor_id=user.id) | Q(doctor__isnull=True, doctor_name__iexact=user.full_name))
         .order_by("app_date", "app_time", "id")
     )
     return JsonResponse([serialize_appointment(a) for a in appointments], safe=False, status=200)
@@ -605,11 +858,10 @@ def doctor_appointments(request: HttpRequest) -> JsonResponse:
 @require_GET
 def patient_medical_records(request: HttpRequest, patient_id: int) -> JsonResponse:
     """Return all clinical medical records for a specific patient ID."""
-    user = get_authenticated_user(request)
-    if not user:
-        return JsonResponse(
-            format_error("UNAUTHENTICATED", "Active session required. Please sign in."),
-            status=401,
+    user, response = authentication_required(request)
+    if response is not None or user is None:
+        return response or JsonResponse(
+            format_error("UNAUTHENTICATED", "Active session required."), status=401
         )
     records = services.get_patient_medical_history(patient_id=patient_id)
     return JsonResponse([serialize_medical_record(r) for r in records], safe=False, status=200)
@@ -638,41 +890,19 @@ def medical_records_collection(request: HttpRequest) -> JsonResponse:
             format_error("BAD_REQUEST", "Request body must not be empty."), status=400
         )
 
-    patient_id = data.get("patient_id")
-    if patient_id is None:
-        return JsonResponse(
-            format_error(
-                "VALIDATION_ERROR",
-                "Patient ID is required.",
-                {"patient_id": ["Patient ID is required."]},
-            ),
-            status=400,
-        )
-
     try:
-        patient_id_int = int(patient_id)
-    except (ValueError, TypeError):
-        return JsonResponse(
-            format_error(
-                "VALIDATION_ERROR",
-                "Invalid Patient ID.",
-                {"patient_id": ["Patient ID must be an integer."]},
-            ),
-            status=400,
-        )
-
-    raw_appt_id = data.get("appointment_id")
-    appt_id_val: int | None = int(raw_appt_id) if raw_appt_id is not None else None
-
-    try:
+        patient_id_int = get_int(data, "patient_id", required=True)
+        appt_id_val = get_int(data, "appointment_id")
+        if patient_id_int is None:
+            raise ValidationError({"patient_id": "Patient ID is required."})
         record = services.create_medical_record(
             patient_id=patient_id_int,
             doctor_id=user.id,
-            diagnosis=data.get("diagnosis", ""),
-            symptoms=data.get("symptoms", ""),
-            clinical_notes=data.get("clinical_notes", ""),
-            prescription=data.get("prescription", ""),
-            follow_up_advice=data.get("follow_up_advice", ""),
+            diagnosis=get_string(data, "diagnosis"),
+            symptoms=get_string(data, "symptoms"),
+            clinical_notes=get_string(data, "clinical_notes"),
+            prescription=get_string(data, "prescription"),
+            follow_up_advice=get_string(data, "follow_up_advice"),
             appointment_id=appt_id_val,
         )
         return JsonResponse(serialize_medical_record(record), status=201)
@@ -719,11 +949,13 @@ def medical_record_detail(request: HttpRequest, record_id: int) -> JsonResponse:
         updated = services.update_medical_record(
             record_id=record_id,
             doctor_id=user.id,
-            diagnosis=data.get("diagnosis", ""),
-            symptoms=data.get("symptoms", ""),
-            clinical_notes=data.get("clinical_notes", ""),
-            prescription=data.get("prescription", ""),
-            follow_up_advice=data.get("follow_up_advice", ""),
+            diagnosis=get_string(data, "diagnosis"),
+            symptoms=get_string(data, "symptoms"),
+            clinical_notes=get_string(data, "clinical_notes"),
+            prescription=get_string(data, "prescription"),
+            follow_up_advice=get_string(data, "follow_up_advice"),
+            correction_reason=get_string(data, "correction_reason"),
+            expected_revision=get_int(data, "expected_revision"),
         )
         return JsonResponse(serialize_medical_record(updated), status=200)
     except ValidationError as err:

@@ -1,0 +1,590 @@
+<script lang="ts">
+  import MetricCard from "./MetricCard.svelte";
+  import { onMount, onDestroy } from "svelte";
+  import {
+    api,
+    type Patient,
+    type Appointment,
+    type StaffUser,
+    type MedicalRecord,
+    type DoctorQueueResponse,
+    type ApiError,
+  } from "$lib/api";
+  import { toast } from "$lib/toast.svelte";
+  import { Button } from "$lib/components/ui/button";
+  import { Input } from "$lib/components/ui/input";
+  import { Badge } from "$lib/components/ui/badge";
+  import * as Tabs from "$lib/components/ui/tabs";
+  import {
+    Table,
+    TableHeader,
+    TableHead,
+    TableBody,
+    TableRow,
+    TableCell,
+  } from "$lib/components/ui/table";
+  import ConsultationDialog from "./ConsultationDialog.svelte";
+  import PatientChartDialog from "./PatientChartDialog.svelte";
+  import {
+    Stethoscope,
+    Users,
+    Clock,
+    CheckCircle2,
+    Calendar,
+    FileText,
+    RefreshCw,
+    Search,
+    UserCheck,
+    Play,
+    Pill,
+    X,
+    Loader2,
+    AlertCircle,
+    CalendarCheck,
+    ClipboardList,
+    ChevronLeft,
+    ChevronRight,
+  } from "lucide-svelte";
+
+  interface Props {
+    activeDoctor: StaffUser;
+  }
+
+  let { activeDoctor }: Props = $props();
+
+  // Active Tab
+  type DoctorTab = "queue" | "schedule" | "patients" | "notes";
+  let activeTab = $state<DoctorTab>("queue");
+
+  // Queue Data
+  let checkedInQueue = $state<Appointment[]>([]);
+  let inConsultationQueue = $state<Appointment[]>([]);
+  let scheduledToday = $state<Appointment[]>([]);
+  let completedToday = $state<Appointment[]>([]);
+
+  // Patients & Notes collections
+  let myPatients = $state<Patient[]>([]);
+  let patientSearch = $state("");
+
+  let clinicalNotes = $state<MedicalRecord[]>([]);
+  let notesSearch = $state("");
+
+  let isLoading = $state(false);
+  let errorMessage = $state<string | null>(null);
+
+  // Dialog State
+  let isConsultationOpen = $state(false);
+  let selectedAppointmentForConsult = $state<Appointment | null>(null);
+
+  let isChartOpen = $state(false);
+  let selectedPatientForChart = $state<Patient | null>(null);
+
+  // Polling Timer (5-second queue refresh)
+  let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+  function formatTime(timeStr?: string): string {
+    if (!timeStr) return "--:--";
+    const parts = timeStr.split(":");
+    if (parts.length < 2) return timeStr;
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    if (isNaN(h) || isNaN(m)) return timeStr;
+    const ampm = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 || 12;
+    const mm = m.toString().padStart(2, "0");
+    return `${h12}:${mm} ${ampm}`;
+  }
+
+  async function loadDoctorQueue(silent = false) {
+    if (!silent) isLoading = true;
+    try {
+      const res = await api.clinical.getDoctorQueue(activeDoctor.id);
+      checkedInQueue = res.queue.checked_in;
+      inConsultationQueue = res.queue.in_consultation;
+      scheduledToday = res.queue.scheduled;
+      completedToday = res.queue.completed;
+      errorMessage = null;
+    } catch (err) {
+      const e = err as ApiError;
+      if (!silent) {
+        errorMessage = e.message || "Failed to load doctor queue.";
+      }
+    } finally {
+      if (!silent) isLoading = false;
+    }
+  }
+
+  async function loadMyPatients() {
+    try {
+      myPatients = await api.clinical.getDoctorPatients(activeDoctor.id, patientSearch || undefined);
+    } catch {
+      // Non-blocking
+    }
+  }
+
+  async function reloadAll() {
+    await Promise.all([loadDoctorQueue(), loadMyPatients()]);
+  }
+
+  function startPolling() {
+    stopPolling();
+    pollInterval = setInterval(() => {
+      // Pause polling if consultation dialog is open or window is blurred
+      if (isConsultationOpen || document.hidden) return;
+      void Promise.all([loadDoctorQueue(true), loadMyPatients()]);
+    }, 5000);
+  }
+
+  function stopPolling() {
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+  }
+
+  async function handleBeginConsultation(app: Appointment) {
+    try {
+      if (app.status !== "In Consultation") {
+        await api.updateAppointmentStatus(app.id, "In Consultation");
+      }
+      selectedAppointmentForConsult = app;
+      isConsultationOpen = true;
+      await loadDoctorQueue(true);
+    } catch (err) {
+      const e = err as ApiError;
+      toast.error(`Unable to start consultation: ${e.message}`);
+    }
+  }
+
+  function openPatientChart(patient: Patient) {
+    selectedPatientForChart = patient;
+    isChartOpen = true;
+  }
+
+  async function openChartFromAppointment(app: Appointment) {
+    try {
+      const patient = await api.getPatient(app.patient_id);
+      openPatientChart(patient);
+    } catch (err) {
+      toast.error((err as ApiError).message || "Unable to load the patient chart.");
+    }
+  }
+
+  let filteredMyPatients = $derived.by(() => {
+    if (!patientSearch.trim()) return myPatients;
+    const q = patientSearch.toLowerCase().trim();
+    return myPatients.filter(
+      (p) =>
+        p.full_name.toLowerCase().includes(q) ||
+        String(p.id).includes(q) ||
+        (p.contact && p.contact.toLowerCase().includes(q))
+    );
+  });
+
+  // Scroll indicators for workspace tabs track
+  let tabsListEl = $state<HTMLElement | null>(null);
+  let canScrollLeft = $state(false);
+  let canScrollRight = $state(false);
+
+  function checkTabScroll() {
+    if (!tabsListEl) return;
+    canScrollLeft = tabsListEl.scrollLeft > 2;
+    canScrollRight =
+      tabsListEl.scrollLeft + tabsListEl.clientWidth < tabsListEl.scrollWidth - 2;
+  }
+
+  function scrollTabs(direction: "left" | "right") {
+    if (!tabsListEl) return;
+    const offset = direction === "left" ? -180 : 180;
+    tabsListEl.scrollBy({ left: offset, behavior: "smooth" });
+    setTimeout(checkTabScroll, 220);
+  }
+
+  onMount(() => {
+    reloadAll();
+    startPolling();
+    setTimeout(checkTabScroll, 100);
+    window.addEventListener("resize", checkTabScroll);
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden && !isConsultationOpen) {
+        void Promise.all([loadDoctorQueue(true), loadMyPatients()]);
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      stopPolling();
+      window.removeEventListener("resize", checkTabScroll);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  });
+
+  onDestroy(() => {
+    stopPolling();
+  });
+</script>
+
+<div class="workspace-enter flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
+  <div class="grid grid-cols-4 gap-3 shrink-0">
+    <MetricCard label="Waiting room" value={checkedInQueue.length} description="Your checked-in visits today" icon={UserCheck} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="In consultation" value={inConsultationQueue.length} description="Your visits in progress today" icon={Stethoscope} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Scheduled today" value={scheduledToday.length} description="Your visits pending arrival" icon={CalendarCheck} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Completed visits" value={completedToday.length} description="Your finalized visits today" icon={ClipboardList} loading={isLoading} unavailable={!!errorMessage} />
+  </div>
+
+  <!-- Workspace Tabs Navigation & Refresh -->
+  <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0 min-w-0">
+    <Tabs.Root
+      value={activeTab}
+      class="min-w-0 max-w-full overflow-hidden shrink"
+      onValueChange={(val) => {
+        if (val) activeTab = val as DoctorTab;
+      }}
+    >
+      <div class="relative flex items-center min-w-0">
+        {#if canScrollLeft}
+          <button
+            type="button"
+            onclick={() => scrollTabs("left")}
+            class="absolute left-0 z-20 h-10 w-7 flex items-center justify-center rounded-l-lg bg-card/95 hover:bg-card border-y border-l border-border shadow-xs cursor-pointer text-muted-foreground hover:text-foreground transition-colors"
+            title="Scroll Left"
+          >
+            <ChevronLeft class="size-4" />
+          </button>
+        {/if}
+
+        <Tabs.List
+          bind:ref={tabsListEl}
+          onscroll={checkTabScroll}
+          class="h-10 p-1 max-w-full overflow-x-auto no-scrollbar flex flex-nowrap"
+        >
+          <Tabs.Trigger value="queue" class="px-3.5 text-xs font-medium gap-1.5 shrink-0 whitespace-nowrap">
+            <UserCheck class="size-3.5" />
+            <span>Waiting Room ({checkedInQueue.length + inConsultationQueue.length})</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="schedule" class="px-3.5 text-xs font-medium gap-1.5 shrink-0 whitespace-nowrap">
+            <Calendar class="size-3.5" />
+            <span>Today's Schedule ({scheduledToday.length + checkedInQueue.length + inConsultationQueue.length + completedToday.length})</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="patients" class="px-3.5 text-xs font-medium gap-1.5 shrink-0 whitespace-nowrap">
+            <Users class="size-3.5" />
+            <span>My Patients ({myPatients.length})</span>
+          </Tabs.Trigger>
+        </Tabs.List>
+
+        {#if canScrollRight}
+          <button
+            type="button"
+            onclick={() => scrollTabs("right")}
+            class="absolute right-0 z-20 h-10 w-7 flex items-center justify-center rounded-r-lg bg-card/95 hover:bg-card border-y border-r border-border shadow-xs cursor-pointer text-muted-foreground hover:text-foreground transition-colors"
+            title="Scroll Right"
+          >
+            <ChevronRight class="size-4" />
+          </button>
+        {/if}
+      </div>
+    </Tabs.Root>
+
+    <div class="flex items-center gap-2 shrink-0">
+      <Button
+        variant="outline"
+        size="sm"
+        class="h-9 px-3 text-xs cursor-pointer"
+        onclick={reloadAll}
+        disabled={isLoading}
+      >
+        <RefreshCw class="size-3.5 mr-1.5 {isLoading ? 'animate-spin' : ''}" />
+        Sync Queue
+      </Button>
+    </div>
+  </div>
+
+  <!-- Tab 1: Waiting Room Triage Queue -->
+  {#if activeTab === "queue"}
+    <div class="flex flex-col gap-4 flex-1 min-h-0 overflow-y-auto pr-1">
+      <!-- Active Consultation Banner (if patient is currently consulting) -->
+      {#if inConsultationQueue.length > 0}
+        <div class="rounded-xl border bg-card p-4 shadow-sm flex flex-col gap-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <Stethoscope class="size-4 text-muted-foreground" />
+              <span class="text-xs font-semibold text-foreground">
+                Active Patient Consultation
+              </span>
+            </div>
+            <span class="text-xs text-muted-foreground">
+              {inConsultationQueue.length} {inConsultationQueue.length === 1 ? "session" : "sessions"} active
+            </span>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {#each inConsultationQueue as activeApp (activeApp.id)}
+              <div class="rounded-lg border bg-muted/20 p-3.5 shadow-2xs flex flex-col justify-between gap-3">
+                <div>
+                  <div class="flex items-start justify-between">
+                    <div>
+                      <h4 class="text-sm font-semibold text-foreground">{activeApp.patient_name}</h4>
+                      <p class="text-xs text-muted-foreground">Patient #{activeApp.patient_id} • Appt #{activeApp.id}</p>
+                    </div>
+                    <Badge variant="secondary" class="text-xs border border-border/80">
+                      Consulting
+                    </Badge>
+                  </div>
+                  {#if activeApp.reason_for_visit}
+                    <p class="text-xs text-muted-foreground mt-2 italic">
+                      Chief Complaint: {activeApp.reason_for_visit}
+                    </p>
+                  {/if}
+                </div>
+
+                <div class="flex items-center justify-between pt-2 border-t border-border/60">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-7 text-xs px-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                    onclick={() => openChartFromAppointment(activeApp)}
+                  >
+                    <FileText class="size-3.5 mr-1" />
+                    View Chart
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    class="h-7 text-xs px-3 cursor-pointer"
+                    onclick={() => handleBeginConsultation(activeApp)}
+                  >
+                    Resume Consultation
+                  </Button>
+                </div>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      <!-- Waiting Room Cards -->
+      <div class="rounded-xl border bg-card p-5 shadow-xs">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2">
+            <h3 class="text-sm font-semibold text-foreground">Waiting Room Triage</h3>
+            <Badge variant="secondary" class="text-xs font-semibold">
+              {checkedInQueue.length} Waiting
+            </Badge>
+          </div>
+          <span class="text-xs text-muted-foreground">Auto-updates every 5s</span>
+        </div>
+
+        {#if checkedInQueue.length === 0}
+          <div class="flex flex-col items-center justify-center py-8 text-center text-muted-foreground gap-2">
+            <UserCheck class="size-9 text-muted-foreground/40" />
+            <p class="text-sm font-medium text-foreground">The Waiting Room is Clear</p>
+            <p class="text-xs max-w-sm">
+              No patients are currently checked in for consultation. When the front desk marks an appointment as 'Checked In', it will appear here immediately.
+            </p>
+          </div>
+        {:else}
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {#each checkedInQueue as app, idx (app.id)}
+              <div class="rounded-xl border bg-card p-4 shadow-xs flex flex-col justify-between gap-3 hover:border-clinic/40 transition-colors duration-150">
+                <div>
+                  <div class="flex items-start justify-between gap-2">
+                    <div>
+                      <div class="flex items-center gap-2">
+                        <span class="size-5 rounded-full bg-secondary text-secondary-foreground font-bold text-xs flex items-center justify-center">
+                          {idx + 1}
+                        </span>
+                        <h4 class="text-sm font-semibold text-foreground">{app.patient_name}</h4>
+                      </div>
+                      <p class="text-xs text-muted-foreground font-mono mt-0.5 pl-7">
+                        Record #{app.patient_id} • Appt #{app.id}
+                      </p>
+                    </div>
+
+                    <Badge variant="secondary" class="text-[11px] font-medium shrink-0">
+                      Checked In
+                    </Badge>
+                  </div>
+
+                  <!-- Time & Complaint -->
+                  <div class="mt-3 pl-7 flex flex-col gap-1.5 text-xs">
+                    <div class="flex items-center gap-1.5 text-muted-foreground">
+                      <Clock class="size-3 text-muted-foreground shrink-0" />
+                      <span>Scheduled: <strong>{formatTime(app.app_time)}</strong></span>
+                    </div>
+                    {#if app.reason_for_visit}
+                      <div class="rounded bg-muted/40 p-2 text-xs italic text-foreground border border-border/40">
+                        "{app.reason_for_visit}"
+                      </div>
+                    {/if}
+                  </div>
+                </div>
+
+                <!-- Card Actions -->
+                <div class="flex items-center justify-between pt-3 border-t border-border/60">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    class="h-8 text-xs px-2.5 cursor-pointer"
+                    onclick={() => openChartFromAppointment(app)}
+                  >
+                    <FileText class="size-3.5 mr-1" />
+                    Chart
+                  </Button>
+
+                  <Button
+                    variant="default"
+                    size="sm"
+                    class="h-8 text-xs px-3 font-medium cursor-pointer"
+                    onclick={() => handleBeginConsultation(app)}
+                  >
+                    <Play class="size-3.5 mr-1" />
+                    Begin Consultation
+                  </Button>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    </div>
+
+  <!-- Tab 2: Today's Full Schedule -->
+  {:else if activeTab === "schedule"}
+    <div class="rounded-xl border bg-card text-card-foreground shadow-xs overflow-hidden flex flex-col flex-1 min-h-0 min-w-0">
+      <Table containerClass="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-auto">
+        <TableHeader class="sticky top-0 bg-card z-10 shadow-xs border-b [&_tr]:bg-card">
+          <TableRow>
+            <TableHead class="w-20">Appt #</TableHead>
+            <TableHead>Patient</TableHead>
+            <TableHead class="w-32">Time</TableHead>
+            <TableHead>Chief Complaint</TableHead>
+            <TableHead class="w-32 text-center">Status</TableHead>
+            <TableHead class="w-24 text-right">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {#each [...inConsultationQueue, ...checkedInQueue, ...scheduledToday, ...completedToday] as item (item.id)}
+            <TableRow>
+              <TableCell class="font-mono text-xs text-muted-foreground">#{item.id}</TableCell>
+              <TableCell class="font-medium text-foreground">{item.patient_name}</TableCell>
+              <TableCell class="text-xs text-muted-foreground font-mono">{formatTime(item.app_time)}</TableCell>
+              <TableCell class="text-xs text-muted-foreground italic">
+                {item.reason_for_visit || "--"}
+              </TableCell>
+              <TableCell class="text-center">
+                {#if item.status === "Checked In"}
+                  <Badge variant="secondary" class="text-xs">
+                    Checked In
+                  </Badge>
+                {:else if item.status === "In Consultation"}
+                  <Badge variant="secondary" class="text-xs border border-border/80">
+                    Consulting
+                  </Badge>
+                {:else if item.status === "Completed"}
+                  <Badge variant="outline" class="text-xs">
+                    Completed
+                  </Badge>
+                {:else}
+                  <Badge variant="outline" class="text-xs text-muted-foreground">
+                    Scheduled
+                  </Badge>
+                {/if}
+              </TableCell>
+              <TableCell class="text-right">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  class="h-7 text-xs px-2 cursor-pointer"
+                  onclick={() => openChartFromAppointment(item)}
+                >
+                  <FileText class="size-3 mr-1" />
+                  Chart
+                </Button>
+              </TableCell>
+            </TableRow>
+          {/each}
+        </TableBody>
+      </Table>
+    </div>
+
+  <!-- Tab 3: My Patients Roster -->
+  {:else if activeTab === "patients"}
+    <div class="flex flex-col gap-3 flex-1 min-h-0 min-w-0 overflow-hidden">
+      <div class="flex items-center justify-between gap-3 shrink-0 min-w-0">
+        <div class="relative w-full sm:w-72 p-0.5">
+          <Search class="absolute left-3.5 top-3 size-4 text-muted-foreground pointer-events-none" />
+          <Input
+            type="text"
+            placeholder="Search patient name or ID..."
+            bind:value={patientSearch}
+            class="pl-9 h-9 text-xs"
+          />
+        </div>
+      </div>
+
+      <div class="rounded-xl border bg-card text-card-foreground shadow-xs overflow-hidden flex flex-col flex-1 min-h-0 min-w-0">
+        <Table containerClass="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-auto">
+          <TableHeader class="sticky top-0 bg-card z-10 shadow-xs border-b [&_tr]:bg-card">
+            <TableRow>
+              <TableHead class="w-20">ID</TableHead>
+              <TableHead>Full Name</TableHead>
+              <TableHead class="w-20">Age</TableHead>
+              <TableHead>Contact Detail</TableHead>
+              <TableHead class="w-32 text-center">Visits with Me</TableHead>
+              <TableHead class="w-28 text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {#if filteredMyPatients.length === 0}
+              <TableRow>
+                <TableCell colspan={6} class="h-28 text-center text-xs text-muted-foreground">
+                  No patient records match your search.
+                </TableCell>
+              </TableRow>
+            {:else}
+              {#each filteredMyPatients as p (p.id)}
+                <TableRow>
+                  <TableCell class="font-mono text-xs text-muted-foreground">#{p.id}</TableCell>
+                  <TableCell class="font-medium text-foreground">{p.full_name}</TableCell>
+                  <TableCell class="text-xs text-muted-foreground">{p.age} yrs</TableCell>
+                  <TableCell class="text-xs text-muted-foreground font-mono">{p.contact || "--"}</TableCell>
+                  <TableCell class="text-center text-xs font-medium text-foreground">
+                    {p.doctor_appointment_count ?? 0}
+                  </TableCell>
+                  <TableCell class="text-right">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      class="h-7 text-xs px-2 cursor-pointer"
+                      onclick={() => openPatientChart(p)}
+                    >
+                      <FileText class="size-3 mr-1 text-clinic" />
+                      View Chart
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              {/each}
+            {/if}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Consultation Dialog (SOAP) -->
+  <ConsultationDialog
+    bind:open={isConsultationOpen}
+    appointment={selectedAppointmentForConsult}
+    activeDoctor={activeDoctor}
+    onComplete={() => {
+      loadDoctorQueue(false);
+    }}
+  />
+
+  <!-- Patient Chart History Modal -->
+  <PatientChartDialog
+    bind:open={isChartOpen}
+    patient={selectedPatientForChart}
+  />
+</div>

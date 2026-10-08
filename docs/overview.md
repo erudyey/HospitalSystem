@@ -1,9 +1,10 @@
 # Hospital Management System: System Overview
 
-The Hospital Management System is a local-first Windows and macOS desktop
-application for clinic receptionists and front-desk staff. It manages patient
-registration and appointment scheduling without requiring internet access,
-external database servers, or cloud dependencies.
+The Hospital Management System is a local-first desktop application for clinics
+and hospitals. It provides role-based workspaces for Receptionists and Doctors to
+manage patient registration, appointment scheduling, waiting room triage, and
+clinical consultation records without requiring internet connectivity or external
+database servers.
 
 ---
 
@@ -15,89 +16,107 @@ flowchart LR
     Search -->|"Yes (Search by Name or ID)"| Select["Select Patient Record"]
     Search -->|"No (Register New Patient)"| Register["Enter Name, Contact, and Age"]
     Register --> Select
-    Select --> Book["Book Appointment (Doctor & Date)"]
-    Book --> Active["Status: Scheduled"]
-    Active -->|"Visit Completed"| Complete["Status: Completed"]
-    Active -->|"Visit Cancelled"| Cancel["Status: Cancelled"]
+    Select --> Book["Book Appointment (Doctor, Date, Time)"]
+    Book -->|"Triage Arrival"| Waiting["Status: Checked In (Waiting Room)"]
+    Book -->|"Advance Booking"| Scheduled["Status: Scheduled"]
+    Scheduled -->|"Patient Arrives"| Waiting
+    Waiting -->|"Doctor Begins Call"| Consult["Status: In Consultation"]
+    Consult -->|"Sign SOAP Record"| Completed["Status: Completed (Final)"]
+    Scheduled -->|"Patient Cancels"| Cancelled["Status: Cancelled"]
 ```
 
 ---
 
 ## 1. Operational Model and Local-First Design
 
-Small clinics and front-desk environments require fast, reliable tools that work
-regardless of internet stability. This system uses a local-first desktop
-architecture for three specific operational reasons:
+Clinical operations require fast, uninterrupted software that functions reliably
+during network or broadband interruptions:
 
-1. **Patient Data Privacy**: Clinical records remain strictly on the local
-   workstation. Data never leaves the machine or traverses external networks.
-2. **Zero Internet Dependency**: Receptionists can register arriving patients
-   and check schedules even during local network or broadband outages.
-3. **Low Maintenance and Native Runtimes**: The application uses the operating
-   system's built-in web engine (Microsoft Edge WebView2 on Windows and Apple
-   WebKit on macOS) alongside an embedded SQLite database in Write-Ahead Logging
-   (WAL) mode. The clinic does not need to install or configure external
-   servers.
-
----
-
-## 2. Core Clinical Capabilities
-
-### Patient Registration and Directory
-
-- **Unique Numeric Identifiers**: Every registered patient receives an
-  auto-incrementing positive integer ID (e.g., ID `1`, `2`, `3`).
-- **Duplicate Name Support**: Multiple patients can share identical names (for
-  example, two patients named "John Smith"). The system treats them as distinct
-  clinical records with unique IDs and distinct contact details.
-- **Fast Search and Shortcuts**: Front-desk staff can search the directory by
-  partial name match (case-insensitive) or by exact numeric ID. The search input
-  can be focused instantly from anywhere in the application with `Ctrl+K` on
-  Windows, `Cmd+K` on macOS, or `/`.
-- **Active Visit Indicators**: The patient directory shows lifetime appointment
-  counts alongside an active scheduled visit indicator, allowing staff to see at
-  a glance whether a patient has a pending appointment today or in the future.
-
-### Appointment Booking and Lifecycle
-
-- **Relational Integrity**: Every appointment requires a valid patient foreign
-  key. Deleting patients or creating orphaned appointments is prevented at the
-  database constraint level.
-- **Calendar Scheduling**: Appointments store the designated doctor name and
-  visit date in standard ISO format (`YYYY-MM-DD`). The booking dialog provides
-  quick-select chips for Today, Tomorrow, and Next Week.
-- **Status State Machine**:
-  - `Scheduled`: Initial state upon booking.
-  - `Completed`: Marked when the doctor consultation concludes.
-  - `Cancelled`: Marked if the appointment is called off before consultation.
-  - Terminal records are preserved for clinical history rather than deleted from
-    the database.
+1. **Patient Data Privacy**: Clinical records and personal health details remain
+   strictly on the local workstation. Data does not leave the machine or traverse
+   external networks.
+2. **Zero Internet Dependency**: Staff can register patients, triage arrivals,
+   and conduct consultations completely offline.
+3. **Embedded Concurrency Engine**: The application pairs operating system webview
+   runtimes (WebView2 on Windows, WebKit on macOS) with an embedded SQLite database
+   configured in Write-Ahead Logging (WAL) mode for resilient, multi-threaded
+   data access.
 
 ---
 
-## 3. Legacy Data Migration
+## 2. Core Clinical Roles and Capabilities
 
-For databases migrating from the legacy Tkinter implementation,
-the backend provides an automated, non-destructive importer
-(`backend.clinic.importer`).
+### Receptionist Workspace
 
-The importer operates with strict safety safeguards:
+- **Patient Registration**: Capture full name, contact information, and age.
+  Unique auto-incrementing IDs identify each patient, with full support for duplicate
+  names as distinct records.
+- **Appointment Booking & Conflict Detection**: Schedule visits with attending
+  physicians with date and time granularity. A real-time conflict engine flags
+  scheduling overlaps within a configurable window (+/- 15 minutes) with soft
+  warning banners and emergency override capability.
+- **Arrival Triage (Waiting Room)**: Front-desk staff can transition arriving
+  patients from `Scheduled` to `Checked In` with a single click, or select
+  "Book & Check In" for immediate walk-in triage.
+- **Fast Search and Navigation**: Search patient directory and appointments by
+  name, ID, or phone number with instant keyboard shortcuts (`Ctrl+K` on Windows,
+  `Cmd+K` on macOS, or `/`).
 
-1. It creates an atomic, read-only snapshot of the legacy `clinic.db` file using
-   Python's `sqlite3.Connection.backup()` API before reading any rows.
-2. It validates every legacy row against Django model constraints.
-3. It imports records into the active database while preserving original patient
-   IDs, duplicate-name records, and appointment relationships.
+### Doctor Workspace
+
+- **Live Waiting Room Queue**: Physicians view a dedicated queue of `Checked In`
+  patients waiting for consultation, sorted chronologically by arrival time. The
+  queue automatically syncs in the background.
+- **Today's Schedule & Patient Roster**: Overview of today's appointments across
+  all statuses, alongside a comprehensive patient directory with visit counts.
+- **SOAP Clinical Consultation Notes**: A structured clinical dialog allows
+  physicians to record:
+  - **Subjective (Symptoms)**: Patient complaints and timeline.
+  - **Objective (Clinical Notes)**: Physical examination and vital findings.
+  - **Assessment (Diagnosis)**: Primary clinical diagnosis (required).
+  - **Plan (Prescription & Follow-up)**: Medication orders, dosage guidelines, and
+    follow-up instructions.
+- **Atomic Record Signing**: Completing a consultation atomically saves the signed
+  `MedicalRecord` and finalizes the appointment into the `Completed` state.
+- **Patient Chart History**: Immediate access to the complete chronological
+  timeline of past diagnoses, notes, and prescriptions for any patient.
 
 ---
 
-## 4. Documentation Hierarchy
+## 3. Appointment Lifecycle State Machine
+
+Appointments transition through a 5-state lifecycle:
+
+1. `Scheduled`: Booked in advance for a future date and time slot.
+2. `Checked In`: The patient has arrived at the facility and is in the waiting room.
+3. `In Consultation`: The physician is currently seeing the patient.
+4. `Completed`: The consultation is concluded and the medical record is signed.
+   Completed appointments are permanent, immutable clinical records.
+5. `Cancelled`: The visit was called off. Cancelled visits can be restored to
+   `Scheduled` if the patient reschedules.
+
+---
+
+## 4. Legacy Data Migration
+
+The system provides an automated SQLite importer (`backend.clinic.importer`) to
+migrate data from legacy database files non-destructively:
+
+1. Creates an atomic, read-only snapshot using Python's `sqlite3.Connection.backup()`
+   before reading rows.
+2. Validates records against current domain constraints.
+3. Preserves patient numeric IDs and relational links between patients and
+   appointments.
+
+---
+
+## 5. Documentation Hierarchy
 
 For deeper technical specifications, see:
 
 - [System Architecture](system-architecture.md): Process isolation,
   single-instance protection, loopback security, and persistence.
-- [API Contracts](api-contracts.md): JSON payload schemas, endpoint tables, and
-  appointment state machine.
-- [Developer Runbook](development.md): Environment setup, task runner commands,
-  test execution, and packaging.
+- [API Contracts](api-contracts.md): REST JSON schemas, endpoints, and error models.
+- [Developer Runbook](development.md): Local development setup, testing commands,
+  and packaging.
+- [Git Cheatsheet](git-cheatsheet.md): Team Git workflow and atomic commit guidelines.

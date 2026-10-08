@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MetricCard from "./MetricCard.svelte";
   import { onMount } from "svelte";
   import { api, type Patient, type ApiError } from "$lib/api";
   import { toast } from "$lib/toast.svelte";
@@ -42,11 +43,13 @@
   } from "lucide-svelte";
 
   interface Props {
+    readOnly?: boolean;
     isRegisterDialogOpen?: boolean;
     onSelectPatientForBooking?: (patient: Patient) => void;
   }
 
   let {
+    readOnly = false,
     isRegisterDialogOpen = $bindable(false),
     onSelectPatientForBooking,
   }: Props = $props();
@@ -83,8 +86,8 @@
   let isDeleteDialogOpen = $state(false);
   let patientForDelete = $state<Patient | null>(null);
 
-  async function loadPatients() {
-    isLoading = true;
+  async function loadPatients(silent = false) {
+    if (!silent) isLoading = true;
     errorMessage = null;
     try {
       patients = await api.listPatients();
@@ -92,7 +95,7 @@
       const e = err as ApiError;
       errorMessage = e.message || "Failed to load patient records.";
     } finally {
-      isLoading = false;
+      if (!silent) isLoading = false;
     }
   }
 
@@ -101,7 +104,7 @@
   let activeAppointmentsCount = $derived(
     patients.filter((p) => (p.active_appointment_count ?? 0) > 0).length
   );
-  let totalConsultationsScheduled = $derived(
+  let appointmentsRecorded = $derived(
     patients.reduce((sum, p) => sum + (p.appointment_count ?? 0), 0)
   );
 
@@ -195,6 +198,7 @@
   }
 
   function openRegisterDialog() {
+    if (readOnly) return;
     fullName = "";
     contact = "";
     age = "";
@@ -204,6 +208,7 @@
 
   async function handleRegister(e: SubmitEvent) {
     e.preventDefault();
+    if (readOnly) return;
     formErrors = {};
 
     const trimmedName = fullName.trim();
@@ -254,46 +259,31 @@
   }
 
   onMount(() => {
-    loadPatients();
+    void loadPatients();
+    const refresh = () => {
+      if (!document.hidden && !isSubmitting && !isRegisterDialogOpen && !isEditDialogOpen && !isDeleteDialogOpen) void loadPatients(true);
+    };
+    const timer = setInterval(refresh, 5000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   });
 </script>
 
-<div class="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
-  <!-- Top Metrics Cards (Matching Reference Screenshot) -->
-  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 shrink-0">
-    <div class="rounded-xl border bg-card text-card-foreground p-4 sm:p-5 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Total Enrolled Patients</p>
-        <Users class="size-4 text-muted-foreground" />
-      </div>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{totalPatients}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Active primary directory records</p>
-    </div>
-
-    <div class="rounded-xl border bg-card text-card-foreground p-4 sm:p-5 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Patients with Active Schedules</p>
-        <CalendarCheck class="size-4 text-primary" />
-      </div>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{activeAppointmentsCount}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Patients with scheduled visits</p>
-    </div>
-
-    <div class="rounded-xl border bg-card text-card-foreground p-4 sm:p-5 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Total Consultations</p>
-        <ClipboardList class="size-4 text-muted-foreground" />
-      </div>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{totalConsultationsScheduled}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Lifetime appointment bookings</p>
-    </div>
+<div class="workspace-enter flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
+  <div class="grid grid-cols-3 gap-3 shrink-0">
+    <MetricCard label="Registered patients" value={totalPatients} description="All saved directory records" icon={Users} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Patients with active visits" value={activeAppointmentsCount} description="Directory patients with pending visits" icon={CalendarCheck} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Appointments recorded" value={appointmentsRecorded} description="Lifetime bookings, all statuses" icon={ClipboardList} loading={isLoading} unavailable={!!errorMessage} />
   </div>
 
   <!-- Table Toolbar Bar (Matching Reference Screenshot) -->
-  <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
+  <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0 min-w-0">
     <div class="flex items-center gap-2">
-      <div class="relative w-full sm:w-72">
-        <Search class="absolute left-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
+      <div class="relative w-full sm:w-72 p-0.5">
+        <Search class="absolute left-3.5 top-3 size-4 text-muted-foreground pointer-events-none" />
         <Input
           type="text"
           placeholder="Filter patients by name, ID, or phone..."
@@ -309,7 +299,7 @@
           <button
             type="button"
             onclick={clearSearch}
-            class="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
+            class="absolute right-3 top-3 text-muted-foreground hover:text-foreground cursor-pointer"
             title="Clear filter (Esc)"
           >
             <X class="size-4" />
@@ -349,7 +339,7 @@
         variant="outline"
         size="sm"
         class="h-9 px-3 cursor-pointer"
-        onclick={loadPatients}
+        onclick={() => loadPatients()}
         disabled={isLoading}
       >
         {#if isLoading}
@@ -359,10 +349,12 @@
         {/if}
         <span class="sr-only">Refresh</span>
       </Button>
+      {#if !readOnly}
       <Button onclick={openRegisterDialog} size="sm" class="h-9 px-3 cursor-pointer">
         <UserPlus class="size-3.5 mr-1.5" />
         <span>Register Patient</span>
       </Button>
+      {/if}
     </div>
   </div>
 
@@ -372,8 +364,8 @@
       {errorMessage}
     </div>
   {:else}
-    <div class="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
-      <Table containerClass="flex-1 min-h-0 overflow-y-auto">
+    <div class="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col flex-1 min-h-0 min-w-0">
+      <Table containerClass="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-auto">
         <TableHeader class="sticky top-0 bg-card z-10 shadow-xs border-b [&_tr]:bg-card">
           <TableRow>
             <TableHead class="w-28">
@@ -384,7 +376,7 @@
               >
                 Patient ID
                 {#if sortField === "id"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -398,7 +390,7 @@
               >
                 Full Name
                 {#if sortField === "full_name"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -412,7 +404,7 @@
               >
                 Contact Number
                 {#if sortField === "contact"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -426,7 +418,7 @@
               >
                 Age
                 {#if sortField === "age"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -438,15 +430,15 @@
                 onclick={() => toggleSort("appointment_count")}
                 class="inline-flex items-center justify-center gap-1.5 hover:text-foreground transition-colors cursor-pointer font-semibold text-xs w-full"
               >
-                Consultations
+                Appointments
                 {#if sortField === "appointment_count"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
               </button>
             </TableHead>
-            <TableHead class="w-16 text-right">Actions</TableHead>
+            {#if !readOnly}<TableHead class="w-16 text-right">Actions</TableHead>{/if}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -454,7 +446,7 @@
             <TableRow>
               <TableCell colspan={6} class="h-32 text-center text-sm text-muted-foreground">
                 <div class="flex items-center justify-center gap-2">
-                  <RefreshCw class="animate-spin size-4 text-primary" />
+                  <RefreshCw class="animate-spin size-4 text-clinic" />
                   <span>Loading patient directory...</span>
                 </div>
               </TableCell>
@@ -490,7 +482,7 @@
                     class="group inline-flex items-center gap-1.5 cursor-pointer text-left"
                     title="Click to copy patient ID"
                   >
-                    <Badge variant="outline" class="font-mono text-xs font-normal group-hover:border-primary/50 transition-colors">
+                    <Badge variant="outline" class="font-mono text-xs font-normal group-hover:border-clinic/50 transition-colors">
                       #{patient.id}
                     </Badge>
                     {#if copiedText === String(patient.id)}
@@ -545,7 +537,7 @@
                 </TableCell>
 
                 <!-- Three-Dots Dropdown Menu -->
-                <TableCell class="text-right">
+                {#if !readOnly}<TableCell class="text-right">
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger class="inline-flex items-center justify-center rounded-md size-8 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring">
                       <MoreHorizontal class="size-4" />
@@ -571,6 +563,7 @@
                     </DropdownMenu.Content>
                   </DropdownMenu.Root>
                 </TableCell>
+                {/if}
               </TableRow>
             {/each}
           {/if}
@@ -578,7 +571,7 @@
       </Table>
 
       <!-- Integrated Table Footer Pagination (Matching Reference Screenshot) -->
-      <div class="border-t border-border px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground bg-muted/20 shrink-0">
+      <div class="border-t border-border px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground bg-muted/20 shrink-0 min-w-0">
         <div class="flex items-center gap-2">
           <span>Rows per page</span>
           <select

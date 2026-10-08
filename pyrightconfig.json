@@ -1,6 +1,8 @@
 {
   "venvPath": ".",
   "venv": ".venv",
+  "include": ["backend", "desktop", "package.py"],
+  "exclude": ["build", "dist", "frontend", ".venv"],
   "typeCheckingMode": "standard",
   "pythonVersion": "3.12"
 }

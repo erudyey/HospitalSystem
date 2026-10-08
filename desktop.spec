@@ -13,8 +13,8 @@ FRONTEND_DIST = REPO_ROOT / 'frontend' / 'dist'
 
 datas = [
     (str(FRONTEND_DIST), 'frontend/dist'),
-    ('backend', 'backend'),
 ]
+datas += collect_data_files('backend', include_py_files=True, excludes=['tests/**', '**/__pycache__/**'])
 datas += collect_data_files('webview')
 
 platform_imports = []
@@ -33,7 +33,7 @@ elif sys.platform == "darwin":
 
 hiddenimports = (
     collect_submodules('whitenoise')
-    + collect_submodules('backend')
+    + collect_submodules('backend', filter=lambda name: not name.startswith('backend.tests'))
     + collect_submodules('django.middleware')
     + collect_submodules('django.contrib.staticfiles')
     + collect_submodules('django.db.backends.sqlite3')
@@ -41,6 +41,7 @@ hiddenimports = (
     + collect_submodules('django.core.management')
     + collect_submodules('waitress')
     + collect_submodules('webview')
+    + collect_submodules('keyring')
     + platform_imports
 )
 
@@ -53,7 +54,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['backend.tests', 'pytest', 'ruff', 'basedpyright'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -70,6 +71,7 @@ exe = EXE(
     a.datas,
     [],
     name='HospitalSystem',
+    icon=str(REPO_ROOT / 'assets' / 'hospital-icon.ico') if sys.platform == 'win32' else None,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -86,9 +88,11 @@ if sys.platform == 'darwin':
     app = BUNDLE(
         exe,
         name='HospitalSystem.app',
-        icon=None,
+        icon=str(REPO_ROOT / 'assets' / 'hospital-icon.icns'),
         bundle_identifier='com.hospitalsystem.clinic',
         info_plist={
+            'CFBundleShortVersionString': '0.1.0-beta.1',
+            'CFBundleVersion': '0.1.0',
             'NSHighResolutionCapable': 'True',
             'LSBackgroundOnly': 'False',
         },

@@ -84,6 +84,35 @@ contributors working on the HospitalSystem codebase.
     - Top metrics cards and toolbars must use `shrink-0`.
     - Tables must scroll internally via `<Table containerClass="flex-1 min-h-0 overflow-y-auto">`
       with sticky headers (`sticky top-0 bg-card z-10`) and pinned pagination controls.
+- **Clinical UI/UX Engineering Invariants & AI Model Mitigations**:
+  - **Chromatic Restraint & Anti-Carnival Palette**: Red (`--primary: 355 84% 44%`)
+    is reserved strictly for primary submit buttons, destructive confirmations,
+    or critical clinical alarms. Never apply solid primary red to routine status
+    badges, role switchers, or consultation queues. Status badges must use subtle
+    neutral tokens (`variant="secondary"`, `variant="outline"`, muted text).
+    Metric cards in stat rows must share a uniform neutral background and border
+    (`rounded-xl border bg-card text-card-foreground p-4 shadow-sm`) with zero
+    rainbow borders and zero pulsing dots.
+  - **Collision-Free Dialog Geometry**: Modal dialog headers must reserve the
+    top-right corner (`pr-10`) so metadata does not collide with the dialog close
+    button (`top-4 right-4`). Form scroll containers must enforce top padding
+    (`pt-4` or `p-6`) to prevent top labels from being visually sliced off by
+    header borders.
+  - **Form Label Hygiene**: Form `<label>` elements must remain strictly standalone.
+    Never jam helper chips, quick-fill buttons, or action links into label rows.
+    Auxiliary controls must be placed cleanly below or within dedicated toolbars.
+  - **Clean Clinical Typography**: Form headers, labels, and metadata must use
+    sentence case or title case. Never use shouting all-caps acronym headers
+    (`SUBJECTIVE -- SYMPTOMS...`).
+  - **Authoritative User Intent Invariant**: Explicit user commands (such as "Log Out")
+    must execute authoritatively and unconditionally. Never subvert a logout by
+    automatically silently logging back into a default account in demo mode. When
+    logged out, the user must stay logged out.
+  - **Zero Redundant Navigation**: Do not duplicate primary sidebar navigation
+    with redundant block CTA buttons that merely repeat the active view link.
+  - **Systemic Audit Responsibility**: When addressing UI/UX feedback, agents must
+    audit all related components across all workspaces and dialogs, rather than
+    narrowly patching only the screens captured in user screenshots.
 - **Latin-Scoped Typography**:
   - Font imports in `frontend/src/app.css` must remain strictly scoped to Latin
     subsets (`@fontsource/inter/latin-*.css`). Never import unscoped `400.css`,

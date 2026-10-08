@@ -21,6 +21,7 @@ export interface StaffUser {
 export interface UserSession {
   token: string;
   user: StaffUser;
+  remembered?: boolean;
 }
 
 export interface Patient {
@@ -30,6 +31,7 @@ export interface Patient {
   age: number;
   appointment_count?: number;
   active_appointment_count?: number;
+  doctor_appointment_count?: number;
 }
 
 export type AppointmentStatus =
@@ -49,6 +51,8 @@ export interface Appointment {
   app_time?: string;
   reason_for_visit?: string;
   status: AppointmentStatus;
+  checked_in_at?: string | null;
+  conflict_override_reason?: string;
 }
 
 export interface MedicalRecord {
@@ -66,6 +70,7 @@ export interface MedicalRecord {
   follow_up_advice: string;
   created_at: string;
   updated_at: string;
+  revision: number;
 }
 
 export interface ConflictCheckResponse {
@@ -86,6 +91,25 @@ export interface ApiError {
   code: string;
   message: string;
   fields: Record<string, string[]>;
+}
+
+export interface ReportCounters {
+  appointments: number;
+  patients: number;
+  scheduled: number;
+  checked_in: number;
+  in_consultation: number;
+  completed: number;
+  cancelled: number;
+}
+
+export interface DailyReport {
+  date: string;
+  generated_at: string;
+  mode: "clinic" | "demo";
+  scope: "clinic" | "doctor";
+  totals: ReportCounters;
+  doctors: (ReportCounters & { doctor_id: number | null; doctor_name: string })[];
 }
 
 function getCookie(name: string): string | null {
@@ -137,34 +161,108 @@ function getSessionToken(): string {
   }
 }
 
-export function getUserToken(): string {
-  try {
-    return localStorage.getItem("user_token") ||
-      sessionStorage.getItem("user_token") || "";
-  } catch {
-    return "";
-  }
+let userToken = "";
+let rememberSession = false;
+const nativeHost = () => (window as unknown as {
+  pywebview?: { api?: {
+    load_remembered_token?: () => Promise<string>;
+    save_remembered_token?: (token: string) => Promise<boolean>;
+    clear_remembered_token?: () => Promise<void>;
+    save_report_csv?: (filename: string, content: string) => Promise<{ status: "saved" | "cancelled" }>;
+  } };
+}).pywebview?.api;
+
+export function getUserToken(): string { return userToken; }
+
+async function readyNativeHost() {
+  if (nativeHost()?.load_remembered_token || nativeHost()?.save_report_csv) return nativeHost();
+  if (!(window as unknown as { __DESKTOP_HOST__?: boolean }).__DESKTOP_HOST__) return undefined;
+  await new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      window.removeEventListener("pywebviewready", done);
+      resolve();
+    };
+    const timer = setTimeout(done, 1500);
+    window.addEventListener("pywebviewready", done, { once: true });
+  });
+  return nativeHost();
 }
 
-export function setUserToken(token: string, remember: boolean = true): void {
+export async function saveCsvFile(filename: string, content: string): Promise<"saved" | "cancelled" | "downloaded"> {
+  const host = await readyNativeHost();
+  if (host?.save_report_csv) {
+    const result = await host.save_report_csv(filename, content);
+    return result.status;
+  }
+  if ((window as unknown as { __DESKTOP_HOST__?: boolean }).__DESKTOP_HOST__) {
+    throw new Error("The desktop Save dialog is unavailable. Please reopen the app and try again.");
+  }
+  const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  try { link.click(); } finally {
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  return "downloaded";
+}
+
+export async function restoreRememberedToken(): Promise<string> {
   try {
-    if (remember) {
-      localStorage.setItem("user_token", token);
-    } else {
-      sessionStorage.setItem("user_token", token);
+    const token = await (await readyNativeHost())?.load_remembered_token?.();
+    userToken = token || "";
+    rememberSession = !!token;
+    return userToken;
+  } catch { return ""; }
+}
+
+export async function setUserToken(token: string, remember: boolean = false): Promise<boolean> {
+  userToken = token;
+  rememberSession = false;
+  try {
+    const host = await readyNativeHost();
+    if (!remember) {
+      await host?.clear_remembered_token?.();
+      return true;
     }
-  } catch {
-    // Ignore storage restrictions
-  }
+    rememberSession = await host?.save_remembered_token?.(token) === true;
+    return rememberSession;
+  } catch { return false; }
 }
 
-export function clearUserToken(): void {
-  try {
-    localStorage.removeItem("user_token");
-    sessionStorage.removeItem("user_token");
-  } catch {
-    // Ignore storage restrictions
+export async function clearUserToken(): Promise<void> {
+  userToken = "";
+  rememberSession = false;
+  try { await (await readyNativeHost())?.clear_remembered_token?.(); } catch { /* native storage unavailable */ }
+}
+
+export async function switchApplicationMode(
+  mode: "clinic" | "demo",
+): Promise<void> {
+  const host = (window as unknown as {
+    pywebview?: { api?: { switch_mode: (mode: string) => Promise<void> } };
+  }).pywebview?.api;
+  if (!host?.switch_mode) {
+    throw new Error(
+      "Open the desktop app to switch between clinic and demo mode.",
+    );
   }
+  await clearUserToken();
+  await host.switch_mode(mode);
+}
+
+export function normalizeApiError(error: Partial<ApiError>): ApiError {
+  const fields = error.fields || {};
+  const details = Object.values(fields).flat().filter(Boolean);
+  const message = details.join(" ") || error.message || "An unexpected error occurred.";
+  return {
+    code: error.code || "UNKNOWN",
+    message,
+    fields: { ...fields, general: fields.general?.length ? fields.general : [message] },
+  };
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -215,7 +313,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       message: response.statusText || "An unexpected error occurred.",
       fields: {},
     };
-    throw apiError;
+    if (response.status === 401 && userToken && getUserToken() === userToken) {
+      const cleanup = clearUserToken();
+      window.dispatchEvent(new Event("staff-session-expired"));
+      await cleanup;
+    }
+    throw normalizeApiError(apiError);
   }
 
   if (response.status === 204) {
@@ -226,9 +329,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  reports: {
+    daily: (date?: string) => request<DailyReport>(
+      "/api/reports/daily/" + (date === undefined ? "" : "?" + new URLSearchParams({ date })),
+    ),
+  },
   /** Initialize connection and set CSRF cookie */
   healthCheck: () =>
-    request<{ status: string; version: string }>("/api/health/"),
+    request<{ status: string; version: string; mode: "clinic" | "demo"; timezone: string; now: string }>(
+      "/api/health/",
+    ),
 
   /** List / search patients */
   listPatients: (query?: string) => {
@@ -286,12 +396,17 @@ export const api = {
       reason_for_visit?: string;
       doctor_id?: number | null;
       initial_status?: AppointmentStatus;
+      allow_conflict?: boolean;
+      override_reason?: string;
     },
   ) =>
     request<Appointment>("/api/appointments/", {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  walkIn: (data: { patient_id: number; doctor_id: number; reason_for_visit?: string; allow_conflict?: boolean; override_reason?: string }) =>
+    request<Appointment>("/api/appointments/walk-in/", { method: "POST", body: JSON.stringify(data) }),
 
   /** Reschedule or update an appointment */
   updateAppointment: (
@@ -302,6 +417,8 @@ export const api = {
       app_time?: string;
       reason_for_visit?: string;
       doctor_id?: number | null;
+      allow_conflict?: boolean;
+      override_reason?: string;
     },
   ) =>
     request<Appointment>(`/api/appointments/${appointmentId}/`, {
@@ -330,17 +447,26 @@ export const api = {
     doctorId: number,
     dateStr: string,
     timeStr: string = "09:00",
-    duration: number = 15,
+    durationOrExcludeId: number = 15,
     excludeId?: number,
   ) => {
+    let duration = 15;
+    let exclude = excludeId;
+    if (excludeId === undefined && durationOrExcludeId !== 15) {
+      exclude = durationOrExcludeId;
+      duration = 15;
+    } else {
+      duration = durationOrExcludeId;
+    }
+
     const params = new URLSearchParams({
       doctor_id: String(doctorId),
       date: dateStr,
-      time: timeStr,
+      time: timeStr || "09:00",
       duration: String(duration),
     });
-    if (excludeId !== undefined) {
-      params.set("exclude_id", String(excludeId));
+    if (exclude !== undefined) {
+      params.set("exclude_id", String(exclude));
     }
     return request<ConflictCheckResponse>(
       `/api/appointments/conflict-check/?${params.toString()}`,
@@ -352,6 +478,7 @@ export const api = {
     register: (data: {
       username: string;
       password: string;
+      password_confirmation: string;
       full_name: string;
       role?: StaffRole;
       specialty?: string;
@@ -363,13 +490,34 @@ export const api = {
         body: JSON.stringify(data),
       }),
 
-    login: async (credentials: { username: string; password: string }) => {
+    login: async (
+      usernameOrCredentials: string | { username: string; password: string },
+      passwordOrRemember?: string | boolean,
+      remember: boolean = false,
+    ) => {
+      let payload: { username: string; password: string };
+      let shouldRemember = remember;
+
+      if (typeof usernameOrCredentials === "string") {
+        payload = {
+          username: usernameOrCredentials,
+          password: typeof passwordOrRemember === "string"
+            ? passwordOrRemember
+            : "",
+        };
+      } else {
+        payload = usernameOrCredentials;
+        if (typeof passwordOrRemember === "boolean") {
+          shouldRemember = passwordOrRemember;
+        }
+      }
+
       const resp = await request<UserSession>("/api/auth/login/", {
         method: "POST",
-        body: JSON.stringify(credentials),
+        body: JSON.stringify(payload),
       });
       if (resp?.token) {
-        setUserToken(resp.token);
+        resp.remembered = await setUserToken(resp.token, shouldRemember) && shouldRemember;
       }
       return resp;
     },
@@ -382,35 +530,89 @@ export const api = {
           method: "POST",
         });
       } finally {
-        clearUserToken();
+        await clearUserToken();
       }
     },
 
-    updateProfile: (data: {
+    status: () => request<{ initial_setup_required: boolean }>("/api/auth/status/"),
+
+    updateProfile: async (data: {
+      username?: string;
       full_name?: string;
       contact?: string;
       specialty?: string;
       license_number?: string;
       current_password?: string;
       new_password?: string;
-    }) =>
-      request<{ user: StaffUser }>("/api/auth/profile/", {
+    }): Promise<StaffUser> => {
+      const res = await request<{ user: StaffUser; token?: string }>("/api/auth/profile/", {
         method: "PUT",
         body: JSON.stringify(data),
-      }),
+      });
+      if (res.token) await setUserToken(res.token, rememberSession);
+      return res.user;
+    },
 
     listDoctors: () => request<StaffUser[]>("/api/doctors/"),
+  },
+  demo: {
+    reset: () => request<{ status: string }>("/api/demo/reset/", { method: "POST", body: JSON.stringify({ confirm: true }) }),
+    accounts: () => request<StaffUser[]>("/api/demo/accounts/"),
+    login: async (accountId: number) => {
+      const session = await request<UserSession>("/api/demo/login/", { method: "POST", body: JSON.stringify({ account_id: accountId }) });
+      await setUserToken(session.token, false);
+      return session;
+    },
   },
 
   // Clinical & Doctor Methods
   clinical: {
-    getDoctorQueue: (dateStr?: string) => {
-      const q = dateStr ? `?date=${encodeURIComponent(dateStr)}` : "";
+    checkScheduleConflict: (
+      doctorId: number,
+      dateStr: string,
+      timeStr: string = "09:00",
+      durationOrExcludeId: number = 15,
+      excludeId?: number,
+    ) => {
+      let duration = 15;
+      let exclude = excludeId;
+      if (excludeId === undefined && durationOrExcludeId !== 15) {
+        exclude = durationOrExcludeId;
+        duration = 15;
+      } else {
+        duration = durationOrExcludeId;
+      }
+
+      const params = new URLSearchParams({
+        doctor_id: String(doctorId),
+        date: dateStr,
+        time: timeStr || "09:00",
+        duration: String(duration),
+      });
+      if (exclude !== undefined) {
+        params.set("exclude_id", String(exclude));
+      }
+      return request<ConflictCheckResponse>(
+        `/api/appointments/conflict-check/?${params.toString()}`,
+      );
+    },
+
+    getDoctorQueue: (doctorIdOrDate?: number | string, dateStr?: string) => {
+      const date = typeof doctorIdOrDate === "string"
+        ? doctorIdOrDate
+        : dateStr;
+      const q = date ? `?date=${encodeURIComponent(date)}` : "";
       return request<DoctorQueueResponse>(`/api/doctor/queue/${q}`);
     },
 
-    getDoctorPatients: (query?: string) => {
-      const q = query ? `?q=${encodeURIComponent(query)}` : "";
+    getDoctorPatients: (
+      doctorIdOrQuery?: number | string,
+      queryStr?: string,
+    ) => {
+      const qVal = typeof doctorIdOrQuery === "string"
+        ? doctorIdOrQuery
+        : queryStr;
+      const q = qVal ? `?q=${encodeURIComponent(qVal)}` : "";
       return request<Patient[]>(`/api/doctor/patients/${q}`);
     },
 
@@ -439,6 +641,8 @@ export const api = {
         clinical_notes?: string;
         prescription?: string;
         follow_up_advice?: string;
+        correction_reason: string;
+        expected_revision?: number;
       },
     ) =>
       request<MedicalRecord>(`/api/medical-records/${recordId}/`, {

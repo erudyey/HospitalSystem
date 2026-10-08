@@ -3,7 +3,7 @@
 # Usage:
 #   ./run.sh setup
 #   ./run.sh dev
-#   ./run.sh desktop
+#   ./run.sh desktop [--demo]
 #   ./run.sh test
 #   ./run.sh format
 #   ./run.sh package
@@ -55,6 +55,7 @@ case "$COMMAND" in
         echo "Starting development servers (Vite + Django)..."
         export DJANGO_SETTINGS_MODULE="backend.config.settings"
         export DEBUG="True"
+        unset TESTING
 
         "$VENV_PYTHON" "$REPO_ROOT/backend/manage.py" migrate
 
@@ -71,12 +72,16 @@ case "$COMMAND" in
             echo "Building frontend bundle first..."
             (cd "$REPO_ROOT/frontend" && deno task build)
         fi
-        "$VENV_PYTHON" "$REPO_ROOT/desktop/launcher.py"
+        DESKTOP_ARGS=()
+        if [ "$OPTION" = "--demo" ]; then
+            DESKTOP_ARGS+=("--demo")
+        fi
+        "$VENV_PYTHON" "$REPO_ROOT/desktop/launcher.py" "${DESKTOP_ARGS[@]}"
         ;;
 
     test)
         if [ "$OPTION" != "--quick" ]; then
-            echo "Running basedpyright strict type checks..."
+            echo "Running basedpyright type checks..."
             "$VENV_PYTHON" -m basedpyright
             echo ""
         fi

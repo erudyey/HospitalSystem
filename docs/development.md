@@ -4,6 +4,34 @@ This runbook covers setting up your local Windows or macOS environment,
 executing development servers, running quality checks, and packaging the
 standalone desktop application.
 
+## Daily reports and CSV verification
+
+Sign in as a receptionist or doctor and select **Daily report** in the sidebar.
+Today follows the clinic clock, including midnight rollover. Choosing a date
+keeps it selected. Reports refresh every five seconds while visible and show
+current statuses, not a fixed closing snapshot.
+
+Select **Save CSV** to export the displayed snapshot. Desktop hosts open a
+native Save dialog limited to CSV destinations; cancelling creates no file.
+The browser-development interface starts a CSV download. The file uses UTF-8
+with BOM, proper quoting, and formula-safe doctor names. It contains report
+date, generation time, mode, scope, a total row, and doctor subtotals. Patient
+counts are distinct within each scope and must not be summed across doctors.
+
+Focused checks:
+
+```bash
+uv run pytest backend/tests/test_reports.py backend/tests/test_report_save.py -v
+cd frontend
+deno task test
+deno task build
+```
+
+The save tests mock the native dialog and write only to disposable test files.
+They verify cancellation, failed replacement preserving an existing file,
+CSV-only destinations, and exact UTF-8 output. Native dialog interactions on
+Windows and macOS require separate runtime verification.
+
 ---
 
 ## 1. Prerequisites and Toolchain
@@ -145,7 +173,7 @@ On macOS / Linux:
 ./run.sh test --quick
 ```
 
-> **Note on Test Performance**: Automated tests execute against in-memory SQLite (`TESTING=True`) with 1-round PBKDF2 password hashing in test settings, running all 76 unit and integration tests in ~0.8 seconds without touching user data directories.
+> **Note on Test Performance**: Automated tests execute against in-memory SQLite (`TESTING=True`) with 1-round PBKDF2 password hashing in test settings, running the backend unit and integration suite without touching user data directories.
 
 ### Run Python Unit Tests Only
 
@@ -163,7 +191,7 @@ On macOS / Linux:
 .venv/bin/pytest backend/tests/ -v
 ```
 
-### Run Strict Python Type Checking
+### Run Python Type Checking
 
 Execute basedpyright across all backend and desktop Python modules:
 
@@ -184,7 +212,7 @@ On macOS / Linux:
 Type-check Svelte and TypeScript files with Deno:
 
 ```bash
-cd frontend; deno check src/main.ts; cd ..
+cd frontend; deno task check; deno task test; cd ..
 ```
 
 ### Code Formatting and Linting
@@ -299,15 +327,19 @@ On macOS / Linux:
 .venv/bin/python desktop/verify_bundle.py
 ```
 
-This verification script tests:
+Both clinic and demo runs use temporary databases inside `build/`. The script
+never opens the production database. The demo run also checks its account chooser
+and verifies that its database is separate from clinic storage.
 
-1. Executable or application bundle presence in `dist/`.
-2. Executable architecture and format integrity.
-3. Digital bundle integrity and internal manifest.
-4. Clean launch and loopback socket binding on `127.0.0.1`.
-5. Health endpoint response (`/api/health/`).
-6. Session token rejection (`403 Forbidden` on invalid tokens).
-7. Clean shutdown and zero process leakage.
+The verification script checks:
+
+1. Executable or application bundle presence.
+2. Database migrations and clean headless startup.
+3. Loopback binding and a healthy response in the requested mode.
+4. Protected launch HTML and required staff authentication.
+5. Database creation in the isolated directory.
+6. Demo accounts and separate clinic/demo storage.
+7. Launcher logs and termination of the background process.
 
 ---
 
@@ -329,10 +361,10 @@ cross-platform desktop releases:
   1. Sets up `uv` package manager with persistent dependency caching.
   2. Verifies zero em/en dash policy across code and documentation.
   3. Verifies Ruff code formatting and linting rules.
-  4. Runs strict Python static type checking with `basedpyright`.
+  4. Runs Python static type checking with `basedpyright`.
   5. Validates GitHub workflow formatting with Deno (`deno fmt`).
   6. Compiles Svelte 5 frontend with Deno 2.
-  7. Executes the full 76-test unit and integration test suite with `pytest`.
+  7. Executes the full backend unit and integration test suite with `pytest`.
 
 ### Release Workflow (`.github/workflows/release.yml`)
 

@@ -1,6 +1,16 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  import { api, type Patient, type Appointment, type ApiError } from "$lib/api";
+  import MetricCard from "./MetricCard.svelte";
+  import { onMount, untrack } from "svelte";
+  import { calendarDateOffset, nextClinicSlot } from "$lib/calendar";
+  import { appointmentsWithinDates, dateFilterError, type DateFilter } from "$lib/schedule";
+  import {
+    api,
+    type Patient,
+    type Appointment,
+    type StaffUser,
+    type AppointmentStatus,
+    type ApiError,
+  } from "$lib/api";
   import { toast } from "$lib/toast.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -16,6 +26,7 @@
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Tabs from "$lib/components/ui/tabs";
+  import * as Select from "$lib/components/ui/select";
   import EditAppointmentDialog from "./EditAppointmentDialog.svelte";
   import DeleteAppointmentDialog from "./DeleteAppointmentDialog.svelte";
   import {
@@ -38,32 +49,60 @@
     ArrowDown,
     X,
     Loader2,
+    AlertTriangle,
+    UserCheck,
+    Stethoscope,
+    Activity,
   } from "lucide-svelte";
 
   interface Props {
+    clinicNow: string;
     isBookingModalOpen?: boolean;
     preselectedPatient?: Patient | null;
     onClearPreselectedPatient?: () => void;
   }
 
   let {
+    clinicNow,
     isBookingModalOpen = $bindable(false),
     preselectedPatient = null,
     onClearPreselectedPatient,
   }: Props = $props();
 
-  // Patients for dropdown selection
+  // Patients & Doctors for dropdown selection
   let patientList = $state<Patient[]>([]);
+  let doctorList = $state<StaffUser[]>([]);
 
   // Appointments master collection
   let allAppointments = $state<Appointment[]>([]);
   let isLoading = $state(false);
   let errorMessage = $state<string | null>(null);
 
-  // Filters
-  type StatusFilter = "ALL" | "Scheduled" | "Completed" | "Cancelled";
+  // Filters (5-State Clinical Lifecycle + ALL)
+  type StatusFilter =
+    | "ALL"
+    | "Checked In"
+    | "Scheduled"
+    | "In Consultation"
+    | "Completed"
+    | "Cancelled";
   let activeFilter = $state<StatusFilter>("ALL");
   let searchQuery = $state("");
+  let dateMode = $state<DateFilter["mode"]>("all");
+  let dateFrom = $state("");
+  let dateTo = $state("");
+  let dateFilter = $derived({ mode: dateMode, from: dateFrom, to: dateTo });
+  let dateError = $derived(dateFilterError(dateFilter));
+  let dateAppointments = $derived(appointmentsWithinDates(allAppointments, dateFilter));
+  let dateScopeLabel = $derived(dateMode === "all" ? "All dates" : dateMode === "day" ? dateFrom : dateFrom + " to " + dateTo);
+
+  function changeDateMode(value: string) {
+    if (!["all", "day", "range"].includes(value)) return;
+    dateMode = value as DateFilter["mode"];
+    if (!dateFrom) dateFrom = clinicNow.slice(0, 10);
+    if (!dateTo) dateTo = dateFrom;
+    currentPage = 1;
+  }
 
   // Sorting state (default: chronological appointment date)
   type AppointmentSortField = "id" | "patient_name" | "doctor_name" | "app_date" | "status";
@@ -76,8 +115,18 @@
 
   // Booking Modal State
   let selectedPatientId = $state<number | null>(null);
+  let selectedDoctorId = $state<number | null>(null);
   let doctorName = $state("");
-  let appDate = $state(new Date().toISOString().split("T")[0]);
+  let appDate = $state("");
+  let appTime = $state("09:00");
+  let reasonForVisit = $state("");
+  let conflictWarning = $state<string | null>(null);
+  let isCheckingConflict = $state(false);
+  let overrideConflict = $state(false);
+  let overrideReason = $state("");
+  let conflictCheckTimer: ReturnType<typeof setTimeout> | null = null;
+  let conflictRequest = 0;
+  let isPreparingBooking = $state(false);
   let isSubmitting = $state(false);
   let bookingErrors = $state<Record<string, string[]>>({});
 
@@ -88,16 +137,31 @@
   let isDeleteDialogOpen = $state(false);
   let appointmentForDelete = $state<Appointment | null>(null);
 
+  function formatTime(timeStr?: string): string {
+    if (!timeStr) return "--:--";
+    const parts = timeStr.split(":");
+    if (parts.length < 2) return timeStr;
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    if (isNaN(h) || isNaN(m)) return timeStr;
+    const ampm = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 || 12;
+    const mm = m.toString().padStart(2, "0");
+    return `${h12}:${mm} ${ampm}`;
+  }
+
   async function loadInitialData() {
     isLoading = true;
     errorMessage = null;
     try {
-      const [patients, appointments] = await Promise.all([
+      const [patients, appointments, doctors] = await Promise.all([
         api.listPatients(),
         api.listAllAppointments(),
+        api.auth.listDoctors(),
       ]);
       patientList = patients;
       allAppointments = appointments;
+      doctorList = doctors;
     } catch (err) {
       const e = err as ApiError;
       errorMessage = e.message || "Failed to load clinic records.";
@@ -106,34 +170,40 @@
     }
   }
 
-  async function reloadAppointments() {
-    isLoading = true;
+  async function reloadAppointments(silent = false) {
+    if (!silent) isLoading = true;
     try {
       allAppointments = await api.listAllAppointments();
     } catch (err) {
       const e = err as ApiError;
       errorMessage = e.message || "Failed to refresh appointments.";
-      toast.error(errorMessage);
+      if (!silent) toast.error(errorMessage);
     } finally {
-      isLoading = false;
+      if (!silent) isLoading = false;
     }
   }
 
   // Filter count counters
-  let countAll = $derived(allAppointments.length);
+  let countAll = $derived(dateAppointments.length);
+  let countCheckedIn = $derived(
+    dateAppointments.filter((a) => a.status === "Checked In").length
+  );
   let countScheduled = $derived(
-    allAppointments.filter((a) => a.status === "Scheduled").length
+    dateAppointments.filter((a) => a.status === "Scheduled").length
+  );
+  let countInConsultation = $derived(
+    dateAppointments.filter((a) => a.status === "In Consultation").length
   );
   let countCompleted = $derived(
-    allAppointments.filter((a) => a.status === "Completed").length
+    dateAppointments.filter((a) => a.status === "Completed").length
   );
   let countCancelled = $derived(
-    allAppointments.filter((a) => a.status === "Cancelled").length
+    dateAppointments.filter((a) => a.status === "Cancelled").length
   );
 
   // Filtered appointments
   let filteredAppointments = $derived.by(() => {
-    let list = allAppointments;
+    let list = dateAppointments;
 
     if (activeFilter !== "ALL") {
       list = list.filter((app) => app.status === activeFilter);
@@ -222,28 +292,94 @@
     currentPage = 1;
   }
 
-  function setQuickDate(daysOffset: number) {
-    const d = new Date();
-    d.setDate(d.getDate() + daysOffset);
-    appDate = d.toISOString().split("T")[0];
+  async function setQuickDate(daysOffset: number) {
+    try { appDate = calendarDateOffset((await api.healthCheck()).now, daysOffset); }
+    catch (err) { bookingErrors = (err as ApiError).fields; }
   }
 
-  function openBookingModal(patientId?: number) {
-    if (patientId) {
-      selectedPatientId = patientId;
-    } else if (preselectedPatient) {
-      selectedPatientId = preselectedPatient.id;
-    } else if (patientList.length > 0) {
-      selectedPatientId = patientList[0].id;
+  function runConflictCheck() {
+    const request = ++conflictRequest;
+    if (conflictCheckTimer) clearTimeout(conflictCheckTimer);
+    conflictWarning = null;
+    if (!selectedDoctorId || selectedDoctorId <= 0 || !appDate || !appTime) {
+      isCheckingConflict = false;
+      return;
     }
-    doctorName = "";
-    appDate = new Date().toISOString().split("T")[0];
-    bookingErrors = {};
+
+    isCheckingConflict = true;
+    const doctorId = selectedDoctorId;
+    const date = appDate;
+    const time = appTime;
+    conflictCheckTimer = setTimeout(async () => {
+      try {
+        const res = await api.clinical.checkScheduleConflict(
+          doctorId,
+          date,
+          time
+        );
+        if (request !== conflictRequest || !isBookingModalOpen || selectedDoctorId !== doctorId || appDate !== date || appTime !== time) return;
+        if (res.has_conflict && res.conflicts.length > 0) {
+          const first = res.conflicts[0];
+          const doc = doctorList.find((d) => d.id === selectedDoctorId);
+          const docDisplayName = doc ? doc.full_name : doctorName || "Doctor";
+          const formattedConflictTime = formatTime(first.app_time);
+          conflictWarning = `${docDisplayName} already has an appointment scheduled (#${first.id} with ${first.patient_name} at ${formattedConflictTime}) within the +/- 15 minute window.`;
+        } else {
+          conflictWarning = null;
+          overrideConflict = false;
+        }
+      } catch {
+        // Non-blocking conflict check failure
+      } finally {
+        if (request === conflictRequest) isCheckingConflict = false;
+      }
+    }, 250);
+  }
+
+  $effect(() => {
+    if (isBookingModalOpen && selectedDoctorId && appDate && appTime) {
+      untrack(runConflictCheck);
+    }
+  });
+
+  function openBookingModal(patientId?: number) {
+    selectedPatientId = patientId ?? preselectedPatient?.id ?? null;
     isBookingModalOpen = true;
   }
 
-  async function handleCreateBooking(e: SubmitEvent) {
+  async function prepareBooking() {
+    isPreparingBooking = true;
+    bookingErrors = {};
+    try {
+      const [context, doctors, patients] = await Promise.all([api.healthCheck(), api.auth.listDoctors(), api.listPatients()]);
+      if (!isBookingModalOpen) return;
+      doctorList = doctors;
+      patientList = patients;
+      if (!patients.some((patient) => patient.id === selectedPatientId)) selectedPatientId = patients[0]?.id ?? null;
+      selectedDoctorId = doctors[0]?.id ?? null;
+      doctorName = doctors[0]?.full_name ?? "";
+      const slot = nextClinicSlot(context.now);
+      appDate = slot.date;
+      appTime = slot.time;
+      reasonForVisit = "";
+      conflictWarning = null;
+      overrideConflict = false;
+      overrideReason = "";
+    } catch (err) {
+      bookingErrors = (err as ApiError).fields;
+    } finally {
+      isPreparingBooking = false;
+    }
+  }
+
+  $effect(() => { if (isBookingModalOpen) untrack(() => void prepareBooking()); });
+
+  async function handleCreateBooking(
+    e: Event,
+    initialStatus: AppointmentStatus = "Scheduled"
+  ) {
     e.preventDefault();
+    if (isPreparingBooking || isSubmitting) return;
     if (!selectedPatientId) {
       bookingErrors = { general: ["Please select a patient."] };
       return;
@@ -251,8 +387,18 @@
 
     const trimmedDoctor = doctorName.trim();
     const localErrors: Record<string, string[]> = {};
-    if (!trimmedDoctor) localErrors.doctor_name = ["Doctor name is required."];
+    if (!trimmedDoctor && (!selectedDoctorId || selectedDoctorId <= 0)) {
+      localErrors.doctor_id = ["Select an active registered physician."];
+    }
     if (!appDate) localErrors.app_date = ["Appointment date is required."];
+    if (!appTime) localErrors.app_time = ["Appointment time is required."];
+
+    if (conflictWarning && !overrideConflict) {
+      localErrors.general = [
+        "A schedule conflict was detected. Check 'Emergency / Walk-in Override' to proceed.",
+      ];
+    }
+    if (overrideConflict && !overrideReason.trim()) localErrors.override_reason = ["Explain why this conflict is being overridden."];
 
     if (Object.keys(localErrors).length > 0) {
       bookingErrors = localErrors;
@@ -266,11 +412,21 @@
       const newApp = await api.bookAppointment({
         patient_id: selectedPatientId,
         doctor_name: trimmedDoctor,
+        doctor_id: selectedDoctorId && selectedDoctorId > 0 ? selectedDoctorId : null,
         app_date: appDate,
+        app_time: appTime,
+        reason_for_visit: reasonForVisit.trim(),
+        initial_status: initialStatus,
+        allow_conflict: overrideConflict,
+        override_reason: overrideReason.trim(),
       });
 
       isBookingModalOpen = false;
-      toast.success(`Appointment #${newApp.id} booked with ${newApp.doctor_name} for ${newApp.app_date}.`);
+      const statusNote =
+        newApp.status === "Checked In" ? " (Checked in to Waiting Room)" : "";
+      toast.success(
+        `Appointment #${newApp.id} booked with ${newApp.doctor_name} for ${newApp.app_date} at ${formatTime(newApp.app_time)}${statusNote}.`
+      );
       await reloadAppointments();
     } catch (err) {
       const e = err as ApiError;
@@ -280,9 +436,31 @@
     }
   }
 
+  async function handleWalkIn(e: Event) {
+    e.preventDefault();
+    if (!selectedPatientId || !selectedDoctorId) {
+      bookingErrors = { general: ["Select a patient and active physician."] };
+      return;
+    }
+    if (conflictWarning && (!overrideConflict || !overrideReason.trim())) {
+      bookingErrors = { override_reason: ["A reason is required to override an active conflict."] };
+      return;
+    }
+    isSubmitting = true;
+    try {
+      const appointment = await api.walkIn({ patient_id: selectedPatientId, doctor_id: selectedDoctorId, reason_for_visit: reasonForVisit.trim(), allow_conflict: overrideConflict, override_reason: overrideReason.trim() });
+      isBookingModalOpen = false;
+      toast.success(`Patient checked in as appointment #${appointment.id}.`);
+      await reloadAppointments();
+    } catch (err) {
+      const apiError = err as ApiError;
+      bookingErrors = apiError.fields || { general: [apiError.message] };
+    } finally { isSubmitting = false; }
+  }
+
   async function handleStatusChange(
     appointmentId: number,
-    status: "Scheduled" | "Completed" | "Cancelled"
+    status: AppointmentStatus
   ) {
     try {
       const updated = await api.updateAppointmentStatus(appointmentId, status);
@@ -304,49 +482,96 @@
     isDeleteDialogOpen = true;
   }
 
+  // Scroll indicators for filter tabs track
+  let tabsListEl = $state<HTMLElement | null>(null);
+  let canScrollLeft = $state(false);
+  let canScrollRight = $state(false);
+
+  function checkTabScroll() {
+    if (!tabsListEl) return;
+    canScrollLeft = tabsListEl.scrollLeft > 2;
+    canScrollRight =
+      tabsListEl.scrollLeft + tabsListEl.clientWidth < tabsListEl.scrollWidth - 2;
+  }
+
+  function scrollTabs(direction: "left" | "right") {
+    if (!tabsListEl) return;
+    const offset = direction === "left" ? -180 : 180;
+    tabsListEl.scrollBy({ left: offset, behavior: "smooth" });
+    setTimeout(checkTabScroll, 220);
+  }
+
   $effect(() => {
     if (preselectedPatient) {
-      selectedPatientId = preselectedPatient.id;
-      openBookingModal(preselectedPatient.id);
-      onClearPreselectedPatient?.();
+      const patientId = preselectedPatient.id;
+      untrack(() => {
+        void openBookingModal(patientId);
+        onClearPreselectedPatient?.();
+      });
     }
   });
 
   onMount(() => {
     loadInitialData();
+    const refresh = () => {
+      if (!document.hidden && !isSubmitting && !isBookingModalOpen && !isEditDialogOpen && !isDeleteDialogOpen) void reloadAppointments(true);
+    };
+    const refreshTimer = setInterval(refresh, 5000);
+    document.addEventListener("visibilitychange", refresh);
+    setTimeout(checkTabScroll, 100);
+    window.addEventListener("resize", checkTabScroll);
+    return () => {
+      clearInterval(refreshTimer);
+      document.removeEventListener("visibilitychange", refresh);
+      window.removeEventListener("resize", checkTabScroll);
+    };
   });
 </script>
 
-<div class="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
-  <!-- Top Metrics Cards (Matching Reference Screenshot) -->
-  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 shrink-0">
-    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <p class="text-[11px] sm:text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Consultations</p>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countAll}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Master schedule count</p>
+<div class="workspace-enter flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
+  <div class="flex flex-wrap items-end gap-3 shrink-0">
+    <div class="flex flex-col gap-1">
+      <label for="schedule-dates" class="text-xs font-medium">Schedule dates</label>
+      <Select.Root type="single" value={dateMode} onValueChange={changeDateMode}>
+        <Select.Trigger id="schedule-dates" class="h-9 w-36 text-xs">
+          {dateMode === "all" ? "All dates" : dateMode === "day" ? "Day" : "Date range"}
+        </Select.Trigger>
+        <Select.Content>
+          <Select.Group>
+            <Select.Item value="all">All dates</Select.Item>
+            <Select.Item value="day">Day</Select.Item>
+            <Select.Item value="range">Date range</Select.Item>
+          </Select.Group>
+        </Select.Content>
+      </Select.Root>
     </div>
-    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <p class="text-[11px] sm:text-xs font-medium text-sky-700 uppercase tracking-wider">Scheduled</p>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countScheduled}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Pending clinical visits</p>
-    </div>
-    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <p class="text-[11px] sm:text-xs font-medium text-emerald-700 uppercase tracking-wider">Completed</p>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countCompleted}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Discharged records</p>
-    </div>
-    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <p class="text-[11px] sm:text-xs font-medium text-zinc-600 uppercase tracking-wider">Cancelled</p>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countCancelled}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Deferred or withdrawn</p>
-    </div>
+    {#if dateMode !== "all"}
+      <div class="flex flex-col gap-1">
+        <label for="schedule-from" class="text-xs font-medium">{dateMode === "day" ? "Date" : "From"}</label>
+        <Input id="schedule-from" type="date" class="h-9 w-36 text-xs" bind:value={dateFrom} onchange={() => currentPage = 1} aria-invalid={!!dateError} aria-describedby={dateError ? "schedule-date-error" : undefined} />
+      </div>
+    {/if}
+    {#if dateMode === "range"}
+      <div class="flex flex-col gap-1">
+        <label for="schedule-to" class="text-xs font-medium">To</label>
+        <Input id="schedule-to" type="date" class="h-9 w-36 text-xs" bind:value={dateTo} onchange={() => currentPage = 1} aria-invalid={!!dateError} aria-describedby={dateError ? "schedule-date-error" : undefined} />
+      </div>
+    {/if}
+    <p class="text-[11px] text-muted-foreground pb-2">Summary: {dateError ? "choose valid dates" : dateScopeLabel}</p>
   </div>
-
-  <!-- Segmented Tabs & Toolbar Bar (Matching Reference Screenshot) -->
-  <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 shrink-0">
-    <!-- Status Filter Tabs -->
+  {#if dateError}<p id="schedule-date-error" role="alert" class="text-xs text-destructive shrink-0">{dateError}</p>{/if}
+  <div class="grid grid-cols-5 gap-3 shrink-0">
+    <MetricCard label="Appointments" value={countAll} description="All appointment states" icon={Calendar} loading={isLoading} unavailable={!!errorMessage || !!dateError} />
+    <MetricCard label="Waiting room" value={countCheckedIn} description="Checked-in visits" icon={UserCheck} loading={isLoading} unavailable={!!errorMessage || !!dateError} />
+    <MetricCard label="Scheduled" value={countScheduled} description="Pending visits" icon={Clock} loading={isLoading} unavailable={!!errorMessage || !!dateError} />
+    <MetricCard label="In consultation" value={countInConsultation} description="Visits in progress" icon={Stethoscope} loading={isLoading} unavailable={!!errorMessage || !!dateError} />
+    <MetricCard label="Completed visits" value={countCompleted} description="Finalized visits" icon={CheckCircle2} loading={isLoading} unavailable={!!errorMessage || !!dateError} />
+  </div>
+  <!-- Tier 1: Status Filter Tabs (Dedicated Full-Width Strip with Scroll Affordances) -->
+  <div class="relative flex items-center shrink-0 min-w-0">
     <Tabs.Root
       value={activeFilter}
+      class="w-full min-w-0"
       onValueChange={(val) => {
         if (val) {
           activeFilter = val as StatusFilter;
@@ -354,79 +579,120 @@
         }
       }}
     >
-      <Tabs.List>
-        <Tabs.Trigger value="ALL" class="min-w-[72px]">
-          All <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countAll})</span>
-        </Tabs.Trigger>
-        <Tabs.Trigger value="Scheduled" class="min-w-[110px]">
-          Scheduled <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countScheduled})</span>
-        </Tabs.Trigger>
-        <Tabs.Trigger value="Completed" class="min-w-[110px]">
-          Completed <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countCompleted})</span>
-        </Tabs.Trigger>
-        <Tabs.Trigger value="Cancelled" class="min-w-[104px]">
-          Cancelled <span class="ml-1 text-[11px] tabular-nums text-muted-foreground font-normal">({countCancelled})</span>
-        </Tabs.Trigger>
-      </Tabs.List>
-    </Tabs.Root>
+      <div class="relative flex items-center min-w-0">
+        {#if canScrollLeft}
+          <button
+            type="button"
+            onclick={() => scrollTabs("left")}
+            class="absolute left-0 z-20 h-9 w-7 flex items-center justify-center rounded-l-lg bg-card/95 hover:bg-card border-y border-l border-border shadow-xs cursor-pointer text-muted-foreground hover:text-foreground transition-colors"
+            title="Scroll Left"
+          >
+            <ChevronLeft class="size-4" />
+          </button>
+        {/if}
 
-    <!-- Search, Refresh, and Action -->
-    <div class="flex items-center gap-2">
+        <Tabs.List
+          bind:ref={tabsListEl}
+          onscroll={checkTabScroll}
+          class="flex flex-nowrap items-center h-9 p-0.5 rounded-lg border bg-muted/60 text-muted-foreground overflow-x-auto no-scrollbar gap-1 max-w-full w-full sm:w-auto"
+        >
+          <Tabs.Trigger value="ALL" class="px-3 text-xs shrink-0 whitespace-nowrap">
+            All <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({dateError ? "--" : countAll})</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="Checked In" class="px-3 text-xs shrink-0 whitespace-nowrap">
+            Waiting Room <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({dateError ? "--" : countCheckedIn})</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="Scheduled" class="px-3 text-xs shrink-0 whitespace-nowrap">
+            Scheduled <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({dateError ? "--" : countScheduled})</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="In Consultation" class="px-3 text-xs shrink-0 whitespace-nowrap">
+            Consulting <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({dateError ? "--" : countInConsultation})</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="Completed" class="px-3 text-xs shrink-0 whitespace-nowrap">
+            Completed <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({dateError ? "--" : countCompleted})</span>
+          </Tabs.Trigger>
+          <Tabs.Trigger value="Cancelled" class="px-3 text-xs shrink-0 whitespace-nowrap">
+            Cancelled <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({dateError ? "--" : countCancelled})</span>
+          </Tabs.Trigger>
+        </Tabs.List>
+
+        {#if canScrollRight}
+          <button
+            type="button"
+            onclick={() => scrollTabs("right")}
+            class="absolute right-0 z-20 h-9 w-7 flex items-center justify-center rounded-r-lg bg-card/95 hover:bg-card border-y border-r border-border shadow-xs cursor-pointer text-muted-foreground hover:text-foreground transition-colors"
+            title="Scroll Right"
+          >
+            <ChevronRight class="size-4" />
+          </button>
+        {/if}
+      </div>
+    </Tabs.Root>
+  </div>
+
+  <!-- Tier 2: Search, Pagination, Refresh & Action Toolbar -->
+  <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0 min-w-0">
+    <div class="relative flex-1 sm:max-w-xs md:max-w-sm p-0.5">
+      <Search class="absolute left-3.5 top-3 size-4 text-muted-foreground pointer-events-none" />
+      <Input
+        type="text"
+        placeholder="Filter doctor, patient, ID..."
+        value={searchQuery}
+        oninput={handleSearchInput}
+        onkeydown={(e) => {
+          if (e.key === "Escape") clearSearch();
+        }}
+        data-search-input="true"
+        class="pl-9 pr-8 h-9"
+      />
+      {#if searchQuery}
+        <button
+          type="button"
+          onclick={clearSearch}
+          class="absolute right-3 top-3 text-muted-foreground hover:text-foreground cursor-pointer"
+          title="Clear filter (Esc)"
+        >
+          <X class="size-4" />
+        </button>
+      {/if}
+    </div>
+
+    <div class="flex items-center gap-2 shrink-0">
       {#if totalPages > 1}
-        <div class="hidden sm:flex items-center gap-1.5 mr-1 text-xs text-muted-foreground border-r border-border pr-2.5">
+        <div class="hidden sm:flex items-center gap-1.5 mr-1 text-xs text-muted-foreground border-r border-border pr-2.5 shrink-0">
           <span class="font-medium text-foreground tabular-nums">
             {currentPage}/{totalPages}
           </span>
-          <button
+          <Button
             type="button"
-            class="p-1 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            variant="outline"
+            size="icon"
+            class="size-7 cursor-pointer"
             onclick={() => (currentPage = Math.max(1, currentPage - 1))}
             disabled={currentPage === 1}
             title="Previous Page"
           >
             <ChevronLeft class="size-3.5" />
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            class="p-1 rounded-md border border-border bg-background hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+            variant="outline"
+            size="icon"
+            class="size-7 cursor-pointer"
             onclick={() => (currentPage = Math.min(totalPages, currentPage + 1))}
             disabled={currentPage >= totalPages}
             title="Next Page"
           >
             <ChevronRight class="size-3.5" />
-          </button>
+          </Button>
         </div>
       {/if}
 
-      <div class="relative w-full md:w-64">
-        <Search class="absolute left-3 top-2.5 size-4 text-muted-foreground pointer-events-none" />
-        <Input
-          type="text"
-          placeholder="Filter doctor, patient, ID..."
-          value={searchQuery}
-          oninput={handleSearchInput}
-          onkeydown={(e) => {
-            if (e.key === "Escape") clearSearch();
-          }}
-          data-search-input="true"
-          class="pl-9 pr-8 h-9"
-        />
-        {#if searchQuery}
-          <button
-            type="button"
-            onclick={clearSearch}
-            class="absolute right-2.5 top-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
-            title="Clear filter (Esc)"
-          >
-            <X class="size-4" />
-          </button>
-        {/if}
-      </div>
       <Button
         variant="outline"
         size="sm"
-        class="h-9 px-3 cursor-pointer"
-        onclick={reloadAppointments}
+        class="h-9 px-3 cursor-pointer shrink-0"
+        onclick={() => reloadAppointments()}
         disabled={isLoading}
       >
         {#if isLoading}
@@ -436,7 +702,7 @@
         {/if}
         <span class="sr-only">Refresh</span>
       </Button>
-      <Button onclick={() => openBookingModal()} size="sm" class="h-9 px-3 cursor-pointer">
+      <Button onclick={() => openBookingModal()} size="sm" class="h-9 px-3 cursor-pointer shrink-0">
         <CalendarPlus class="size-3.5 mr-1.5" />
         <span>New Appointment</span>
       </Button>
@@ -449,8 +715,8 @@
       {errorMessage}
     </div>
   {:else}
-    <div class="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
-      <Table containerClass="flex-1 min-h-0 overflow-y-auto">
+    <div class="rounded-xl border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col flex-1 min-h-0 min-w-0">
+      <Table containerClass="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-auto">
         <TableHeader class="sticky top-0 bg-card z-10 shadow-xs border-b [&_tr]:bg-card">
           <TableRow>
             <TableHead class="w-24">
@@ -461,7 +727,7 @@
               >
                 Appt #
                 {#if sortField === "id"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -475,7 +741,7 @@
               >
                 Patient
                 {#if sortField === "patient_name"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -489,7 +755,7 @@
               >
                 Doctor
                 {#if sortField === "doctor_name"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -503,7 +769,7 @@
               >
                 Date
                 {#if sortField === "app_date"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -517,7 +783,7 @@
               >
                 Status
                 {#if sortField === "status"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -531,7 +797,7 @@
             <TableRow>
               <TableCell colspan={6} class="h-32 text-center text-sm text-muted-foreground">
                 <div class="flex items-center justify-center gap-2">
-                  <RefreshCw class="animate-spin size-4 text-primary" />
+                  <RefreshCw class="animate-spin size-4 text-clinic" />
                   <span>Loading consultation schedules...</span>
                 </div>
               </TableCell>
@@ -539,7 +805,9 @@
           {:else if sortedAppointments.length === 0}
             <TableRow>
               <TableCell colspan={6} class="h-36 text-center text-sm text-muted-foreground">
-                {#if searchQuery || activeFilter !== "ALL"}
+                {#if dateError}
+                  Choose valid dates to view appointments.
+                {:else if searchQuery || activeFilter !== "ALL"}
                   <div class="flex flex-col items-center justify-center gap-2 py-2">
                     <p>No appointments match your active filter or search query.</p>
                     <Button
@@ -556,7 +824,7 @@
                     </Button>
                   </div>
                 {:else}
-                  No appointments have been booked yet. Click 'New Appointment' to schedule a consultation.
+                  No appointments are scheduled for the selected dates.
                 {/if}
               </TableCell>
             </TableRow>
@@ -571,9 +839,18 @@
                 </TableCell>
 
                 <!-- Patient -->
-                <TableCell class="font-medium text-foreground">
-                  {app.patient_name}
-                  <span class="text-xs text-muted-foreground ml-1 font-normal">(ID #{app.patient_id})</span>
+                <TableCell>
+                  <div class="flex flex-col">
+                    <span class="font-medium text-foreground">
+                      {app.patient_name}
+                      <span class="text-xs text-muted-foreground ml-1 font-normal">(ID #{app.patient_id})</span>
+                    </span>
+                    {#if app.reason_for_visit}
+                      <span class="text-[11px] text-muted-foreground line-clamp-1 italic">
+                        Reason: {app.reason_for_visit}
+                      </span>
+                    {/if}
+                  </div>
                 </TableCell>
 
                 <!-- Doctor -->
@@ -581,97 +858,140 @@
                   {app.doctor_name}
                 </TableCell>
 
-                <!-- Date -->
-                <TableCell class="tabular-nums text-xs text-muted-foreground font-mono">
-                  {app.app_date}
+                <!-- Schedule Date & Time -->
+                <TableCell>
+                  <div class="flex flex-col">
+                    <span class="text-xs font-medium text-foreground">{app.app_date}</span>
+                    <span class="text-[11px] text-muted-foreground font-mono flex items-center gap-1">
+                      <Clock class="size-3 text-muted-foreground shrink-0" />
+                      {formatTime(app.app_time)}
+                    </span>
+                  </div>
                 </TableCell>
 
-                <!-- Status Indicator Badge (Standard shadcn Badge) -->
+                <!-- Status Indicator Badge (5 Clinical States) -->
                 <TableCell class="text-center">
                   {#if app.status === "Scheduled"}
-                    <Badge variant="outline" class="border-sky-200 bg-sky-50 text-sky-700 gap-1 font-medium text-xs">
-                      <Clock class="size-3 text-sky-600 shrink-0" />
+                    <Badge variant="outline" class="gap-1 font-medium text-xs text-muted-foreground">
+                      <Clock class="size-3 shrink-0" />
                       Scheduled
                     </Badge>
+                  {:else if app.status === "Checked In"}
+                    <Badge variant="secondary" class="gap-1 font-medium text-xs">
+                      <UserCheck class="size-3 shrink-0" />
+                      Checked In
+                    </Badge>
+                  {:else if app.status === "In Consultation"}
+                    <Badge variant="secondary" class="gap-1 font-medium text-xs border border-border/80">
+                      <Stethoscope class="size-3 shrink-0" />
+                      Consulting
+                    </Badge>
                   {:else if app.status === "Completed"}
-                    <Badge variant="outline" class="border-emerald-200 bg-emerald-50 text-emerald-700 gap-1 font-medium text-xs">
-                      <CheckCircle2 class="size-3 text-emerald-600 shrink-0" />
+                    <Badge variant="outline" class="gap-1 font-medium text-xs">
+                      <CheckCircle2 class="size-3 shrink-0" />
                       Completed
                     </Badge>
                   {:else if app.status === "Cancelled"}
-                    <Badge variant="outline" class="border-zinc-200 bg-zinc-50 text-zinc-600 gap-1 font-medium text-xs">
-                      <XCircle class="size-3 text-zinc-500 shrink-0" />
+                    <Badge variant="outline" class="gap-1 font-medium text-xs opacity-70">
+                      <XCircle class="size-3 shrink-0" />
                       Cancelled
                     </Badge>
                   {/if}
                 </TableCell>
 
-                <!-- Dropdown Menu Actions -->
+                <!-- Actions: Quick Check In + Dropdown Menu -->
                 <TableCell class="text-right">
-                  <DropdownMenu.Root>
-                    <DropdownMenu.Trigger class="inline-flex items-center justify-center rounded-md size-8 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                      <MoreHorizontal class="size-4" />
-                      <span class="sr-only">Open menu</span>
-                    </DropdownMenu.Trigger>
-                    <DropdownMenu.Content align="end">
-                      {#if app.status === "Scheduled"}
-                        <DropdownMenu.Item
-                          onclick={() => handleStatusChange(app.id, "Completed")}
-                          class="text-emerald-700 focus:bg-emerald-50 focus:text-emerald-800 cursor-pointer"
-                        >
-                          <CheckCircle2 class="size-4 mr-2" />
-                          <span>Mark Completed</span>
-                        </DropdownMenu.Item>
-                        <DropdownMenu.Item
-                          onclick={() => openEditAppointment(app)}
-                          class="cursor-pointer"
-                        >
-                          <Calendar class="size-4 mr-2" />
-                          <span>Reschedule / Edit</span>
-                        </DropdownMenu.Item>
-                        <DropdownMenu.Separator />
-                        <DropdownMenu.Item
-                          onclick={() => handleStatusChange(app.id, "Cancelled")}
-                          class="text-amber-700 focus:bg-amber-50 focus:text-amber-800 cursor-pointer"
-                        >
-                          <XCircle class="size-4 mr-2" />
-                          <span>Cancel Appointment</span>
-                        </DropdownMenu.Item>
-                        <DropdownMenu.Item
-                          onclick={() => openDeleteAppointment(app)}
-                          class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
-                        >
-                          <Trash2 class="size-4 mr-2" />
-                          <span>Delete</span>
-                        </DropdownMenu.Item>
-                      {:else if app.status === "Cancelled"}
-                        <DropdownMenu.Item
-                          onclick={() => handleStatusChange(app.id, "Scheduled")}
-                          class="text-sky-700 focus:bg-sky-50 focus:text-sky-800 cursor-pointer"
-                        >
-                          <RotateCcw class="size-4 mr-2" />
-                          <span>Restore to Scheduled</span>
-                        </DropdownMenu.Item>
-                        <DropdownMenu.Separator />
-                        <DropdownMenu.Item
-                          onclick={() => openDeleteAppointment(app)}
-                          class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
-                        >
-                          <Trash2 class="size-4 mr-2" />
-                          <span>Delete</span>
-                        </DropdownMenu.Item>
-                      {:else if app.status === "Completed"}
-                        <!-- Completed records are immutable: only deletion is permissible -->
-                        <DropdownMenu.Item
-                          onclick={() => openDeleteAppointment(app)}
-                          class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
-                        >
-                          <Trash2 class="size-4 mr-2" />
-                          <span>Delete</span>
-                        </DropdownMenu.Item>
-                      {/if}
-                    </DropdownMenu.Content>
-                  </DropdownMenu.Root>
+                  <div class="inline-flex items-center justify-end gap-1.5">
+                    {#if app.status === "Scheduled"}
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        class="h-7 text-xs px-2 cursor-pointer inline-flex items-center gap-1 font-medium"
+                        onclick={() => handleStatusChange(app.id, "Checked In")}
+                        title="Check in patient to Waiting Room"
+                      >
+                        <UserCheck class="size-3" />
+                        Check In
+                      </Button>
+                    {/if}
+
+                    <DropdownMenu.Root>
+                      <DropdownMenu.Trigger class="inline-flex items-center justify-center rounded-md size-8 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <MoreHorizontal class="size-4" />
+                        <span class="sr-only">Open menu</span>
+                      </DropdownMenu.Trigger>
+                      <DropdownMenu.Content align="end">
+                        {#if app.status === "Scheduled"}
+                          <DropdownMenu.Item
+                            onclick={() => handleStatusChange(app.id, "Checked In")}
+                            class="text-amber-800 focus:bg-amber-50 focus:text-amber-900 cursor-pointer"
+                          >
+                            <UserCheck class="size-4 mr-2" />
+                            <span>Check In (Waiting Room)</span>
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Item
+                            onclick={() => openEditAppointment(app)}
+                            class="cursor-pointer"
+                          >
+                            <Calendar class="size-4 mr-2" />
+                            <span>Reschedule Visit</span>
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Item
+                            onclick={() => handleStatusChange(app.id, "Cancelled")}
+                            class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
+                          >
+                            <XCircle class="size-4 mr-2" />
+                            <span>Cancel Appointment</span>
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Separator />
+                          <DropdownMenu.Item
+                            onclick={() => openDeleteAppointment(app)}
+                            class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
+                          >
+                            <Trash2 class="size-4 mr-2" />
+                            <span>Delete Record</span>
+                          </DropdownMenu.Item>
+                        {:else if app.status === "Checked In"}
+                          <DropdownMenu.Item
+                            onclick={() => handleStatusChange(app.id, "Scheduled")}
+                            class="cursor-pointer"
+                          >
+                            <RotateCcw class="size-4 mr-2" />
+                            <span>Return to Scheduled</span>
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Item
+                            onclick={() => handleStatusChange(app.id, "Cancelled")}
+                            class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
+                          >
+                            <XCircle class="size-4 mr-2" />
+                            <span>Cancel Appointment</span>
+                          </DropdownMenu.Item>
+                        {:else if app.status === "In Consultation"}
+                          <div class="px-2 py-1.5 text-xs text-muted-foreground">Consultation managed by the assigned doctor</div>
+                        {:else if app.status === "Completed"}
+                          <div class="px-2 py-1.5 text-xs text-muted-foreground italic">
+                            Finalized clinical visit
+                          </div>
+                        {:else if app.status === "Cancelled"}
+                          <DropdownMenu.Item
+                            onclick={() => handleStatusChange(app.id, "Scheduled")}
+                            class="text-sky-700 focus:bg-sky-50 focus:text-sky-800 cursor-pointer"
+                          >
+                            <RotateCcw class="size-4 mr-2" />
+                            <span>Reopen as Scheduled</span>
+                          </DropdownMenu.Item>
+                          <DropdownMenu.Separator />
+                          <DropdownMenu.Item
+                            onclick={() => openDeleteAppointment(app)}
+                            class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
+                          >
+                            <Trash2 class="size-4 mr-2" />
+                            <span>Delete Record</span>
+                          </DropdownMenu.Item>
+                        {/if}
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Root>
+                  </div>
                 </TableCell>
               </TableRow>
             {/each}
@@ -680,7 +1000,7 @@
       </Table>
 
       <!-- Integrated Table Footer Pagination (Matching Reference Screenshot) -->
-      <div class="border-t border-border px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground bg-muted/20 shrink-0">
+      <div class="border-t border-border px-4 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground bg-muted/20 shrink-0 min-w-0">
         <div class="flex items-center gap-2">
           <span>Rows per page</span>
           <select
@@ -742,7 +1062,7 @@
 
   <!-- Modal Dialog: New Appointment -->
   <Dialog.Root bind:open={isBookingModalOpen}>
-    <Dialog.Content class="sm:max-w-md">
+    <Dialog.Content class="sm:max-w-2xl overflow-x-hidden">
       <Dialog.Header>
         <Dialog.Title>Schedule Consultation</Dialog.Title>
         <Dialog.Description>
@@ -750,11 +1070,11 @@
         </Dialog.Description>
       </Dialog.Header>
 
-      <form onsubmit={handleCreateBooking} class="flex flex-col gap-4 py-2">
+      <form onsubmit={handleCreateBooking} class="flex min-w-0 flex-col gap-4 py-2">
         <!-- Patient Selector with Empty State Guard -->
         <div>
-          <label for="modalPatientSelect" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-            Patient <span class="text-destructive">*</span>
+          <label for="modalPatientSelect" class="block text-xs font-semibold text-foreground mb-1.5">
+            Patient Record <span class="text-destructive">*</span>
           </label>
           {#if patientList.length === 0}
             <div class="rounded-lg border border-amber-200/80 bg-amber-50/70 p-3 text-xs text-amber-900 flex flex-col gap-1.5">
@@ -777,72 +1097,122 @@
           {/if}
         </div>
 
-        <!-- Doctor Name -->
+        <!-- Attending Physician Selector -->
         <div>
-          <label for="modalDoctor" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-            Attending Doctor <span class="text-destructive">*</span>
+          <label for="modalDoctorSelect" class="block text-xs font-semibold text-foreground mb-1.5">
+            Attending Physician <span class="text-destructive">*</span>
           </label>
-          <Input
-            id="modalDoctor"
-            type="text"
-            placeholder="e.g. Dr. Maria Cruz"
-            bind:value={doctorName}
-            aria-invalid={!!bookingErrors.doctor_name}
-            disabled={isSubmitting || patientList.length === 0}
-            autofocus
-          />
-          {#if bookingErrors.doctor_name}
-            <p class="text-xs text-destructive mt-1">{bookingErrors.doctor_name.join(" ")}</p>
+          {#if doctorList.length === 0}
+            <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">No active registered physicians. Register a physician in Settings, then return here.</div>
+          {:else}
+          <select
+            id="modalDoctorSelect"
+            class="h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm w-full focus:outline-none focus:ring-1 focus:ring-ring cursor-pointer"
+            bind:value={selectedDoctorId}
+            onchange={(e) => {
+              const val = Number((e.target as HTMLSelectElement).value);
+              selectedDoctorId = val > 0 ? val : null;
+              if (val > 0) {
+                const doc = doctorList.find((d) => d.id === val);
+                if (doc) doctorName = doc.full_name;
+              }
+            }}
+            disabled={isSubmitting}
+          >
+            {#if doctorList.length > 0}
+              <option value={null}>-- Select Attending Physician --</option>
+              {#each doctorList as doc (doc.id)}
+                <option value={doc.id}>
+                  Dr. {doc.full_name.replace(/^Dr\.\s*/i, "")} ({doc.specialty || "General Medicine"})
+                </option>
+              {/each}
+            {/if}
+          </select>
+          {/if}
+
+          {#if bookingErrors.doctor_id}
+            <p class="text-xs text-destructive mt-1">{bookingErrors.doctor_id.join(" ")}</p>
           {/if}
         </div>
 
-        <!-- Date with Quick Chips -->
-        <div>
-          <div class="flex items-center justify-between mb-1.5">
-            <label for="modalDate" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Consultation Date <span class="text-destructive">*</span>
+        <!-- Date & Time Row -->
+        <div class="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+          <!-- Date -->
+          <div class="min-w-0">
+            <label for="modalDate" class="block text-xs font-semibold text-foreground mb-1.5">
+              Appointment Date <span class="text-destructive">*</span>
             </label>
-            <div class="flex items-center gap-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                class="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
-                onclick={() => setQuickDate(0)}
-              >
-                Today
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                class="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
-                onclick={() => setQuickDate(1)}
-              >
-                Tomorrow
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                class="h-6 text-[11px] px-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
-                onclick={() => setQuickDate(7)}
-              >
-                Next Week
-              </Button>
-            </div>
+            <Input
+              id="modalDate"
+              type="date"
+              bind:value={appDate}
+              aria-invalid={!!bookingErrors.app_date}
+              disabled={isSubmitting || patientList.length === 0}
+            />
+            {#if bookingErrors.app_date}
+              <p class="text-xs text-destructive mt-1">{bookingErrors.app_date.join(" ")}</p>
+            {/if}
           </div>
+
+          <!-- Time Slot -->
+          <div class="min-w-0">
+            <label for="modalTime" class="block text-xs font-semibold text-foreground mb-1.5">
+              Time Slot <span class="text-destructive">*</span>
+            </label>
+            <Input
+              id="modalTime"
+              type="time"
+              bind:value={appTime}
+              aria-invalid={!!bookingErrors.app_time}
+              disabled={isSubmitting || patientList.length === 0}
+            />
+            {#if bookingErrors.app_time}
+              <p class="text-xs text-destructive mt-1">{bookingErrors.app_time.join(" ")}</p>
+            {/if}
+          </div>
+        </div>
+
+        <!-- Reason for Visit -->
+        <div>
+          <label for="modalReason" class="block text-xs font-semibold text-foreground mb-1.5">
+            Reason for Visit / Chief Complaint
+          </label>
           <Input
-            id="modalDate"
-            type="date"
-            bind:value={appDate}
-            aria-invalid={!!bookingErrors.app_date}
+            id="modalReason"
+            type="text"
+            placeholder="e.g. Annual physical exam, follow-up on lab tests, sore throat"
+            bind:value={reasonForVisit}
             disabled={isSubmitting || patientList.length === 0}
           />
-          {#if bookingErrors.app_date}
-            <p class="text-xs text-destructive mt-1">{bookingErrors.app_date.join(" ")}</p>
-          {/if}
         </div>
+
+        <!-- Reactive Conflict Check Warning Banner -->
+        {#if isCheckingConflict}
+          <div class="flex items-center gap-2 text-xs text-muted-foreground py-1">
+            <Loader2 class="size-3 animate-spin text-clinic" />
+            <span>Checking doctor schedule availability...</span>
+          </div>
+        {:else if conflictWarning}
+          <div class="rounded-lg border border-amber-300 bg-amber-50/90 p-3 text-xs text-amber-900 flex flex-col gap-2">
+            <div class="flex items-center gap-2 font-semibold text-amber-800">
+              <AlertTriangle class="size-4 text-amber-600 shrink-0" />
+              <span>Schedule Conflict Warning</span>
+            </div>
+            <p>{conflictWarning}</p>
+            <label class="flex items-center gap-2 font-medium cursor-pointer text-amber-950 mt-1 select-none">
+              <input
+                type="checkbox"
+                bind:checked={overrideConflict}
+                class="rounded border-amber-400 text-amber-600 focus:ring-amber-500 cursor-pointer"
+              />
+              <span>Emergency / Walk-in Override (Book Anyway)</span>
+            </label>
+            {#if overrideConflict}
+              <Input class="mt-1.5 text-xs" placeholder="Required override reason" bind:value={overrideReason} maxlength={255} />
+              {#if bookingErrors.override_reason}<p class="mt-1 text-xs text-destructive">{bookingErrors.override_reason.join(" ")}</p>{/if}
+            {/if}
+          </div>
+        {/if}
 
         {#if bookingErrors.general}
           <div class="rounded-md bg-destructive/10 border border-destructive/20 p-3 text-xs text-destructive">
@@ -850,20 +1220,39 @@
           </div>
         {/if}
 
-        <Dialog.Footer class="pt-2">
+        <Dialog.Footer class="grid w-full grid-cols-1 gap-2 pt-2 sm:grid-cols-3">
           <Button
             type="button"
             variant="outline"
             onclick={() => (isBookingModalOpen = false)}
             disabled={isSubmitting}
+            class="w-full whitespace-normal"
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={isSubmitting || patientList.length === 0}>
+          <Button
+            type="button"
+            variant="secondary"
+            onclick={(e) => handleWalkIn(e)}
+            disabled={isPreparingBooking || isSubmitting || !selectedDoctorId || patientList.length === 0 || (!!conflictWarning && !overrideConflict)}
+            class="w-full whitespace-normal cursor-pointer"
+          >
             {#if isSubmitting}
-              <Loader2 class="size-4 animate-spin" />
+              <Loader2 class="size-4 animate-spin mr-1" />
+            {:else}
+              <UserCheck class="size-4 mr-1" />
             {/if}
-            Confirm Schedule
+            Walk-in / Check in now
+          </Button>
+          <Button
+            type="submit"
+            disabled={isPreparingBooking || isSubmitting || !selectedDoctorId || patientList.length === 0 || (!!conflictWarning && !overrideConflict)}
+            class="w-full whitespace-normal cursor-pointer"
+          >
+            {#if isSubmitting}
+              <Loader2 class="size-4 animate-spin mr-1" />
+            {/if}
+            Book Appointment
           </Button>
         </Dialog.Footer>
       </form>
@@ -874,6 +1263,7 @@
   <EditAppointmentDialog
     bind:open={isEditDialogOpen}
     appointment={appointmentForEdit}
+    doctorList={doctorList}
     onSuccess={() => {
       toast.success(`Appointment #${appointmentForEdit?.id} updated.`);
       reloadAppointments();

@@ -6,6 +6,30 @@ System.
 
 ---
 
+## Daily schedule report
+
+`GET /api/reports/daily/?date=YYYY-MM-DD` requires both the desktop launch
+credential and an active staff session. Omit `date` for clinic-today. An empty,
+invalid, or noncanonical date returns HTTP 400 with a `date` validation field.
+Past and future dates are supported.
+
+The response contains `date`, `generated_at` (clinic-local ISO timestamp),
+`mode` (`clinic` or `demo`), `scope` (`clinic` or `doctor`), `totals`,
+and `doctors`. Every counter object contains `appointments`, `patients`,
+`scheduled`, `checked_in`, `in_consultation`, `completed`, and `cancelled`.
+Doctor rows additionally contain `doctor_id` and `doctor_name`.
+
+Receptionists receive the whole selected schedule, including inactive doctors
+and an Unassigned row for appointments without a doctor ID. Doctors receive
+only appointments assigned to their authenticated staff ID. Query parameters
+cannot expand that scope. Patient counts are distinct within each scope; the
+overall patient total is calculated independently of doctor subtotals.
+
+This report shows current statuses for appointments scheduled on a date.
+It is not a saved closing report or a history of actions performed that day.
+An empty day returns zero counters and an empty doctor list. No patient names,
+contact details, diagnoses, or clinical notes are included.
+
 ## 1. Appointment Lifecycle State Machine
 
 Appointments transition through a 5-state clinical workflow:

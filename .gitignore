@@ -8,6 +8,8 @@ venv/
 clinic.db
 clinic.db-*
 clinic_dev.sqlite3
+clinic_demo_dev.sqlite3
+clinic_demo_dev.sqlite3-*
 clinic_dev.sqlite3-*
 
 frontend/node_modules/

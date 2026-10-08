@@ -51,6 +51,7 @@ IS_TESTING = (
     or any("pytest" in arg for arg in sys.argv)
     or any(arg.endswith("pytest") or arg.endswith("pytest.exe") for arg in sys.argv)
 )
+TESTING = IS_TESTING
 
 if IS_TESTING:
     DB_PATH = ":memory:"
@@ -58,10 +59,19 @@ if IS_TESTING:
         "backend.config.settings.FastPBKDF2PasswordHasher",
     ]
 elif DEBUG:
-    DB_PATH = str(BASE_DIR / "clinic_dev.sqlite3")
+    DB_PATH = str(
+        BASE_DIR
+        / (
+            "clinic_demo_dev.sqlite3"
+            if os.environ.get("HOSPITAL_MODE") == "demo"
+            else "clinic_dev.sqlite3"
+        )
+    )
 else:
     # Desktop / Packaged production mode
-    if sys.platform == "darwin":
+    if os.environ.get("HOSPITAL_DATA_DIR"):
+        app_dir = Path(os.environ["HOSPITAL_DATA_DIR"])
+    elif sys.platform == "darwin":
         app_dir = Path.home() / "Library" / "Application Support" / "HospitalSystem"
     elif sys.platform == "win32":
         local_appdata = os.environ.get("LOCALAPPDATA")
@@ -77,8 +87,14 @@ else:
             if xdg_data
             else Path.home() / ".local" / "share" / "HospitalSystem"
         )
+    configured_dir = os.environ.get("HOSPITAL_DATA_DIR")
+    if configured_dir:
+        app_dir = Path(configured_dir).expanduser()
     app_dir.mkdir(parents=True, exist_ok=True)
-    DB_PATH = str(app_dir / "clinic.sqlite3")
+    database_name = (
+        "clinic_demo.sqlite3" if os.environ.get("HOSPITAL_MODE") == "demo" else "clinic.sqlite3"
+    )
+    DB_PATH = str(app_dir / database_name)
 
 DATABASES = {
     "default": {
@@ -114,9 +130,6 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
 
 # CSRF & Security for local loopback
 CSRF_COOKIE_HTTPONLY = False  # Allows Svelte frontend to read csrf token cookie
-CSRF_TRUSTED_ORIGINS = [
-    "http://127.0.0.1:*",
-    "http://localhost:*",
-]
+CSRF_TRUSTED_ORIGINS = ["http://127.0.0.1:5173", "http://localhost:5173"] if DEBUG else []
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
