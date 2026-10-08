@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref_name || github.ref }}
+  group: release-${{ github.event.inputs.tag_name || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -23,19 +23,19 @@ jobs:
     name: Pre-Flight Verification & Quality Gate
     runs-on: windows-latest
     outputs:
+      commit_sha: ${{ steps.release-commit.outputs.commit_sha }}
       tag_name: ${{ steps.resolve-tag.outputs.tag_name }}
       is_prerelease: ${{ steps.resolve-tag.outputs.is_prerelease }}
       make_latest: ${{ steps.resolve-tag.outputs.make_latest }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Resolve and validate tag name
         id: resolve-tag
         shell: bash
+        env:
+          REQUESTED_TAG: ${{ github.event.inputs.tag_name }}
         run: |
-          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
-            TAG="${{ github.event.inputs.tag_name }}"
+          if [ -n "$REQUESTED_TAG" ]; then
+            TAG="$REQUESTED_TAG"
           else
             TAG="${GITHUB_REF#refs/tags/}"
           fi
@@ -48,7 +48,7 @@ jobs:
           echo "tag_name=$TAG" >> $GITHUB_OUTPUT
           echo "Resolved release tag: $TAG"
 
-          if [[ "$TAG" =~ - ]]; then
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+- ]]; then
             echo "is_prerelease=true" >> $GITHUB_OUTPUT
             echo "make_latest=false" >> $GITHUB_OUTPUT
             echo "Detected pre-release tag: marking as pre-release and not latest."
@@ -57,6 +57,16 @@ jobs:
             echo "make_latest=true" >> $GITHUB_OUTPUT
             echo "Detected production tag: marking as latest release."
           fi
+
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ steps.resolve-tag.outputs.tag_name }}
+
+      - name: Pin verified release commit
+        id: release-commit
+        shell: bash
+        run: echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -92,7 +102,7 @@ jobs:
           uv run ruff check backend desktop package.py
           uv run ruff format --check backend desktop package.py
 
-      - name: Strict Python Type Check
+      - name: Python Type Check
         run: uv run python -m basedpyright
 
       - name: Check Workflow Formatting
@@ -102,6 +112,7 @@ jobs:
         working-directory: ./frontend
         run: |
           deno install
+          deno task test
           deno task build
 
       - name: Run Backend Tests
@@ -114,6 +125,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.pre-flight-check.outputs.commit_sha }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -166,6 +179,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.pre-flight-check.outputs.commit_sha }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -220,6 +235,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.pre-flight-check.outputs.commit_sha }}
 
       - name: Download release assets
         uses: actions/download-artifact@v4

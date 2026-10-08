@@ -128,6 +128,14 @@ You can also launch with `--demo`:
 Clinic data and demo data are stored in separate SQLite databases. Standard desktop
 launches do not create sample accounts.
 
+Demo edits persist between launches. To refresh old sample dates, use
+**Settings > System > Reset demo data**. This replaces demo clinical data,
+retains staff profiles, and signs out demo sessions.
+
+For a fresh clinic, register the first receptionist on the sign-in screen.
+That receptionist can add physicians through **Settings > System > Register staff**
+while staying signed in.
+
 ---
 
 ## Common Developer Tasks

@@ -184,7 +184,7 @@ On macOS / Linux:
 Type-check Svelte and TypeScript files with Deno:
 
 ```bash
-cd frontend; deno check src/main.ts; cd ..
+cd frontend; deno task check; deno task test; cd ..
 ```
 
 ### Code Formatting and Linting
@@ -299,15 +299,19 @@ On macOS / Linux:
 .venv/bin/python desktop/verify_bundle.py
 ```
 
-This verification script tests:
+Both clinic and demo runs use temporary databases inside `build/`. The script
+never opens the production database. The demo run also checks its account chooser
+and verifies that its database is separate from clinic storage.
 
-1. Executable or application bundle presence in `dist/`.
-2. Executable architecture and format integrity.
-3. Digital bundle integrity and internal manifest.
-4. Clean launch and loopback socket binding on `127.0.0.1`.
-5. Health endpoint response (`/api/health/`).
-6. Session token rejection (`403 Forbidden` on invalid tokens).
-7. Clean shutdown and zero process leakage.
+The verification script checks:
+
+1. Executable or application bundle presence.
+2. Database migrations and clean headless startup.
+3. Loopback binding and a healthy response in the requested mode.
+4. Protected launch HTML and required staff authentication.
+5. Database creation in the isolated directory.
+6. Demo accounts and separate clinic/demo storage.
+7. Launcher logs and termination of the background process.
 
 ---
 

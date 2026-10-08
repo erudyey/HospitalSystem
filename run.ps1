@@ -30,7 +30,7 @@ $VenvPytest = Join-Path $RepoRoot ".venv\Scripts\pytest.exe"
 $VenvRuff = Join-Path $RepoRoot ".venv\Scripts\ruff.exe"
 
 $savedEnvironment = @{}
-foreach ($name in @("TESTING", "DEBUG", "DJANGO_SETTINGS_MODULE")) {
+foreach ($name in @("TESTING", "DEBUG", "DJANGO_SETTINGS_MODULE", "HOSPITAL_MODE")) {
     $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, "Process")
 }
 

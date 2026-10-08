@@ -61,6 +61,7 @@ jobs:
         working-directory: ./frontend
         run: |
           deno install
+          deno task test
           deno task build
 
       - name: Run Backend Tests
