@@ -227,10 +227,10 @@
 
 <div class="flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
   <div class="grid grid-cols-4 gap-3 shrink-0">
-    <MetricCard label="Waiting Room" value={checkedInQueue.length} description="Checked in & waiting" icon={UserCheck} loading={isLoading} unavailable={!!errorMessage} />
-    <MetricCard label="In Consultation" value={inConsultationQueue.length} description="Active patient encounter" icon={Stethoscope} loading={isLoading} unavailable={!!errorMessage} />
-    <MetricCard label="Scheduled Today" value={scheduledToday.length} description="Pending arrival" icon={CalendarCheck} loading={isLoading} unavailable={!!errorMessage} />
-    <MetricCard label="Seen Today" value={completedToday.length} description="Completed visits" icon={ClipboardList} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Waiting room" value={checkedInQueue.length} description="Your checked-in visits today" icon={UserCheck} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="In consultation" value={inConsultationQueue.length} description="Your visits in progress today" icon={Stethoscope} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Scheduled today" value={scheduledToday.length} description="Your visits pending arrival" icon={CalendarCheck} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Completed visits" value={completedToday.length} description="Your finalized visits today" icon={ClipboardList} loading={isLoading} unavailable={!!errorMessage} />
   </div>
 
   <!-- Workspace Tabs Navigation & Refresh -->

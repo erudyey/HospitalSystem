@@ -104,7 +104,7 @@
   let activeAppointmentsCount = $derived(
     patients.filter((p) => (p.active_appointment_count ?? 0) > 0).length
   );
-  let totalConsultationsScheduled = $derived(
+  let appointmentsRecorded = $derived(
     patients.reduce((sum, p) => sum + (p.appointment_count ?? 0), 0)
   );
 
@@ -274,9 +274,9 @@
 
 <div class="flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
   <div class="grid grid-cols-3 gap-3 shrink-0">
-    <MetricCard label="Total Enrolled Patients" value={totalPatients} description="Active primary directory records" icon={Users} loading={isLoading} unavailable={!!errorMessage} />
-    <MetricCard label="Patients with Active Schedules" value={activeAppointmentsCount} description="Patients with scheduled visits" icon={CalendarCheck} loading={isLoading} unavailable={!!errorMessage} />
-    <MetricCard label="Appointments recorded" value={totalConsultationsScheduled} description="Lifetime appointment bookings" icon={ClipboardList} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Registered patients" value={totalPatients} description="All saved directory records" icon={Users} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Patients with active visits" value={activeAppointmentsCount} description="Directory patients with pending visits" icon={CalendarCheck} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Appointments recorded" value={appointmentsRecorded} description="Lifetime bookings, all statuses" icon={ClipboardList} loading={isLoading} unavailable={!!errorMessage} />
   </div>
 
   <!-- Table Toolbar Bar (Matching Reference Screenshot) -->

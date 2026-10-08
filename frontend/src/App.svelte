@@ -508,7 +508,8 @@
         />
       {:else}
         {#key currentUser.id + ":" + staffRevision}
-        <AppointmentsWorkspace
+          <AppointmentsWorkspace
+            {clinicNow}
           bind:isBookingModalOpen={triggerAppointmentBook}
           preselectedPatient={selectedPatientForBooking}
           onClearPreselectedPatient={handleClearSelectedPatient}

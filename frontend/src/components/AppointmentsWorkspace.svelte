@@ -2,6 +2,7 @@
   import MetricCard from "./MetricCard.svelte";
   import { onMount, untrack } from "svelte";
   import { calendarDateOffset, nextClinicSlot } from "$lib/calendar";
+  import { appointmentsWithinDates, dateFilterError, type DateFilter } from "$lib/schedule";
   import {
     api,
     type Patient,
@@ -25,6 +26,7 @@
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import * as Dialog from "$lib/components/ui/dialog";
   import * as Tabs from "$lib/components/ui/tabs";
+  import * as Select from "$lib/components/ui/select";
   import EditAppointmentDialog from "./EditAppointmentDialog.svelte";
   import DeleteAppointmentDialog from "./DeleteAppointmentDialog.svelte";
   import {
@@ -54,12 +56,14 @@
   } from "lucide-svelte";
 
   interface Props {
+    clinicNow: string;
     isBookingModalOpen?: boolean;
     preselectedPatient?: Patient | null;
     onClearPreselectedPatient?: () => void;
   }
 
   let {
+    clinicNow,
     isBookingModalOpen = $bindable(false),
     preselectedPatient = null,
     onClearPreselectedPatient,
@@ -84,6 +88,21 @@
     | "Cancelled";
   let activeFilter = $state<StatusFilter>("ALL");
   let searchQuery = $state("");
+  let dateMode = $state<DateFilter["mode"]>("all");
+  let dateFrom = $state("");
+  let dateTo = $state("");
+  let dateFilter = $derived({ mode: dateMode, from: dateFrom, to: dateTo });
+  let dateError = $derived(dateFilterError(dateFilter));
+  let dateAppointments = $derived(appointmentsWithinDates(allAppointments, dateFilter));
+  let dateScopeLabel = $derived(dateMode === "all" ? "All dates" : dateMode === "day" ? dateFrom : dateFrom + " to " + dateTo);
+
+  function changeDateMode(value: string) {
+    if (!["all", "day", "range"].includes(value)) return;
+    dateMode = value as DateFilter["mode"];
+    if (!dateFrom) dateFrom = clinicNow.slice(0, 10);
+    if (!dateTo) dateTo = dateFrom;
+    currentPage = 1;
+  }
 
   // Sorting state (default: chronological appointment date)
   type AppointmentSortField = "id" | "patient_name" | "doctor_name" | "app_date" | "status";
@@ -165,26 +184,26 @@
   }
 
   // Filter count counters
-  let countAll = $derived(allAppointments.length);
+  let countAll = $derived(dateAppointments.length);
   let countCheckedIn = $derived(
-    allAppointments.filter((a) => a.status === "Checked In").length
+    dateAppointments.filter((a) => a.status === "Checked In").length
   );
   let countScheduled = $derived(
-    allAppointments.filter((a) => a.status === "Scheduled").length
+    dateAppointments.filter((a) => a.status === "Scheduled").length
   );
   let countInConsultation = $derived(
-    allAppointments.filter((a) => a.status === "In Consultation").length
+    dateAppointments.filter((a) => a.status === "In Consultation").length
   );
   let countCompleted = $derived(
-    allAppointments.filter((a) => a.status === "Completed").length
+    dateAppointments.filter((a) => a.status === "Completed").length
   );
   let countCancelled = $derived(
-    allAppointments.filter((a) => a.status === "Cancelled").length
+    dateAppointments.filter((a) => a.status === "Cancelled").length
   );
 
   // Filtered appointments
   let filteredAppointments = $derived.by(() => {
-    let list = allAppointments;
+    let list = dateAppointments;
 
     if (activeFilter !== "ALL") {
       list = list.filter((app) => app.status === activeFilter);
@@ -510,12 +529,43 @@
 </script>
 
 <div class="flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
+  <div class="flex flex-wrap items-end gap-3 shrink-0">
+    <div class="flex flex-col gap-1">
+      <label for="schedule-dates" class="text-xs font-medium">Schedule dates</label>
+      <Select.Root type="single" value={dateMode} onValueChange={changeDateMode}>
+        <Select.Trigger id="schedule-dates" class="h-9 w-36 text-xs">
+          {dateMode === "all" ? "All dates" : dateMode === "day" ? "Day" : "Date range"}
+        </Select.Trigger>
+        <Select.Content>
+          <Select.Group>
+            <Select.Item value="all">All dates</Select.Item>
+            <Select.Item value="day">Day</Select.Item>
+            <Select.Item value="range">Date range</Select.Item>
+          </Select.Group>
+        </Select.Content>
+      </Select.Root>
+    </div>
+    {#if dateMode !== "all"}
+      <div class="flex flex-col gap-1">
+        <label for="schedule-from" class="text-xs font-medium">{dateMode === "day" ? "Date" : "From"}</label>
+        <Input id="schedule-from" type="date" class="h-9 w-36 text-xs" bind:value={dateFrom} onchange={() => currentPage = 1} aria-invalid={!!dateError} aria-describedby={dateError ? "schedule-date-error" : undefined} />
+      </div>
+    {/if}
+    {#if dateMode === "range"}
+      <div class="flex flex-col gap-1">
+        <label for="schedule-to" class="text-xs font-medium">To</label>
+        <Input id="schedule-to" type="date" class="h-9 w-36 text-xs" bind:value={dateTo} onchange={() => currentPage = 1} aria-invalid={!!dateError} aria-describedby={dateError ? "schedule-date-error" : undefined} />
+      </div>
+    {/if}
+    <p class="text-[11px] text-muted-foreground pb-2">Summary: {dateError ? "choose valid dates" : dateScopeLabel}</p>
+  </div>
+  {#if dateError}<p id="schedule-date-error" role="alert" class="text-xs text-destructive shrink-0">{dateError}</p>{/if}
   <div class="grid grid-cols-5 gap-3 shrink-0">
-    <MetricCard label="Total Visits" value={countAll} description="Master schedule count" icon={Calendar} loading={isLoading} unavailable={!!errorMessage} />
-    <MetricCard label="Waiting Room" value={countCheckedIn} description="Checked in at clinic" icon={UserCheck} loading={isLoading} unavailable={!!errorMessage} />
-    <MetricCard label="Scheduled" value={countScheduled} description="Pending clinical visits" icon={Clock} loading={isLoading} unavailable={!!errorMessage} />
-    <MetricCard label="Consulting" value={countInConsultation} description="Currently with physician" icon={Stethoscope} loading={isLoading} unavailable={!!errorMessage} />
-    <MetricCard label="Completed" value={countCompleted} description="Discharged records" icon={CheckCircle2} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Appointments" value={countAll} description="All appointment states" icon={Calendar} loading={isLoading} unavailable={!!errorMessage || !!dateError} />
+    <MetricCard label="Waiting room" value={countCheckedIn} description="Checked-in visits" icon={UserCheck} loading={isLoading} unavailable={!!errorMessage || !!dateError} />
+    <MetricCard label="Scheduled" value={countScheduled} description="Pending visits" icon={Clock} loading={isLoading} unavailable={!!errorMessage || !!dateError} />
+    <MetricCard label="In consultation" value={countInConsultation} description="Visits in progress" icon={Stethoscope} loading={isLoading} unavailable={!!errorMessage || !!dateError} />
+    <MetricCard label="Completed visits" value={countCompleted} description="Finalized visits" icon={CheckCircle2} loading={isLoading} unavailable={!!errorMessage || !!dateError} />
   </div>
   <!-- Tier 1: Status Filter Tabs (Dedicated Full-Width Strip with Scroll Affordances) -->
   <div class="relative flex items-center shrink-0 min-w-0">
@@ -547,22 +597,22 @@
           class="flex flex-nowrap items-center h-9 p-0.5 rounded-lg border bg-muted/60 text-muted-foreground overflow-x-auto no-scrollbar gap-1 max-w-full w-full sm:w-auto"
         >
           <Tabs.Trigger value="ALL" class="px-3 text-xs shrink-0 whitespace-nowrap">
-            All <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countAll})</span>
+            All <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({dateError ? "--" : countAll})</span>
           </Tabs.Trigger>
           <Tabs.Trigger value="Checked In" class="px-3 text-xs shrink-0 whitespace-nowrap">
-            Waiting Room <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countCheckedIn})</span>
+            Waiting Room <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({dateError ? "--" : countCheckedIn})</span>
           </Tabs.Trigger>
           <Tabs.Trigger value="Scheduled" class="px-3 text-xs shrink-0 whitespace-nowrap">
-            Scheduled <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countScheduled})</span>
+            Scheduled <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({dateError ? "--" : countScheduled})</span>
           </Tabs.Trigger>
           <Tabs.Trigger value="In Consultation" class="px-3 text-xs shrink-0 whitespace-nowrap">
-            Consulting <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countInConsultation})</span>
+            Consulting <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({dateError ? "--" : countInConsultation})</span>
           </Tabs.Trigger>
           <Tabs.Trigger value="Completed" class="px-3 text-xs shrink-0 whitespace-nowrap">
-            Completed <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countCompleted})</span>
+            Completed <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({dateError ? "--" : countCompleted})</span>
           </Tabs.Trigger>
           <Tabs.Trigger value="Cancelled" class="px-3 text-xs shrink-0 whitespace-nowrap">
-            Cancelled <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({countCancelled})</span>
+            Cancelled <span class="ml-1 text-[11px] tabular-nums opacity-75 font-normal">({dateError ? "--" : countCancelled})</span>
           </Tabs.Trigger>
         </Tabs.List>
 
@@ -755,7 +805,9 @@
           {:else if sortedAppointments.length === 0}
             <TableRow>
               <TableCell colspan={6} class="h-36 text-center text-sm text-muted-foreground">
-                {#if searchQuery || activeFilter !== "ALL"}
+                {#if dateError}
+                  Choose valid dates to view appointments.
+                {:else if searchQuery || activeFilter !== "ALL"}
                   <div class="flex flex-col items-center justify-center gap-2 py-2">
                     <p>No appointments match your active filter or search query.</p>
                     <Button
@@ -772,7 +824,7 @@
                     </Button>
                   </div>
                 {:else}
-                  No appointments have been booked yet. Click 'New Appointment' to schedule a consultation.
+                  No appointments are scheduled for the selected dates.
                 {/if}
               </TableCell>
             </TableRow>
