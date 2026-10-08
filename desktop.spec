@@ -13,8 +13,8 @@ FRONTEND_DIST = REPO_ROOT / 'frontend' / 'dist'
 
 datas = [
     (str(FRONTEND_DIST), 'frontend/dist'),
-    ('backend', 'backend'),
 ]
+datas += collect_data_files('backend', include_py_files=True, excludes=['tests/**', '**/__pycache__/**'])
 datas += collect_data_files('webview')
 
 platform_imports = []
@@ -33,7 +33,7 @@ elif sys.platform == "darwin":
 
 hiddenimports = (
     collect_submodules('whitenoise')
-    + collect_submodules('backend')
+    + collect_submodules('backend', filter=lambda name: not name.startswith('backend.tests'))
     + collect_submodules('django.middleware')
     + collect_submodules('django.contrib.staticfiles')
     + collect_submodules('django.db.backends.sqlite3')
@@ -53,7 +53,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['backend.tests', 'pytest', 'ruff', 'basedpyright'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,

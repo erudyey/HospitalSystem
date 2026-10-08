@@ -12,8 +12,9 @@ import json
 import logging
 import os
 import secrets
-import socket
+import shutil
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -63,7 +64,16 @@ def get_app_dir() -> Path:
     return app_dir
 
 
-APP_DIR = get_app_dir()
+IS_VERIFY_MODE = "--verify" in sys.argv or "--verify-server" in sys.argv
+_verification_dir = None
+if IS_VERIFY_MODE and not os.environ.get("HOSPITAL_DATA_DIR"):
+    _verification_dir = Path(tempfile.mkdtemp(prefix="hospitalsystem-verify-"))
+    os.environ["HOSPITAL_DATA_DIR"] = str(_verification_dir)
+    atexit.register(shutil.rmtree, _verification_dir, ignore_errors=True)
+APP_DIR = (
+    Path(os.environ["HOSPITAL_DATA_DIR"]) if os.environ.get("HOSPITAL_DATA_DIR") else get_app_dir()
+)
+APP_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = APP_DIR / "launcher.log"
 STATE_FILE = APP_DIR / "app_state.json"
 
@@ -76,7 +86,6 @@ logger = logging.getLogger("HospitalLauncher")
 logger.info("Initializing HospitalSystem launcher (PID: %d)...", os.getpid())
 
 # Single Instance Check (bypassed if running verification mode)
-IS_VERIFY_MODE = "--verify" in sys.argv
 _INSTANCE_LOCK_HANDLE = None
 
 
@@ -155,13 +164,6 @@ if not IS_VERIFY_MODE:
             logger.warning("Could not acquire POSIX instance lock: %s", exc)
 
 
-def find_available_port() -> int:
-    """Pre-bind an ephemeral socket to find and reserve an unused local port."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
-
-
 def wait_for_server(url: str, timeout_sec: float = 10.0) -> bool:
     """Poll readiness endpoint until the local server confirms 200 OK."""
     deadline = time.time() + timeout_sec
@@ -183,9 +185,9 @@ def main() -> None:
     os.environ["HOSPITAL_SESSION_TOKEN"] = session_token
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.config.settings")
 
-    # 2. Allocate loopback port
-    port = find_available_port()
-    logger.info("Allocated ephemeral loopback port: %d", port)
+    # Desktop launches must not inherit development or test database settings.
+    os.environ.pop("TESTING", None)
+    os.environ.pop("DEBUG", None)
 
     # 3. Initialize Django and Waitress WSGI server
     try:
@@ -206,15 +208,16 @@ def main() -> None:
         sys.exit(1)
 
     try:
-        server = create_server(application, host="127.0.0.1", port=port, threads=4)
+        server = create_server(application, host="127.0.0.1", port=0, threads=4)
+        port = int(getattr(server, "effective_port", 0))
+        if not port:
+            raise RuntimeError("The loopback server did not report its bound port.")
         server_thread = threading.Thread(target=server.run, daemon=True)
         server_thread.start()
         logger.info("Waitress WSGI server started on 127.0.0.1:%d", port)
     except Exception as exc:
         logger.exception("Failed to start Waitress server: %s", exc)
-        show_error_dialog(
-            "Server Socket Error", f"Could not bind server to 127.0.0.1:{port}:\n\n{exc}"
-        )
+        show_error_dialog("Server Socket Error", f"Could not bind server to 127.0.0.1:\n\n{exc}")
         sys.exit(1)
 
     # Write state file for verification discovery
@@ -251,10 +254,14 @@ def main() -> None:
     logger.info("Backend readiness verified successfully.")
 
     # Headless verification mode exits cleanly here without opening GUI
-    if IS_VERIFY_MODE:
+    if "--verify" in sys.argv:
         logger.info("Verification check completed successfully. Exiting cleanly.")
         time.sleep(0.05)
         sys.exit(0)
+
+    if "--verify-server" in sys.argv:
+        threading.Event().wait()
+        return
 
     # 5. Import and verify pywebview / WebView2
     try:
