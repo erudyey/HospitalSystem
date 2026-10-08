@@ -4,6 +4,34 @@ This runbook covers setting up your local Windows or macOS environment,
 executing development servers, running quality checks, and packaging the
 standalone desktop application.
 
+## Daily reports and CSV verification
+
+Sign in as a receptionist or doctor and select **Daily report** in the sidebar.
+Today follows the clinic clock, including midnight rollover. Choosing a date
+keeps it selected. Reports refresh every five seconds while visible and show
+current statuses, not a fixed closing snapshot.
+
+Select **Save CSV** to export the displayed snapshot. Desktop hosts open a
+native Save dialog limited to CSV destinations; cancelling creates no file.
+The browser-development interface starts a CSV download. The file uses UTF-8
+with BOM, proper quoting, and formula-safe doctor names. It contains report
+date, generation time, mode, scope, a total row, and doctor subtotals. Patient
+counts are distinct within each scope and must not be summed across doctors.
+
+Focused checks:
+
+```bash
+uv run pytest backend/tests/test_reports.py backend/tests/test_report_save.py -v
+cd frontend
+deno task test
+deno task build
+```
+
+The save tests mock the native dialog and write only to disposable test files.
+They verify cancellation, failed replacement preserving an existing file,
+CSV-only destinations, and exact UTF-8 output. Native dialog interactions on
+Windows and macOS require separate runtime verification.
+
 ---
 
 ## 1. Prerequisites and Toolchain

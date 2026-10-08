@@ -5,6 +5,21 @@ slices for the Hospital Management System.
 
 ---
 
+## Priority additions: staff context and daily reporting
+
+- [x] Staff welcome banner with live profile, role, clinic date, and demo context.
+- [x] Shared neutral summary cards with explicit directory, lifetime, and doctor-today scopes.
+- [x] Inclusive All dates, Day, and Date range summaries independent of table search and status.
+- [x] Authenticated daily report with clinic-wide receptionist scope and assigned-doctor scope.
+- [x] Snapshot CSV export with Unicode, formula-safe names, native Save, and browser download.
+- [x] Role isolation, distinct patients, stale responses, date boundaries, and save failure tests.
+- [x] Six quality gates and isolated Windows bundle verification in clinic and demo modes.
+
+Native Save dialog interactions are covered with mocks and disposable file writes.
+Native Windows dialog interaction and macOS runtime verification remain manual checks.
+
+---
+
 ## 1. Architectural Strategy: Decoupled Vertical Slices
 
 To enable multiple agents or human contributors to work in parallel without

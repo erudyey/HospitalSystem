@@ -76,6 +76,12 @@ embedded SQLite database in Write-Ahead Logging (WAL) mode.
     appointment scheduling with date/time granularity, and front-desk check-in.
   - **Doctor Workspace**: Live waiting room queue, doctor-specific schedules,
     assigned patient roster, and clinical records management.
+- **Workspace Summaries and Daily Reporting**:
+  - A compact staff welcome banner with role, clinic-local date, and demo context.
+  - Consistent summary cards with explicit scope and inclusive appointment date filters.
+  - Role-scoped daily schedule reports with current status counts and CSV export.
+  - Receptionists see the whole clinic; doctors see their assigned appointments.
+  - Local-only exports contain doctor totals without patient details or clinical notes.
 - **Clinical Records & Diagnoses**:
   - Structured SOAP-lite consultation documentation (Chief Complaint, Clinical
     Notes, Primary Diagnosis, Prescription, Follow-up Advice).

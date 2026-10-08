@@ -4,6 +4,16 @@
 > appointment scheduling, built with Svelte 5, `shadcn-svelte`, Tailwind CSS,
 > Django, SQLite, Waitress, and `pywebview`.
 
+Staff workspaces include a welcome banner with the clinic-local date, consistent
+summary cards, and a **Daily report** view. Receptionists see the whole clinic;
+doctors see their assigned appointments. Appointment summaries can cover all
+dates, a single day, or an inclusive date range.
+
+Daily reports show a selected date's current schedule and can be saved as CSV
+with doctor subtotals and an independently calculated overall patient count.
+Desktop exports use a native Save dialog; browser development uses a download.
+See [API contracts](docs/api-contracts.md) for the report's data and access rules.
+
 [![CI Status](https://github.com/erudyey/HospitalSystem/actions/workflows/ci.yml/badge.svg)](https://github.com/erudyey/HospitalSystem/actions/workflows/ci.yml)
 [![Type Checked with basedpyright](https://img.shields.io/badge/types-basedpyright-blue.svg)](https://github.com/DetachHead/basedpyright)
 [![Code Style: Ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
