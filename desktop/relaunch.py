@@ -19,4 +19,5 @@ def restart_application(mode: str) -> None:
     environment["DEBUG"] = "False"
     environment["PYINSTALLER_RESET_ENVIRONMENT"] = "1"
     environment.pop("HOSPITAL_SESSION_TOKEN", None)
+    environment.pop("TESTING", None)
     subprocess.Popen(command, env=environment)

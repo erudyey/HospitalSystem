@@ -13,20 +13,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
-def get_app_dir() -> Path:
-    if sys.platform == "darwin":
-        base = Path.home() / "Library" / "Application Support"
-    elif sys.platform == "win32":
-        local_appdata = os.environ.get("LOCALAPPDATA")
-        base = Path(local_appdata) if local_appdata else (Path.home() / "AppData" / "Local")
-    else:
-        xdg_data = os.environ.get("XDG_DATA_HOME")
-        base = Path(xdg_data) if xdg_data else (Path.home() / ".local" / "share")
-    app_dir = base / "HospitalSystem"
-    app_dir.mkdir(parents=True, exist_ok=True)
-    return app_dir
-
-
 def get_executable_path() -> Path:
     if sys.platform == "win32":
         return REPO_ROOT / "dist" / "HospitalSystem.exe"
@@ -39,7 +25,7 @@ def get_executable_path() -> Path:
     return REPO_ROOT / "dist" / "HospitalSystem"
 
 
-EXE_PATH = get_executable_path()
+EXE_PATH = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else get_executable_path()
 
 
 def log(msg: str) -> None:
@@ -57,18 +43,40 @@ def main() -> None:
 
     log(f"Found standalone binary: {EXE_PATH} ({EXE_PATH.stat().st_size / (1024 * 1024):.1f} MB)")
 
-    with tempfile.TemporaryDirectory(prefix="hospitalsystem-bundle-verify-") as temp_dir:
-        run_verification(Path(temp_dir))
+    temp_root = REPO_ROOT / "build"
+    temp_root.mkdir(exist_ok=True)
+    if not temp_root.resolve().is_relative_to(REPO_ROOT.resolve()):
+        fail("Verification data must remain inside this checkout.")
+    temporary = tempfile.TemporaryDirectory(prefix="bundle-verify-", dir=temp_root)
+    temp_dir = temporary.name
+    try:
+        for mode in ("clinic", "demo"):
+            run_verification(Path(temp_dir) / mode, mode)
+
+    finally:
+        # Allow Windows a brief interval to release antivirus and SQLite file handles.
+        for attempt in range(20):
+            try:
+                temporary.cleanup()
+                break
+            except PermissionError:
+                if attempt == 19:
+                    raise
+                time.sleep(0.25)
 
 
-def run_verification(app_dir: Path) -> None:
+def run_verification(app_dir: Path, mode: str) -> None:
     """Verify a bundle using an isolated app-data directory."""
+    app_dir.mkdir(parents=True, exist_ok=True)
+    log(f"Verifying isolated {mode} mode...")
     state_file = app_dir / "app_state.json"
     log_file = app_dir / "launcher.log"
-    db_file = app_dir / "clinic.sqlite3"
+    db_file = app_dir / ("clinic_demo.sqlite3" if mode == "demo" else "clinic.sqlite3")
     env = os.environ.copy()
+    env.pop("TESTING", None)
+    env.pop("DEBUG", None)
     env["HOSPITAL_DATA_DIR"] = str(app_dir)
-    env["HOSPITAL_MODE"] = "clinic"
+    env["HOSPITAL_MODE"] = mode
 
     # Record log file offset for clean test isolation
     initial_log_offset = log_file.stat().st_size if log_file.exists() else 0
@@ -76,7 +84,7 @@ def run_verification(app_dir: Path) -> None:
     # Phase 1: Test internal bootstrapping and migrations via --verify
     log("Testing internal bootstrapping via '--verify' flag...")
     res = subprocess.run(
-        [str(EXE_PATH), "--verify"], capture_output=True, text=True, timeout=20, env=env
+        [str(EXE_PATH), "--verify"], capture_output=True, text=True, timeout=45, env=env
     )
     if res.returncode != 0:
         fail(
@@ -89,19 +97,32 @@ def run_verification(app_dir: Path) -> None:
     if state_file.exists():
         state_file.unlink()
 
-    proc = subprocess.Popen([str(EXE_PATH)], env=env)
+    proc = subprocess.Popen([str(EXE_PATH), "--verify-server"], env=env)
+    launcher_pid = proc.pid
 
     try:
         # Wait for state file to be written
-        deadline = time.time() + 10.0
+        deadline = time.monotonic() + 45.0
         port = None
         token = None
-        while time.time() < deadline:
+        while time.monotonic() < deadline:
+            if proc.poll() is not None:
+                details = (
+                    log_file.read_text(encoding="utf-8")
+                    if log_file.exists()
+                    else "No launcher log."
+                )
+                fail(
+                    f"The launcher exited before becoming ready (code {proc.returncode}).\n{details}"
+                )
             if state_file.exists():
                 try:
                     data = json.loads(state_file.read_text(encoding="utf-8"))
                     port = data.get("port")
                     token = data.get("token")
+                    candidate_pid = data.get("pid")
+                    if type(candidate_pid) is int and candidate_pid > 0:
+                        launcher_pid = candidate_pid
                     if port and token:
                         break
                 except Exception:
@@ -121,10 +142,12 @@ def run_verification(app_dir: Path) -> None:
             body = json.loads(resp.read().decode("utf-8"))
             if body.get("status") != "ok":
                 fail(f"Health check status unexpected: {body}")
+            if body.get("mode") != mode:
+                fail(f"Expected {mode} mode, got {body.get('mode')}")
         log("Health check returned 200 OK.")
 
         # Check 2: SPA root HTML and injected token
-        root_url = f"http://127.0.0.1:{port}/"
+        root_url = f"http://127.0.0.1:{port}/?token={token}"
         req = urllib.request.Request(root_url)
         with urllib.request.urlopen(req, timeout=3.0) as resp:
             if resp.status != 200:
@@ -134,17 +157,41 @@ def run_verification(app_dir: Path) -> None:
                 fail("Session token was not injected into HTML head.")
         log("Root HTML returned 200 OK with synchronously injected session token.")
 
-        # Check 3: Clinic data is not exposed before a staff member signs in.
-        api_url = f"http://127.0.0.1:{port}/api/patients/"
-        api_req = urllib.request.Request(api_url, headers={"X-Session-Token": str(token)})
+        # The root must not disclose launch credentials to another local origin.
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=3.0)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 403:
+                fail(f"Untrusted root request returned {exc.code}")
+        else:
+            fail("Untrusted root request exposed launch credentials.")
+
+        # Check 3: Clinic data requires a staff session after loopback authentication.
+        api_req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/patients/",
+            headers={"X-Session-Token": str(token)},
+        )
         try:
             urllib.request.urlopen(api_req, timeout=3.0)
         except urllib.error.HTTPError as exc:
             if exc.code != 401:
-                fail(f"API patients endpoint returned unexpected status {exc.code}")
+                fail(f"Unauthenticated staff request returned {exc.code}")
         else:
-            fail("API patients endpoint was accessible without a staff session.")
-        log("Clinic API correctly requires a staff session.")
+            fail("Clinic records were accessible without a staff session.")
+        log("Clinic staff authentication verified.")
+
+        if mode == "demo":
+            accounts_req = urllib.request.Request(
+                f"http://127.0.0.1:{port}/api/demo/accounts/",
+                headers={"X-Session-Token": str(token)},
+            )
+            with urllib.request.urlopen(accounts_req, timeout=3.0) as resp:
+                accounts = json.loads(resp.read())
+                if len(accounts) != 4:
+                    fail("The fresh demo account chooser did not contain all four accounts.")
+            if (app_dir / "clinic.sqlite3").exists():
+                fail("Demo verification created a clinic database.")
+            log("Demo account chooser and separate database verified.")
 
         # Check 4: SQLite Database creation
         if not db_file.exists():
@@ -165,11 +212,16 @@ def run_verification(app_dir: Path) -> None:
         log("Terminating background test process...")
         if sys.platform == "win32":
             subprocess.run(
-                ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                ["taskkill", "/F", "/T", "/PID", str(launcher_pid)],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 check=False,
             )
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
         else:
             proc.terminate()
             try:
