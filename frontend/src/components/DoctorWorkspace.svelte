@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MetricCard from "./MetricCard.svelte";
   import { onMount, onDestroy } from "svelte";
   import {
     api,
@@ -225,47 +226,11 @@
 </script>
 
 <div class="flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
-  <!-- Physician Header & Metrics Bar -->
-  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 shrink-0">
-    <!-- Waiting Room Card -->
-    <div class="rounded-xl border bg-card text-card-foreground p-4 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Waiting Room</p>
-        <UserCheck class="size-4 text-muted-foreground" />
-      </div>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{checkedInQueue.length}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Checked in & waiting</p>
-    </div>
-
-    <!-- Consulting Now Card -->
-    <div class="rounded-xl border bg-card text-card-foreground p-4 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs sm:text-sm font-medium text-muted-foreground">In Consultation</p>
-        <Stethoscope class="size-4 text-muted-foreground" />
-      </div>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{inConsultationQueue.length}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Active patient encounter</p>
-    </div>
-
-    <!-- Scheduled Today Card -->
-    <div class="rounded-xl border bg-card text-card-foreground p-4 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Scheduled Today</p>
-        <CalendarCheck class="size-4 text-muted-foreground" />
-      </div>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{scheduledToday.length}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Pending arrival</p>
-    </div>
-
-    <!-- Completed Today Card -->
-    <div class="rounded-xl border bg-card text-card-foreground p-4 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Seen Today</p>
-        <ClipboardList class="size-4 text-muted-foreground" />
-      </div>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{completedToday.length}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Completed visits</p>
-    </div>
+  <div class="grid grid-cols-4 gap-3 shrink-0">
+    <MetricCard label="Waiting Room" value={checkedInQueue.length} description="Checked in & waiting" icon={UserCheck} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="In Consultation" value={inConsultationQueue.length} description="Active patient encounter" icon={Stethoscope} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Scheduled Today" value={scheduledToday.length} description="Pending arrival" icon={CalendarCheck} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Seen Today" value={completedToday.length} description="Completed visits" icon={ClipboardList} loading={isLoading} unavailable={!!errorMessage} />
   </div>
 
   <!-- Workspace Tabs Navigation & Refresh -->

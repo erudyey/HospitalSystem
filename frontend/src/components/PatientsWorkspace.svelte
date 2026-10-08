@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MetricCard from "./MetricCard.svelte";
   import { onMount } from "svelte";
   import { api, type Patient, type ApiError } from "$lib/api";
   import { toast } from "$lib/toast.svelte";
@@ -272,34 +273,10 @@
 </script>
 
 <div class="flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
-  <!-- Top Metrics Cards (Matching Reference Screenshot) -->
-  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 shrink-0">
-    <div class="rounded-xl border bg-card text-card-foreground p-4 sm:p-5 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Total Enrolled Patients</p>
-        <Users class="size-4 text-muted-foreground" />
-      </div>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{totalPatients}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Active primary directory records</p>
-    </div>
-
-    <div class="rounded-xl border bg-card text-card-foreground p-4 sm:p-5 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Patients with Active Schedules</p>
-        <CalendarCheck class="size-4 text-primary" />
-      </div>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{activeAppointmentsCount}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Patients with scheduled visits</p>
-    </div>
-
-    <div class="rounded-xl border bg-card text-card-foreground p-4 sm:p-5 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Appointments recorded</p>
-        <ClipboardList class="size-4 text-muted-foreground" />
-      </div>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{totalConsultationsScheduled}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Lifetime appointment bookings</p>
-    </div>
+  <div class="grid grid-cols-3 gap-3 shrink-0">
+    <MetricCard label="Total Enrolled Patients" value={totalPatients} description="Active primary directory records" icon={Users} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Patients with Active Schedules" value={activeAppointmentsCount} description="Patients with scheduled visits" icon={CalendarCheck} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Appointments recorded" value={totalConsultationsScheduled} description="Lifetime appointment bookings" icon={ClipboardList} loading={isLoading} unavailable={!!errorMessage} />
   </div>
 
   <!-- Table Toolbar Bar (Matching Reference Screenshot) -->

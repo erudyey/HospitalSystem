@@ -1,4 +1,5 @@
 <script lang="ts">
+  import MetricCard from "./MetricCard.svelte";
   import { onMount, untrack } from "svelte";
   import { calendarDateOffset, nextClinicSlot } from "$lib/calendar";
   import {
@@ -509,55 +510,13 @@
 </script>
 
 <div class="flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
-  <!-- Top Metrics Cards (5-State Clinical Lifecycle) -->
-  <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 shrink-0">
-    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Total Visits</p>
-        <Calendar class="size-4 text-muted-foreground" />
-      </div>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countAll}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Master schedule count</p>
-    </div>
-
-    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Waiting Room</p>
-        <UserCheck class="size-4 text-muted-foreground" />
-      </div>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countCheckedIn}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Checked in at clinic</p>
-    </div>
-
-    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Scheduled</p>
-        <Clock class="size-4 text-muted-foreground" />
-      </div>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countScheduled}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Pending clinical visits</p>
-    </div>
-
-    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Consulting</p>
-        <Stethoscope class="size-4 text-muted-foreground" />
-      </div>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countInConsultation}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Currently with physician</p>
-    </div>
-
-    <div class="rounded-xl border bg-card text-card-foreground p-3.5 sm:p-4 shadow-sm">
-      <div class="flex items-center justify-between">
-        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Completed</p>
-        <CheckCircle2 class="size-4 text-muted-foreground" />
-      </div>
-      <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{countCompleted}</p>
-      <p class="text-[11px] text-muted-foreground mt-0.5">Discharged records</p>
-    </div>
+  <div class="grid grid-cols-5 gap-3 shrink-0">
+    <MetricCard label="Total Visits" value={countAll} description="Master schedule count" icon={Calendar} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Waiting Room" value={countCheckedIn} description="Checked in at clinic" icon={UserCheck} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Scheduled" value={countScheduled} description="Pending clinical visits" icon={Clock} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Consulting" value={countInConsultation} description="Currently with physician" icon={Stethoscope} loading={isLoading} unavailable={!!errorMessage} />
+    <MetricCard label="Completed" value={countCompleted} description="Discharged records" icon={CheckCircle2} loading={isLoading} unavailable={!!errorMessage} />
   </div>
-
-  <!-- 2-Tier Structured Toolbar -->
   <!-- Tier 1: Status Filter Tabs (Dedicated Full-Width Strip with Scroll Affordances) -->
   <div class="relative flex items-center shrink-0 min-w-0">
     <Tabs.Root
