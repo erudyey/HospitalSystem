@@ -2,7 +2,7 @@
 
 import json
 import os
-from datetime import date, time
+from datetime import UTC, date, datetime, time
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
@@ -189,6 +189,11 @@ class ClinicalLifecycleAndQueueTests(TestCase):
     """Tests for 5-state lifecycle transitions and doctor queue triage."""
 
     def setUp(self) -> None:
+        clock = patch(
+            "backend.clinic.services.clinic_now", return_value=datetime(2026, 10, 5, 8, tzinfo=UTC)
+        )
+        clock.start()
+        self.addCleanup(clock.stop)
         self.doctor = register_staff(
             username="dr.house",
             password="password123",

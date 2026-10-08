@@ -10,9 +10,10 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from django.db import transaction
+from django.core.exceptions import ValidationError
 
-from backend.clinic.models import Appointment, AppointmentStatus, Patient
+from backend.clinic.models import AppointmentStatus
+from backend.clinic.services import import_legacy_rows
 
 
 class MigrationAnomalyError(Exception):
@@ -182,28 +183,13 @@ def import_legacy_data(source_db_path: Path, snapshot_dir: Path) -> dict[str, An
             anomalies=anomalies,
         )
 
-    with transaction.atomic():
-        imported_patients = 0
-        for p in patients:
-            Patient.objects.update_or_create(
-                id=p["id"],
-                defaults={"full_name": p["full_name"], "contact": p["contact"], "age": p["age"]},
-            )
-            imported_patients += 1
-
-        imported_appointments = 0
-        for a in appointments:
-            patient_obj = Patient.objects.get(id=a["patient_id"])
-            Appointment.objects.update_or_create(
-                id=a["id"],
-                defaults={
-                    "patient": patient_obj,
-                    "doctor_name": a["doctor_name"],
-                    "app_date": a["app_date"],
-                    "status": a["status"],
-                },
-            )
-            imported_appointments += 1
+    try:
+        imported_patients, imported_appointments = import_legacy_rows(patients, appointments)
+    except ValidationError as err:
+        raise MigrationAnomalyError(
+            "Legacy import requires an empty clinical database. Existing records were preserved.",
+            anomalies=[{"table": "database", "field": "database", "issue": str(err)}],
+        ) from err
 
     return {
         "status": "success",

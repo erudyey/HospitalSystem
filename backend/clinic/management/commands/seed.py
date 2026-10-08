@@ -9,10 +9,11 @@ Usage:
 import random
 from datetime import date, timedelta
 
-from django.core.management.base import BaseCommand
+from django.core.exceptions import ValidationError
+from django.core.management.base import BaseCommand, CommandError
 
-from backend.clinic.models import Appointment, AppointmentStatus, Patient
-from backend.clinic.services import book_appointment, register_patient
+from backend.clinic.models import AppointmentStatus
+from backend.clinic.services import clinic_now, seed_sample_rows
 
 FIRST_NAMES = [
     "Maria",
@@ -82,29 +83,17 @@ CONTACTS = [
     "",  # some patients have no contact on file
 ]
 
-TODAY = date.today()
 
-
-def _random_date(days_back: int, days_forward: int) -> date:
-    offset = random.randint(-days_back, days_forward)
-    return TODAY + timedelta(days=offset)
+def _random_date(rng: random.Random, days_back: int, days_forward: int) -> date:
+    offset = rng.randint(-days_back, days_forward)
+    return clinic_now().date() + timedelta(days=offset)
 
 
 def _random_status(app_date: date) -> str:
     """Derive a plausible status based on how far the appointment is from today."""
-    if app_date < TODAY - timedelta(days=3):
+    if app_date <= clinic_now().date():
         # Past appointments are mostly completed, occasionally cancelled
-        return random.choices(
-            [AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED],
-            weights=[75, 25],
-        )[0]
-    if app_date > TODAY + timedelta(days=1):
-        # Future appointments are scheduled, occasionally cancelled
-        return random.choices(
-            [AppointmentStatus.SCHEDULED, AppointmentStatus.CANCELLED],
-            weights=[85, 15],
-        )[0]
-    # Appointments around today stay scheduled
+        return AppointmentStatus.COMPLETED
     return AppointmentStatus.SCHEDULED
 
 
@@ -127,31 +116,11 @@ class Command(BaseCommand):
     def handle(self, *args, **options) -> None:
         rng = random.Random(42)  # deterministic so re-runs produce the same names
 
-        if options["clear"]:
-            deleted_appts, _ = Appointment.objects.all().delete()
-            deleted_patients, _ = Patient.objects.all().delete()
-            self.stdout.write(
-                self.style.WARNING(
-                    f"Cleared {deleted_patients} patient(s) and {deleted_appts} appointment(s)."
-                )
-            )
-
-        existing = Patient.objects.count()
-        if existing > 0 and not options["clear"]:
-            self.stdout.write(
-                self.style.NOTICE(
-                    f"Database already has {existing} patient(s). "
-                    "Use --clear to wipe and re-seed, or --count to add more."
-                )
-            )
-            return
-
         count = max(1, options["count"])
         first_names = rng.sample(FIRST_NAMES, min(count, len(FIRST_NAMES)))
         last_names = rng.choices(LAST_NAMES, k=count)
 
-        patients_created = 0
-        appointments_created = 0
+        rows = []
 
         for i in range(count):
             first = first_names[i] if i < len(first_names) else rng.choice(FIRST_NAMES)
@@ -160,28 +129,34 @@ class Command(BaseCommand):
             contact = rng.choice(CONTACTS)
             age = rng.randint(5, 85)
 
-            patient = register_patient(full_name=full_name, contact=contact, age=age)
-            patients_created += 1
+            appointments = []
 
             # Give each patient 1-4 appointments spread around today
             num_appts = rng.randint(1, 4)
             for _ in range(num_appts):
                 doctor = rng.choice(DOCTORS)
-                app_date = _random_date(days_back=180, days_forward=60)
+                app_date = _random_date(rng, days_back=180, days_forward=60)
                 status = _random_status(app_date)
 
-                appt = book_appointment(
-                    patient_id=patient.id,
-                    doctor_name=doctor,
-                    app_date_str=app_date.isoformat(),
-                )
+                appointments.append({"doctor_name": doctor, "app_date": app_date, "status": status})
+            rows.append(
+                {
+                    "full_name": full_name,
+                    "contact": contact,
+                    "age": age,
+                    "appointments": appointments,
+                }
+            )
 
-                # book_appointment always sets Scheduled; patch status directly if needed
-                if status != AppointmentStatus.SCHEDULED:
-                    appt.status = status
-                    appt.save(update_fields=["status"])
-
-                appointments_created += 1
+        try:
+            patients_created, appointments_created = seed_sample_rows(rows, clear=options["clear"])
+        except ValidationError as err:
+            raise CommandError(str(err)) from err
+        if not patients_created:
+            self.stdout.write(
+                "Existing data retained. Use --clear only in a development or test database."
+            )
+            return
 
         self.stdout.write(
             self.style.SUCCESS(

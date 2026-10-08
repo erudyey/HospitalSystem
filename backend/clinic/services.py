@@ -4,9 +4,13 @@ All operations execute inside database transactions, perform explicit validation
 and return strongly-typed model instances decoupled from HTTP requests.
 """
 
+import os
 import secrets
-from datetime import date, time, timedelta
+from datetime import date, datetime, time, timedelta
+from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Count, Q
@@ -21,6 +25,73 @@ from backend.clinic.models import (
     StaffUser,
     UserSession,
 )
+
+
+def clinic_timezone():
+    """Return the configured clinic timezone or the workstation local timezone."""
+    configured = os.environ.get("HOSPITAL_TIME_ZONE", "").strip()
+    if configured:
+        try:
+            return ZoneInfo(configured)
+        except ZoneInfoNotFoundError:
+            pass
+    return datetime.now().astimezone().tzinfo
+
+
+def clinic_now() -> datetime:
+    """Return the current clinic-local wall time."""
+    return datetime.now(clinic_timezone())
+
+
+def _validate_future_slot(app_date: date, app_time: time) -> None:
+    if datetime.combine(app_date, app_time, tzinfo=clinic_timezone()) <= clinic_now():
+        raise ValidationError({"schedule": "Scheduled appointments must be in the future."})
+
+
+def import_legacy_rows(
+    patients: list[dict[str, Any]], appointments: list[dict[str, Any]]
+) -> tuple[int, int]:
+    """Import validated legacy IDs only into an empty clinical database."""
+    with transaction.atomic():
+        if (
+            Patient.objects.exists()
+            or Appointment.objects.exists()
+            or MedicalRecord.objects.exists()
+        ):
+            raise ValidationError(
+                {
+                    "database": "Legacy import requires an empty clinical database. Existing records were preserved."
+                }
+            )
+        for row in patients:
+            Patient.objects.create(**row)
+        for row in appointments:
+            Appointment.objects.create(**row)
+        return len(patients), len(appointments)
+
+
+def seed_sample_rows(rows: list[dict[str, Any]], clear: bool = False) -> tuple[int, int]:
+    """Write sample fixtures atomically, never into a production clinic database."""
+    if not (settings.DEBUG or settings.IS_TESTING):
+        raise ValidationError(
+            {"database": "Sample seeding is restricted to development and test databases."}
+        )
+    with transaction.atomic():
+        if Patient.objects.exists() and not clear:
+            return 0, 0
+        if clear:
+            MedicalRecord.objects.all().delete()
+            Appointment.objects.all().delete()
+            Patient.objects.all().delete()
+        appointment_count = 0
+        for row in rows:
+            patient = Patient.objects.create(
+                full_name=row["full_name"], contact=row["contact"], age=row["age"]
+            )
+            for appointment in row["appointments"]:
+                Appointment.objects.create(patient=patient, **appointment)
+                appointment_count += 1
+        return len(rows), appointment_count
 
 
 def register_patient(full_name: str, contact: str = "", age: int = 0) -> Patient:
@@ -149,6 +220,11 @@ def book_appointment(
     if clean_status not in (AppointmentStatus.SCHEDULED, AppointmentStatus.CHECKED_IN):
         errors["status"] = f"Initial status must be Scheduled or Checked In, not '{clean_status}'."
 
+    if clean_status == AppointmentStatus.CHECKED_IN and parsed_date != clinic_now().date():
+        errors["app_date"] = (
+            "Patients can only check in for today's appointments. Reschedule the appointment to today first."
+        )
+
     try:
         patient = Patient.objects.get(id=patient_id)
     except Patient.DoesNotExist:
@@ -205,16 +281,16 @@ def delete_patient(patient_id: int) -> tuple[int, dict[str, int]]:
     """Delete a patient record and cascade-delete associated appointments."""
     with transaction.atomic():
         patient = Patient.objects.select_for_update().get(id=patient_id)
-        has_completed = Appointment.objects.filter(
-            patient_id=patient_id, status=AppointmentStatus.COMPLETED
+        has_protected_visits = Appointment.objects.filter(
+            patient_id=patient_id,
+            status__in=[AppointmentStatus.COMPLETED, AppointmentStatus.IN_CONSULTATION],
         ).exists()
         has_records = MedicalRecord.objects.filter(patient_id=patient_id).exists()
-        if has_completed or has_records:
+        if has_protected_visits or has_records:
             raise ValidationError(
                 {
                     "patient": (
-                        "Cannot delete patient with finalized clinical history "
-                        "(completed appointments or signed medical records exist)."
+                        "Cannot delete patient with an active consultation or finalized clinical history."
                     )
                 }
             )
@@ -245,25 +321,30 @@ def update_appointment(
 
     with transaction.atomic():
         appointment = Appointment.objects.select_for_update().get(id=appointment_id)
-        if appointment.status == AppointmentStatus.COMPLETED:
+        if appointment.status in (AppointmentStatus.COMPLETED, AppointmentStatus.IN_CONSULTATION):
             raise ValidationError(
                 {
-                    "appointment": "Completed appointments are finalized clinical records and cannot be rescheduled or modified."
+                    "appointment": "Completed appointments and active consultations cannot be rescheduled or modified."
                 }
             )
 
         if doctor_id is not None:
             try:
                 assigned_doctor = StaffUser.objects.get(id=doctor_id)
-                appointment.doctor = assigned_doctor
-                appointment.doctor_name = assigned_doctor.full_name
+                if assigned_doctor.role != StaffRole.DOCTOR or not assigned_doctor.is_active:
+                    errors["doctor_id"] = "Appointment doctor must be an active physician."
+                else:
+                    appointment.doctor = assigned_doctor
+                    appointment.doctor_name = assigned_doctor.full_name
             except StaffUser.DoesNotExist:
                 errors["doctor_id"] = f"Doctor #{doctor_id} does not exist."
 
-        if doctor_name is not None:
+        if doctor_name is not None and doctor_id is None:
             clean_doctor = doctor_name.strip()
             if not clean_doctor:
                 errors["doctor_name"] = "Doctor name cannot be blank."
+            elif appointment.doctor_id and clean_doctor != appointment.doctor.full_name:
+                errors["doctor_id"] = "Select a registered physician to reassign this appointment."
             else:
                 appointment.doctor_name = clean_doctor
 
@@ -293,10 +374,10 @@ def delete_appointment(appointment_id: int) -> tuple[int, dict[str, int]]:
     """Delete an appointment record."""
     with transaction.atomic():
         appointment = Appointment.objects.select_for_update().get(id=appointment_id)
-        if appointment.status == AppointmentStatus.COMPLETED:
+        if appointment.status in (AppointmentStatus.COMPLETED, AppointmentStatus.IN_CONSULTATION):
             raise ValidationError(
                 {
-                    "appointment": "Completed appointments are immutable clinical records and cannot be deleted."
+                    "appointment": "Completed appointments and active consultations cannot be deleted."
                 }
             )
         return appointment.delete()
@@ -322,6 +403,30 @@ def update_appointment_status(appointment_id: int, new_status: str) -> Appointme
 
         if current == clean_status:
             return appointment
+
+        if (
+            clean_status == AppointmentStatus.CHECKED_IN
+            and appointment.app_date != clinic_now().date()
+        ):
+            raise ValidationError(
+                {
+                    "app_date": "Patients can only check in for today's appointments. Reschedule the appointment to today first."
+                }
+            )
+
+        if clean_status == AppointmentStatus.SCHEDULED:
+            _validate_future_slot(appointment.app_date, appointment.app_time)
+            if appointment.doctor_id and check_schedule_conflict(
+                appointment.doctor_id,
+                appointment.app_date,
+                appointment.app_time,
+                exclude_id=appointment.id,
+            ):
+                raise ValidationError(
+                    {
+                        "schedule": "The doctor already has an overlapping appointment. Reschedule to an available slot."
+                    }
+                )
 
         if current == AppointmentStatus.COMPLETED:
             raise ValidationError(
@@ -696,7 +801,7 @@ def get_doctor_queue(
     doctor_id: int, target_date: date | None = None
 ) -> dict[str, list[Appointment]]:
     """Return today's doctor queue grouped by clinical status."""
-    ref_date = target_date or date.today()
+    ref_date = target_date or clinic_now().date()
     base_qs = (
         Appointment.objects.select_related("patient")
         .filter(doctor_id=doctor_id, app_date=ref_date)
@@ -719,10 +824,11 @@ def get_doctor_patients(doctor_id: int, query: str | None = None) -> list[Patien
         )
         .distinct()
         .annotate(
-            appointment_count=Count("appointments"),
+            appointment_count=Count("appointments", distinct=True),
             doctor_appointment_count=Count(
                 "appointments",
                 filter=Q(appointments__doctor_id=doctor_id),
+                distinct=True,
             ),
         )
         .order_by("full_name")

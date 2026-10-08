@@ -73,6 +73,7 @@ def serialize_patient(patient: Patient) -> dict[str, Any]:
         "age": patient.age,
         "appointment_count": getattr(patient, "appointment_count", 0),
         "active_appointment_count": getattr(patient, "active_appointment_count", 0),
+        "doctor_appointment_count": getattr(patient, "doctor_appointment_count", 0),
     }
 
 
@@ -387,6 +388,11 @@ def auth_login(request: HttpRequest) -> JsonResponse:
 
     username = data.get("username", "")
     password = data.get("password", "")
+
+    if not isinstance(username, str) or not isinstance(password, str):
+        return JsonResponse(
+            format_error("VALIDATION_ERROR", "Username and password must be text."), status=400
+        )
 
     try:
         staff, session = services.authenticate_staff(username=username, password=password)

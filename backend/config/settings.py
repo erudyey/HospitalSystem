@@ -61,7 +61,9 @@ elif DEBUG:
     DB_PATH = str(BASE_DIR / "clinic_dev.sqlite3")
 else:
     # Desktop / Packaged production mode
-    if sys.platform == "darwin":
+    if os.environ.get("HOSPITAL_DATA_DIR"):
+        app_dir = Path(os.environ["HOSPITAL_DATA_DIR"])
+    elif sys.platform == "darwin":
         app_dir = Path.home() / "Library" / "Application Support" / "HospitalSystem"
     elif sys.platform == "win32":
         local_appdata = os.environ.get("LOCALAPPDATA")
@@ -114,9 +116,6 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
 
 # CSRF & Security for local loopback
 CSRF_COOKIE_HTTPONLY = False  # Allows Svelte frontend to read csrf token cookie
-CSRF_TRUSTED_ORIGINS = [
-    "http://127.0.0.1:*",
-    "http://localhost:*",
-]
+CSRF_TRUSTED_ORIGINS = ["http://127.0.0.1:5173", "http://localhost:5173"] if DEBUG else []
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
