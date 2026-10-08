@@ -315,7 +315,7 @@
       <!-- Reactive Conflict Check Warning Banner -->
       {#if isCheckingConflict}
         <div class="flex items-center gap-2 text-xs text-muted-foreground py-1">
-          <Loader2 class="size-3 animate-spin text-primary" />
+          <Loader2 class="size-3 animate-spin text-clinic" />
           <span>Checking doctor schedule availability...</span>
         </div>
       {:else if conflictWarning}

@@ -14,11 +14,13 @@
   let { label, value, description, icon: Icon, loading = false, unavailable = false }: Props = $props();
 </script>
 
-<Card.Root aria-busy={loading} data-testid="metric-card">
+<Card.Root class="metric-card" aria-busy={loading} data-testid="metric-card">
   <Card.Header class="p-3.5 pb-1">
-    <div class="flex items-start justify-between gap-2 min-h-8">
-      <Card.Title class="text-xs font-medium leading-4 text-muted-foreground">{label}</Card.Title>
-      <Icon class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+    <div class="flex items-start justify-between gap-1.5 min-h-8">
+      <Card.Title class="text-xs font-medium leading-4 text-muted-foreground min-w-0 break-words">{label}</Card.Title>
+      <span class="size-5 rounded-md bg-info/10 text-info flex items-center justify-center shrink-0" aria-hidden="true">
+        <Icon class="size-3.5" />
+      </span>
     </div>
   </Card.Header>
   <Card.Content class="px-3.5 pt-0 pb-3.5">

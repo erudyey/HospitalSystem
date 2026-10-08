@@ -247,7 +247,7 @@
   });
 </script>
 
-<div class="h-screen w-full bg-background text-foreground flex flex-row selection:bg-primary/10 selection:text-primary antialiased overflow-hidden min-h-0 min-w-0">
+<div class="h-screen w-full bg-background text-foreground flex flex-row selection:bg-accent selection:text-accent-foreground antialiased overflow-hidden min-h-0 min-w-0">
   <!-- Left Sidebar Navigation -->
   <aside class="w-64 border-r border-border bg-card flex flex-col shrink-0 h-full select-none min-h-0">
     <!-- Clinic Brand Header -->
@@ -289,44 +289,52 @@
       {#if currentUser?.role === "doctor"}
         <!-- Doctor Navigation Items -->
         <Button
-          variant={activeWorkspace === "doctor_workspace" ? "secondary" : "ghost"}
+          variant="navigation"
+          data-active={activeWorkspace === "doctor_workspace"}
+          aria-current={activeWorkspace === "doctor_workspace" ? "page" : undefined}
           size="sm"
           onclick={() => (activeWorkspace = "doctor_workspace")}
-          class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer {activeWorkspace === 'doctor_workspace' ? 'font-semibold text-foreground shadow-2xs' : 'text-muted-foreground'}"
+          class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer"
         >
-          <Stethoscope class="size-4 shrink-0 {activeWorkspace === 'doctor_workspace' ? 'text-primary' : 'text-muted-foreground'}" />
+          <Stethoscope data-icon="inline-start" />
           <span>Doctor Workspace</span>
         </Button>
 
         <Button
-          variant={activeWorkspace === "patients" ? "secondary" : "ghost"}
+          variant="navigation"
+          data-active={activeWorkspace === "patients"}
+          aria-current={activeWorkspace === "patients" ? "page" : undefined}
           size="sm"
           onclick={() => (activeWorkspace = "patients")}
-          class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer {activeWorkspace === 'patients' ? 'font-semibold text-foreground shadow-2xs' : 'text-muted-foreground'}"
+          class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer"
         >
-          <Users class="size-4 shrink-0 {activeWorkspace === 'patients' ? 'text-primary' : 'text-muted-foreground'}" />
+          <Users data-icon="inline-start" />
           <span>Patient Directory</span>
         </Button>
 
       {:else}
         <!-- Receptionist Navigation Items -->
         <Button
-          variant={activeWorkspace === "appointments" ? "secondary" : "ghost"}
+          variant="navigation"
+          data-active={activeWorkspace === "appointments"}
+          aria-current={activeWorkspace === "appointments" ? "page" : undefined}
           size="sm"
           onclick={() => (activeWorkspace = "appointments")}
-          class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer {activeWorkspace === 'appointments' ? 'font-semibold text-foreground shadow-2xs' : 'text-muted-foreground'}"
+          class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer"
         >
-          <Calendar class="size-4 shrink-0 {activeWorkspace === 'appointments' ? 'text-primary' : 'text-muted-foreground'}" />
+          <Calendar data-icon="inline-start" />
           <span>Appointments & Triage</span>
         </Button>
 
         <Button
-          variant={activeWorkspace === "patients" ? "secondary" : "ghost"}
+          variant="navigation"
+          data-active={activeWorkspace === "patients"}
+          aria-current={activeWorkspace === "patients" ? "page" : undefined}
           size="sm"
           onclick={() => (activeWorkspace = "patients")}
-          class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer {activeWorkspace === 'patients' ? 'font-semibold text-foreground shadow-2xs' : 'text-muted-foreground'}"
+          class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer"
         >
-          <Users class="size-4 shrink-0 {activeWorkspace === 'patients' ? 'text-primary' : 'text-muted-foreground'}" />
+          <Users data-icon="inline-start" />
           <span>Patients Directory</span>
         </Button>
       {/if}
@@ -334,7 +342,8 @@
 
     {#if currentUser}
       <div class="px-3 pb-3">
-        <Button variant={activeWorkspace === "daily_report" ? "secondary" : "ghost"} size="sm"
+        <Button variant="navigation" size="sm" data-active={activeWorkspace === "daily_report"}
+          aria-current={activeWorkspace === "daily_report" ? "page" : undefined}
           onclick={() => activeWorkspace = "daily_report"}
           class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs">
           <ClipboardList data-icon="inline-start" />
@@ -349,15 +358,15 @@
         <button
           type="button"
           onclick={() => openSettings("profile")}
-          class="w-full rounded-lg bg-muted/40 hover:bg-muted/70 p-2 text-xs flex items-center justify-between border border-border/40 transition-colors cursor-pointer group text-left"
+          class="w-full rounded-lg bg-accent/40 hover:bg-accent p-2 text-xs flex items-center justify-between border border-border/40 transition-colors duration-150 cursor-pointer group text-left"
           title="Staff Profile & Settings"
         >
           <div class="flex items-center gap-2 min-w-0">
-            <div class="size-6 rounded-full bg-muted text-foreground font-semibold text-[10px] flex items-center justify-center shrink-0 border border-border/70 group-hover:border-primary/50 transition-colors">
+            <div class="size-6 rounded-full bg-accent text-accent-foreground font-semibold text-[10px] flex items-center justify-center shrink-0 border border-clinic/20 transition-colors">
               {currentUser.full_name?.charAt(0) || currentUser.username.charAt(0).toUpperCase()}
             </div>
             <div class="min-w-0">
-              <p class="font-semibold text-foreground truncate leading-tight group-hover:text-primary transition-colors">
+              <p class="font-semibold text-foreground truncate leading-tight group-hover:text-accent-foreground transition-colors">
                 {currentUser.full_name || currentUser.username}
               </p>
               <p class="text-[10px] text-muted-foreground capitalize truncate leading-tight mt-0.5">
@@ -425,9 +434,9 @@
 
       <!-- Demo account switcher -->
       {#if demoMode}
-        <div class="hidden lg:flex items-center bg-muted/60 p-0.5 rounded-lg border border-border/60 text-xs shadow-2xs">
-          <span class="text-[11px] font-medium text-muted-foreground px-2 flex items-center gap-1">
-            <Sparkles class="size-3 text-muted-foreground" />
+        <div class="hidden lg:flex items-center bg-demo/5 p-0.5 rounded-lg border border-demo/20 text-xs shadow-2xs">
+          <span class="text-[11px] font-medium text-demo px-2 flex items-center gap-1">
+            <Sparkles class="size-3" />
             <span>Demo:</span>
           </span>
 

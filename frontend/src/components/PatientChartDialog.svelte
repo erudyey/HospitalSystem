@@ -79,7 +79,7 @@
     <div class="px-6 pt-6 pb-4 border-b border-border bg-card">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2.5">
-          <div class="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+          <div class="size-8 rounded-lg bg-clinic/10 text-clinic flex items-center justify-center">
             <FileText class="size-4.5" />
           </div>
           <div>
@@ -128,7 +128,7 @@
     <div class="flex-1 overflow-y-auto px-6 py-4 flex flex-col gap-4">
       {#if isLoading}
         <div class="flex flex-col items-center justify-center py-12 text-sm text-muted-foreground gap-2">
-          <RefreshCw class="animate-spin size-5 text-primary" />
+          <RefreshCw class="animate-spin size-5 text-clinic" />
           <span>Retrieving signed clinical records...</span>
         </div>
       {:else if errorMessage}

@@ -156,7 +156,7 @@
       <div class="mt-2.5 flex items-center justify-between">
         <button
           type="button"
-          class="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline cursor-pointer"
+          class="inline-flex items-center gap-1.5 text-xs font-medium text-info hover:underline cursor-pointer"
           onclick={() => (isHistoryExpanded = !isHistoryExpanded)}
         >
           <FileText class="size-3.5" />
@@ -189,7 +189,7 @@
                   <span class="text-[10px] font-mono text-muted-foreground">{rec.created_at?.slice(0, 10)}</span>
                 </div>
                 {#if rec.prescription}
-                  <p class="text-primary text-[11px] font-mono">Rx: {rec.prescription}</p>
+                  <p class="text-info text-[11px] font-mono">Rx: {rec.prescription}</p>
                 {/if}
                 <p class="text-[11px] text-muted-foreground">Dr. {rec.doctor_name}</p>
               </div>

@@ -12,6 +12,9 @@
 				destructive:
 					"bg-destructive text-destructive-foreground hover:bg-destructive/80 border-transparent",
 				outline: "text-foreground",
+				info: "border-info/20 bg-info/10 text-info",
+				clinic: "border-clinic/20 bg-clinic/10 text-clinic",
+				demo: "border-demo/20 bg-demo/10 text-demo",
 			},
 		},
 		defaultVariants: {

@@ -92,13 +92,13 @@
   ] as const;
 </script>
 
-<div class="flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
+<div class="workspace-enter flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
   <div class="flex items-start justify-between gap-3 shrink-0">
     <div>
       <h2 class="text-lg font-semibold tracking-tight">Daily report</h2>
       <p class="text-xs text-muted-foreground mt-1">Current statuses of appointments scheduled for the selected date.</p>
     </div>
-    <Badge variant="outline" class="shrink-0">{user.role === "doctor" ? "My appointments" : "Whole clinic"}</Badge>
+    <Badge variant="info" class="shrink-0">{user.role === "doctor" ? "My appointments" : "Whole clinic"}</Badge>
   </div>
 
   <div class="flex flex-wrap items-end gap-3 shrink-0">
@@ -139,7 +139,7 @@
       </TableHeader>
       <TableBody>
         {#if report}
-          <TableRow class="bg-muted/40 font-semibold">
+          <TableRow class="bg-accent/60 font-semibold">
             <TableCell>Overall total</TableCell>
             {#each columns as [key]}<TableCell class="text-right tabular-nums">{report.totals[key]}</TableCell>{/each}
           </TableRow>

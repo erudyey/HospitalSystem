@@ -9,7 +9,7 @@
 
 @layer base {
   :root {
-    --background: 0 0% 98.5%;
+    --background: 180 20% 98%;
     --foreground: 240 10% 3.9%;
 
     --card: 0 0% 100%;
@@ -27,15 +27,18 @@
     --muted: 240 4.8% 95.9%;
     --muted-foreground: 240 3.8% 46.1%;
 
-    --accent: 355 100% 97%;
-    --accent-foreground: 355 84% 44%;
+    --clinic: 174 62% 25%;
+    --info: 210 61% 38%;
+    --demo: 38 74% 29%;
+    --accent: 174 46% 94%;
+    --accent-foreground: var(--clinic);
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
-    --ring: 355 84% 44%;
+    --ring: var(--clinic);
 
     --radius: 0.75rem;
     --radius-xl: calc(var(--radius) + 4px);
@@ -101,5 +104,54 @@
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
+  }
+}
+
+@layer components {
+  .staff-banner {
+    border-inline-start: 3px solid hsl(var(--clinic));
+    background: linear-gradient(
+      110deg, hsl(var(--clinic) / 0.09), hsl(var(--info) / 0.04)
+    );
+    animation: workspace-reveal 220ms ease-out both;
+  }
+
+  .workspace-enter {
+    animation: workspace-reveal 200ms ease-out both;
+  }
+
+  .metric-card {
+    animation: metric-reveal 220ms ease-out both;
+    transition: box-shadow 160ms ease-out;
+  }
+
+  .metric-card:nth-child(2) { animation-delay: 30ms; }
+  .metric-card:nth-child(3) { animation-delay: 60ms; }
+  .metric-card:nth-child(4) { animation-delay: 90ms; }
+  .metric-card:nth-child(5) { animation-delay: 120ms; }
+
+  .metric-card:hover {
+    box-shadow: 0 4px 14px hsl(var(--clinic) / 0.09);
+  }
+}
+
+@keyframes workspace-reveal {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes metric-reveal {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
   }
 }

@@ -309,7 +309,7 @@
               <input
                 type="checkbox"
                 bind:checked={keepSignedIn}
-                class="size-4 rounded border-border text-primary focus:ring-primary/20 accent-primary cursor-pointer"
+                class="size-4 rounded border-border text-clinic focus:ring-clinic/20 accent-clinic cursor-pointer"
               />
               <span>Keep me signed in</span>
             </label>

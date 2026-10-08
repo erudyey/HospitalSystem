@@ -9,6 +9,11 @@ summary cards, and a **Daily report** view. Receptionists see the whole clinic;
 doctors see their assigned appointments. Appointment summaries can cover all
 dates, a single day, or an inclusive date range.
 
+Teal navigation, blue information accents, and amber demo indicators add color
+while keeping clinical summary cards neutral. Short workspace transitions and
+staggered card entrances respect the system's reduced-motion preference and do
+not replay when live data refreshes.
+
 Daily reports show a selected date's current schedule and can be saved as CSV
 with doctor subtotals and an independently calculated overall patient count.
 Desktop exports use a native Save dialog; browser development uses a download.
@@ -259,7 +264,7 @@ HospitalSystem/
 │   ├── src/
 │   │   ├── components/       # PatientsWorkspace and AppointmentsWorkspace
 │   │   ├── lib/              # shadcn-svelte UI components, API client, and toast system
-│   │   ├── app.css           # Inter typography and Swiss Medical Red design tokens
+│   │   ├── app.css           # Inter typography, clinical colors, and motion tokens
 │   │   └── App.svelte        # Application shell and global error boundary
 │   ├── deno.json             # Deno tasks and compiler options
 │   ├── tsconfig.json         # TypeScript configuration for editor LSP

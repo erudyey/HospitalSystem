@@ -156,7 +156,7 @@
     <div class="px-6 pt-6 pb-4 border-b border-border bg-card pr-12">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2.5">
-          <div class="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+          <div class="size-8 rounded-lg bg-clinic/10 text-clinic flex items-center justify-center">
             <Settings class="size-4.5" />
           </div>
           <div>
@@ -276,7 +276,7 @@
           <!-- Password Change Section -->
           <div class="pt-2 border-t border-border/80 flex flex-col gap-2.5">
             <p class="text-xs font-semibold text-foreground flex items-center gap-1.5">
-              <KeyRound class="size-3.5 text-primary" />
+              <KeyRound class="size-3.5 text-clinic" />
               <span>Change Password (optional)</span>
             </p>
             <div class="grid grid-cols-2 gap-2.5">
@@ -336,12 +336,12 @@
             </div>
           {/if}
           <!-- Demo Mode Status Card -->
-          <div class="rounded-xl border border-primary/20 bg-primary/5 p-4 flex items-start justify-between gap-4">
+          <div class="rounded-xl border border-demo/20 bg-demo/5 p-4 flex items-start justify-between gap-4">
             <div class="flex flex-col gap-1">
               <div class="flex items-center gap-2">
-                <Sparkles class="size-4 text-primary" />
+                <Sparkles class="size-4 text-demo" />
                 <h4 class="text-xs font-semibold text-foreground">Evaluation Demo Mode</h4>
-                <Badge variant="outline" class="text-[10px] px-1.5 py-0 {demoMode ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-zinc-100 text-zinc-600'}">
+                <Badge variant={demoMode ? "clinic" : "outline"} class="text-[10px] px-1.5 py-0">
                   {demoMode ? "ACTIVE" : "OFF"}
                 </Badge>
               </div>

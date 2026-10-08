@@ -528,7 +528,7 @@
   });
 </script>
 
-<div class="flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
+<div class="workspace-enter flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
   <div class="flex flex-wrap items-end gap-3 shrink-0">
     <div class="flex flex-col gap-1">
       <label for="schedule-dates" class="text-xs font-medium">Schedule dates</label>
@@ -727,7 +727,7 @@
               >
                 Appt #
                 {#if sortField === "id"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -741,7 +741,7 @@
               >
                 Patient
                 {#if sortField === "patient_name"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -755,7 +755,7 @@
               >
                 Doctor
                 {#if sortField === "doctor_name"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -769,7 +769,7 @@
               >
                 Date
                 {#if sortField === "app_date"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -783,7 +783,7 @@
               >
                 Status
                 {#if sortField === "status"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -797,7 +797,7 @@
             <TableRow>
               <TableCell colspan={6} class="h-32 text-center text-sm text-muted-foreground">
                 <div class="flex items-center justify-center gap-2">
-                  <RefreshCw class="animate-spin size-4 text-primary" />
+                  <RefreshCw class="animate-spin size-4 text-clinic" />
                   <span>Loading consultation schedules...</span>
                 </div>
               </TableCell>
@@ -1189,7 +1189,7 @@
         <!-- Reactive Conflict Check Warning Banner -->
         {#if isCheckingConflict}
           <div class="flex items-center gap-2 text-xs text-muted-foreground py-1">
-            <Loader2 class="size-3 animate-spin text-primary" />
+            <Loader2 class="size-3 animate-spin text-clinic" />
             <span>Checking doctor schedule availability...</span>
           </div>
         {:else if conflictWarning}

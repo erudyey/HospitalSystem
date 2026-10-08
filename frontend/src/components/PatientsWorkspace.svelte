@@ -272,7 +272,7 @@
   });
 </script>
 
-<div class="flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
+<div class="workspace-enter flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
   <div class="grid grid-cols-3 gap-3 shrink-0">
     <MetricCard label="Registered patients" value={totalPatients} description="All saved directory records" icon={Users} loading={isLoading} unavailable={!!errorMessage} />
     <MetricCard label="Patients with active visits" value={activeAppointmentsCount} description="Directory patients with pending visits" icon={CalendarCheck} loading={isLoading} unavailable={!!errorMessage} />
@@ -376,7 +376,7 @@
               >
                 Patient ID
                 {#if sortField === "id"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -390,7 +390,7 @@
               >
                 Full Name
                 {#if sortField === "full_name"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -404,7 +404,7 @@
               >
                 Contact Number
                 {#if sortField === "contact"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -418,7 +418,7 @@
               >
                 Age
                 {#if sortField === "age"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -432,7 +432,7 @@
               >
                 Appointments
                 {#if sortField === "appointment_count"}
-                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
+                  {#if sortDirection === "asc"}<ArrowUp class="size-3 text-clinic" />{:else}<ArrowDown class="size-3 text-clinic" />{/if}
                 {:else}
                   <ArrowUpDown class="size-3 opacity-40" />
                 {/if}
@@ -446,7 +446,7 @@
             <TableRow>
               <TableCell colspan={6} class="h-32 text-center text-sm text-muted-foreground">
                 <div class="flex items-center justify-center gap-2">
-                  <RefreshCw class="animate-spin size-4 text-primary" />
+                  <RefreshCw class="animate-spin size-4 text-clinic" />
                   <span>Loading patient directory...</span>
                 </div>
               </TableCell>
@@ -482,7 +482,7 @@
                     class="group inline-flex items-center gap-1.5 cursor-pointer text-left"
                     title="Click to copy patient ID"
                   >
-                    <Badge variant="outline" class="font-mono text-xs font-normal group-hover:border-primary/50 transition-colors">
+                    <Badge variant="outline" class="font-mono text-xs font-normal group-hover:border-clinic/50 transition-colors">
                       #{patient.id}
                     </Badge>
                     {#if copiedText === String(patient.id)}

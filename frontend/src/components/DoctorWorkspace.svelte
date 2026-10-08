@@ -225,7 +225,7 @@
   });
 </script>
 
-<div class="flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
+<div class="workspace-enter flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
   <div class="grid grid-cols-4 gap-3 shrink-0">
     <MetricCard label="Waiting room" value={checkedInQueue.length} description="Your checked-in visits today" icon={UserCheck} loading={isLoading} unavailable={!!errorMessage} />
     <MetricCard label="In consultation" value={inConsultationQueue.length} description="Your visits in progress today" icon={Stethoscope} loading={isLoading} unavailable={!!errorMessage} />
@@ -386,7 +386,7 @@
         {:else}
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {#each checkedInQueue as app, idx (app.id)}
-              <div class="rounded-xl border bg-card p-4 shadow-xs flex flex-col justify-between gap-3 hover:border-primary/40 transition-colors">
+              <div class="rounded-xl border bg-card p-4 shadow-xs flex flex-col justify-between gap-3 hover:border-clinic/40 transition-colors duration-150">
                 <div>
                   <div class="flex items-start justify-between gap-2">
                     <div>
@@ -559,7 +559,7 @@
                       class="h-7 text-xs px-2 cursor-pointer"
                       onclick={() => openPatientChart(p)}
                     >
-                      <FileText class="size-3 mr-1 text-primary" />
+                      <FileText class="size-3 mr-1 text-clinic" />
                       View Chart
                     </Button>
                   </TableCell>
