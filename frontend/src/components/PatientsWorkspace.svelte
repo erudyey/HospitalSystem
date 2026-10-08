@@ -281,7 +281,7 @@
 
     <div class="rounded-xl border bg-card text-card-foreground p-4 sm:p-5 shadow-sm">
       <div class="flex items-center justify-between">
-        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Total Consultations</p>
+        <p class="text-xs sm:text-sm font-medium text-muted-foreground">Appointments recorded</p>
         <ClipboardList class="size-4 text-muted-foreground" />
       </div>
       <p class="text-xl sm:text-2xl font-bold tracking-tight text-foreground mt-1.5">{totalConsultationsScheduled}</p>
@@ -438,7 +438,7 @@
                 onclick={() => toggleSort("appointment_count")}
                 class="inline-flex items-center justify-center gap-1.5 hover:text-foreground transition-colors cursor-pointer font-semibold text-xs w-full"
               >
-                Consultations
+                Appointments
                 {#if sortField === "appointment_count"}
                   {#if sortDirection === "asc"}<ArrowUp class="size-3 text-primary" />{:else}<ArrowDown class="size-3 text-primary" />{/if}
                 {:else}
