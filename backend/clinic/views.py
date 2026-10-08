@@ -605,6 +605,23 @@ def demo_login(request: HttpRequest) -> JsonResponse:
         return validation_error_response(err, "Demo sign-in failed.")
 
 
+@require_http_methods(["POST"])
+def demo_reset(request: HttpRequest) -> JsonResponse:
+    """Reset only the demo database after explicit confirmation."""
+    data, response = parse_json(request)
+    if response is not None:
+        return response
+    if not data or data.get("confirm") is not True:
+        return JsonResponse(
+            format_error("VALIDATION_ERROR", "Confirm demo reset explicitly."), status=400
+        )
+    try:
+        services.reset_demo_data()
+        return JsonResponse({"status": "reset"})
+    except ValidationError as err:
+        return validation_error_response(err, "Demo reset failed.")
+
+
 @require_GET
 def auth_me(request: HttpRequest) -> JsonResponse:
     """Return the currently authenticated staff profile."""
@@ -645,7 +662,10 @@ def auth_profile(request: HttpRequest) -> JsonResponse:
 
     try:
         token = request.headers.get("X-User-Token", "").strip()
-        changing_credentials = "username" in data or bool(data.get("new_password"))
+        clean_username = get_string(data, "username", user.username).strip().lower()
+        changing_credentials = clean_username != user.username or bool(
+            get_string(data, "new_password")
+        )
         updated_user = services.update_staff_profile(
             user_id=user.id,
             full_name=get_string(data, "full_name", user.full_name),
@@ -654,7 +674,7 @@ def auth_profile(request: HttpRequest) -> JsonResponse:
             license_number=get_string(data, "license_number", user.license_number),
             current_password=get_string(data, "current_password") or None,
             new_password=get_string(data, "new_password") or None,
-            username=get_string(data, "username", user.username),
+            username=clean_username,
             session_token=token,
         )
         payload = {"user": serialize_staff_user(updated_user)}

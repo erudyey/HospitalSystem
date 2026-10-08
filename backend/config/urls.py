@@ -39,6 +39,7 @@ def serve_spa(request: HttpRequest) -> HttpResponse:
     if token and "<head>" in html_content:
         injection = (
             f"<script>window.__SESSION_TOKEN__ = {json.dumps(token)};"
+            f"window.__DESKTOP_HOST__ = {json.dumps(os.environ.get('HOSPITAL_DESKTOP_HOST') == '1')};"
             "const launchUrl = new URL(window.location.href);"
             "launchUrl.searchParams.delete('token');"
             "history.replaceState(null, '', launchUrl);</script>"

@@ -31,6 +31,7 @@ urlpatterns = [
     path("auth/login/", views.auth_login, name="api-auth-login"),
     path("demo/accounts/", views.demo_accounts, name="api-demo-accounts"),
     path("demo/login/", views.demo_login, name="api-demo-login"),
+    path("demo/reset/", views.demo_reset, name="api-demo-reset"),
     path("auth/me/", views.auth_me, name="api-auth-me"),
     path("auth/logout/", views.auth_logout, name="api-auth-logout"),
     path("auth/profile/", views.auth_profile, name="api-auth-profile"),

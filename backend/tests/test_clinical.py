@@ -370,6 +370,11 @@ class MedicalRecordClinicalTests(TestCase):
     """Tests for clinical diagnosis and SOAP note authoring."""
 
     def setUp(self) -> None:
+        clock = patch(
+            "backend.clinic.services.clinic_now", return_value=datetime(2026, 10, 10, 8, tzinfo=UTC)
+        )
+        clock.start()
+        self.addCleanup(clock.stop)
         self.doctor = register_staff(
             username="dr.watson",
             password="password123",

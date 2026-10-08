@@ -7,8 +7,10 @@ and return strongly-typed model instances decoupled from HTTP requests.
 import os
 import secrets
 from datetime import date, datetime, time, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
@@ -55,6 +57,7 @@ def _appointment_snapshot(appointment: Appointment) -> dict[str, str | int | Non
         "doctor_name": appointment.doctor_name,
         "app_date": appointment.app_date.isoformat(),
         "app_time": appointment.app_time.strftime("%H:%M"),
+        "reason_for_visit": appointment.reason_for_visit,
         "status": appointment.status,
         "checked_in_at": appointment.checked_in_at.isoformat()
         if appointment.checked_in_at
@@ -84,6 +87,52 @@ def next_quarter_hour() -> datetime:
     """Return the next clinic-local fifteen-minute appointment boundary."""
     now = clinic_now().replace(second=0, microsecond=0)
     return now + timedelta(minutes=15 - (now.minute % 15))
+
+
+def import_legacy_rows(
+    patients: list[dict[str, Any]], appointments: list[dict[str, Any]]
+) -> tuple[int, int]:
+    """Import validated legacy IDs only into an empty clinical database."""
+    with transaction.atomic():
+        if (
+            Patient.objects.exists()
+            or Appointment.objects.exists()
+            or MedicalRecord.objects.exists()
+        ):
+            raise ValidationError(
+                {
+                    "database": "Legacy import requires an empty clinical database. Existing records were preserved."
+                }
+            )
+        for row in patients:
+            Patient.objects.create(**row)
+        for row in appointments:
+            Appointment.objects.create(**row)
+        return len(patients), len(appointments)
+
+
+def seed_sample_rows(rows: list[dict[str, Any]], clear: bool = False) -> tuple[int, int]:
+    """Write sample fixtures atomically, never into a production clinic database."""
+    if not (settings.DEBUG or settings.IS_TESTING):
+        raise ValidationError(
+            {"database": "Sample seeding is restricted to development and test databases."}
+        )
+    with transaction.atomic():
+        if Patient.objects.exists() and not clear:
+            return 0, 0
+        if clear:
+            MedicalRecord.objects.all().delete()
+            Appointment.objects.all().delete()
+            Patient.objects.all().delete()
+        appointment_count = 0
+        for row in rows:
+            patient = Patient.objects.create(
+                full_name=row["full_name"], contact=row["contact"], age=row["age"]
+            )
+            for appointment in row["appointments"]:
+                Appointment.objects.create(patient=patient, **appointment)
+                appointment_count += 1
+        return len(rows), appointment_count
 
 
 def register_patient(full_name: str, contact: str = "", age: int = 0) -> Patient:
@@ -216,6 +265,11 @@ def book_appointment(
     if clean_status not in (AppointmentStatus.SCHEDULED, AppointmentStatus.CHECKED_IN):
         errors["status"] = f"Initial status must be Scheduled or Checked In, not '{clean_status}'."
 
+    if clean_status == AppointmentStatus.CHECKED_IN and parsed_date != clinic_now().date():
+        errors["app_date"] = (
+            "Patients can only check in for today's appointments. Reschedule the appointment to today first."
+        )
+
     try:
         patient = Patient.objects.get(id=patient_id)
     except Patient.DoesNotExist:
@@ -309,16 +363,16 @@ def delete_patient(patient_id: int) -> tuple[int, dict[str, int]]:
     """Delete a patient record and cascade-delete associated appointments."""
     with transaction.atomic():
         patient = Patient.objects.select_for_update().get(id=patient_id)
-        has_completed = Appointment.objects.filter(
-            patient_id=patient_id, status=AppointmentStatus.COMPLETED
+        has_protected_visits = Appointment.objects.filter(
+            patient_id=patient_id,
+            status__in=[AppointmentStatus.COMPLETED, AppointmentStatus.IN_CONSULTATION],
         ).exists()
         has_records = MedicalRecord.objects.filter(patient_id=patient_id).exists()
-        if has_completed or has_records:
+        if has_protected_visits or has_records:
             raise ValidationError(
                 {
                     "patient": (
-                        "Cannot delete patient with finalized clinical history "
-                        "(completed appointments or signed medical records exist)."
+                        "Cannot delete patient with an active consultation or finalized clinical history."
                     )
                 }
             )
@@ -375,6 +429,8 @@ def update_appointment(
             clean_doctor = doctor_name.strip()
             if not clean_doctor:
                 errors["doctor_name"] = "Doctor name cannot be blank."
+            elif appointment.doctor_id and clean_doctor != appointment.doctor.full_name:
+                errors["doctor_id"] = "Select a registered physician to reassign this appointment."
             else:
                 appointment.doctor_name = clean_doctor
 
@@ -399,15 +455,18 @@ def update_appointment(
         if errors:
             raise ValidationError(errors)
 
-        if appointment.status != AppointmentStatus.CANCELLED:
-            try:
-                _validate_future_slot(appointment.app_date, appointment.app_time)
-            except ValidationError as exc:
-                raise exc
+        after = _appointment_snapshot(appointment)
+        schedule_changed = any(
+            before[field] != after[field] for field in ("doctor_id", "app_date", "app_time")
+        ) or (appointment.doctor_id is None and before["doctor_name"] != after["doctor_name"])
+        if appointment.status != AppointmentStatus.CANCELLED and (
+            schedule_changed or appointment.status == AppointmentStatus.SCHEDULED
+        ):
+            _validate_future_slot(appointment.app_date, appointment.app_time)
 
         clean_override_reason = (override_reason or "").strip()
         conflicts = []
-        if appointment.doctor_id is not None:
+        if schedule_changed and appointment.doctor_id is not None:
             conflicts = check_schedule_conflict(
                 appointment.doctor_id,
                 appointment.app_date,
@@ -428,13 +487,13 @@ def update_appointment(
             appointment.conflict_override_reason = clean_override_reason
             appointment.conflict_overridden_at = timezone.now()
             appointment.conflict_overridden_by_id = override_by_id
-        if before["status"] == AppointmentStatus.CHECKED_IN:
+        if schedule_changed and before["status"] == AppointmentStatus.CHECKED_IN:
             appointment.status = AppointmentStatus.SCHEDULED
             appointment.checked_in_at = None
         appointment.save()
         _audit(
             appointment,
-            "rescheduled",
+            "rescheduled" if schedule_changed else "updated",
             override_by_id,
             clean_override_reason if allow_conflict else "",
             before,
@@ -476,6 +535,30 @@ def update_appointment_status(appointment_id: int, new_status: str) -> Appointme
         if current == clean_status:
             return appointment
 
+        if (
+            clean_status == AppointmentStatus.CHECKED_IN
+            and appointment.app_date != clinic_now().date()
+        ):
+            raise ValidationError(
+                {
+                    "app_date": "Patients can only check in for today's appointments. Reschedule the appointment to today first."
+                }
+            )
+
+        if clean_status == AppointmentStatus.SCHEDULED:
+            _validate_future_slot(appointment.app_date, appointment.app_time)
+            if appointment.doctor_id and check_schedule_conflict(
+                appointment.doctor_id,
+                appointment.app_date,
+                appointment.app_time,
+                exclude_id=appointment.id,
+            ):
+                raise ValidationError(
+                    {
+                        "schedule": "The doctor already has an overlapping appointment. Reschedule to an available slot."
+                    }
+                )
+
         if current == AppointmentStatus.COMPLETED:
             raise ValidationError(
                 {
@@ -512,6 +595,9 @@ def update_appointment_status(appointment_id: int, new_status: str) -> Appointme
 
         appointment.status = clean_status
         update_fields = ["status"]
+        if clean_status in (AppointmentStatus.SCHEDULED, AppointmentStatus.CANCELLED):
+            appointment.checked_in_at = None
+            update_fields.append("checked_in_at")
         if clean_status == AppointmentStatus.CHECKED_IN and appointment.checked_in_at is None:
             appointment.checked_in_at = timezone.now()
             update_fields.append("checked_in_at")
@@ -695,7 +781,9 @@ def update_staff_profile(
         except StaffUser.DoesNotExist:
             raise ValidationError({"user": f"Staff user #{user_id} does not exist."}) from None
 
-        clean_username = (username or staff.username).strip().lower()
+        clean_username = staff.username if username is None else username.strip().lower()
+        if not clean_username:
+            errors["username"] = "Username is required."
         changing_credentials = bool(new_password) or clean_username != staff.username
         if changing_credentials:
             if not current_password:
@@ -791,8 +879,17 @@ def ensure_demo_data() -> None:
         state = DemoSeedState.objects.filter(key="default").first()
         if state and state.version >= DEMO_SEED_VERSION:
             return
-        staff = ensure_default_staff()
+        staff = (
+            list(StaffUser.objects.filter(id__in=state.account_ids.values()))
+            if state and state.account_ids
+            else ensure_default_staff()
+        )
         if not state and (Patient.objects.exists() or Appointment.objects.exists()):
+            DemoSeedState.objects.create(
+                key="default",
+                version=DEMO_SEED_VERSION,
+                account_ids={user.username: user.id for user in staff},
+            )
             return
         patients = []
         names = [
@@ -833,13 +930,19 @@ def ensure_demo_data() -> None:
         for index in range(24):
             status = statuses[index % len(statuses)]
             doctor = doctors[index % len(doctors)]
-            day = anchor + timedelta(days=(index % 8) - 3)
+            slot = next_quarter_hour() + timedelta(minutes=30 * index)
+            day = anchor
+            app_time = time(9 + (index % 6), (index // 3 % 4) * 15)
+            if status == AppointmentStatus.SCHEDULED:
+                day, app_time = slot.date(), slot.time().replace(tzinfo=None)
+            elif status in (AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED):
+                day = anchor - timedelta(days=1 + index % 8)
             appointment = Appointment.objects.create(
                 patient=patients[index % len(patients)],
                 doctor=doctor,
                 doctor_name=doctor.full_name,
                 app_date=day,
-                app_time=time(9 + (index % 6), (index // 3 % 4) * 15),
+                app_time=app_time,
                 reason_for_visit="Sample consultation",
                 status=status,
                 checked_in_at=timezone.now()
@@ -877,6 +980,111 @@ def ensure_demo_data() -> None:
                 "account_ids": {u.username: u.id for u in staff},
             },
         )
+
+
+def reset_demo_data() -> None:
+    """Reset demo clinical fixtures explicitly while retaining staff profiles."""
+    if os.environ.get("HOSPITAL_MODE") != "demo":
+        raise ValidationError({"mode": "Demo reset is unavailable in clinic mode."})
+    with transaction.atomic():
+        state = DemoSeedState.objects.filter(key="default").first()
+        account_ids = state.account_ids if state else {}
+        MedicalRecord.objects.all().delete()
+        Appointment.objects.all().delete()
+        Patient.objects.all().delete()
+        UserSession.objects.all().delete()
+        DemoSeedState.objects.update_or_create(
+            key="default", defaults={"version": 0, "account_ids": account_ids}
+        )
+        ensure_demo_data()
+
+
+def seed_clinical_samples(count: int = 15, clear: bool = False) -> dict[str, int]:
+    """Create complete fixture encounters atomically in demo, development, or tests."""
+    import random
+
+    from backend.clinic.sample_data import (
+        CLINICAL_CASES,
+        CONTACTS,
+        FIRST_NAMES,
+        LAST_NAMES,
+        REASONS,
+    )
+
+    if not (settings.DEBUG or settings.IS_TESTING or os.environ.get("HOSPITAL_MODE") == "demo"):
+        raise ValidationError({"database": "Sample seeding is unavailable in clinic mode."})
+    with transaction.atomic():
+        if Patient.objects.exists() and not clear:
+            return {"patients": 0, "appointments": 0, "records": 0}
+        if clear:
+            MedicalRecord.objects.all().delete()
+            Appointment.objects.all().delete()
+            Patient.objects.all().delete()
+            UserSession.objects.all().delete()
+        staff = ensure_default_staff()
+        doctors = [user for user in staff if user.role == StaffRole.DOCTOR]
+        rng = random.Random(42)
+        record_count = 0
+        for index in range(max(1, count)):
+            patient = Patient.objects.create(
+                full_name=rng.choice(FIRST_NAMES) + " " + rng.choice(LAST_NAMES),
+                contact=rng.choice(CONTACTS),
+                age=rng.randint(6, 82),
+            )
+            doctor = doctors[index % len(doctors)]
+            status = [
+                AppointmentStatus.CHECKED_IN,
+                AppointmentStatus.IN_CONSULTATION,
+                AppointmentStatus.SCHEDULED,
+                AppointmentStatus.COMPLETED,
+                AppointmentStatus.CANCELLED,
+            ][index % 5]
+            slot = next_quarter_hour() + timedelta(minutes=30 * index)
+            day = clinic_now().date()
+            if status in (AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED):
+                day -= timedelta(days=1 + index % 10)
+            elif status == AppointmentStatus.SCHEDULED:
+                day = slot.date()
+            appointment = Appointment.objects.create(
+                patient=patient,
+                doctor=doctor,
+                doctor_name=doctor.full_name,
+                app_date=day,
+                app_time=slot.time().replace(tzinfo=None),
+                reason_for_visit=rng.choice(REASONS),
+                status=status,
+                checked_in_at=timezone.now()
+                if status in (AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_CONSULTATION)
+                else None,
+            )
+            if status == AppointmentStatus.COMPLETED:
+                record = MedicalRecord.objects.create(
+                    patient=patient,
+                    doctor=doctor,
+                    appointment=appointment,
+                    **rng.choice(CLINICAL_CASES),
+                )
+                MedicalRecordRevision.objects.create(
+                    record=record,
+                    revision=1,
+                    correction_reason="Initial sample record",
+                    diagnosis=record.diagnosis,
+                    symptoms=record.symptoms,
+                    clinical_notes=record.clinical_notes,
+                    prescription=record.prescription,
+                    follow_up_advice=record.follow_up_advice,
+                    changed_by=doctor,
+                )
+                record_count += 1
+        if os.environ.get("HOSPITAL_MODE") == "demo":
+            DemoSeedState.objects.update_or_create(
+                key="default",
+                defaults={
+                    "version": DEMO_SEED_VERSION,
+                    "account_ids": {user.username: user.id for user in staff},
+                },
+            )
+        return {"patients": max(1, count), "appointments": max(1, count), "records": record_count}
 
 
 def list_demo_accounts() -> list[StaffUser]:
@@ -1142,7 +1350,7 @@ def get_doctor_queue(
     doctor_id: int, target_date: date | None = None
 ) -> dict[str, list[Appointment]]:
     """Return today's doctor queue grouped by clinical status."""
-    ref_date = target_date or date.today()
+    ref_date = target_date or clinic_now().date()
     doc = StaffUser.objects.filter(id=doctor_id).first()
     doctor_filter = Q(doctor_id=doctor_id)
     if doc and doc.full_name:
@@ -1175,10 +1383,11 @@ def get_doctor_patients(doctor_id: int, query: str | None = None) -> list[Patien
         Patient.objects.filter(appt_filter | Q(medical_records__doctor_id=doctor_id))
         .distinct()
         .annotate(
-            appointment_count=Count("appointments"),
+            appointment_count=Count("appointments", distinct=True),
             doctor_appointment_count=Count(
                 "appointments",
                 filter=appt_filter,
+                distinct=True,
             ),
         )
         .order_by("full_name")

@@ -26,6 +26,7 @@ MIDDLEWARE = [
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "backend.clinic.middleware.LoopbackSecurityMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -58,7 +59,14 @@ if IS_TESTING:
         "backend.config.settings.FastPBKDF2PasswordHasher",
     ]
 elif DEBUG:
-    DB_PATH = str(BASE_DIR / "clinic_dev.sqlite3")
+    DB_PATH = str(
+        BASE_DIR
+        / (
+            "clinic_demo_dev.sqlite3"
+            if os.environ.get("HOSPITAL_MODE") == "demo"
+            else "clinic_dev.sqlite3"
+        )
+    )
 else:
     # Desktop / Packaged production mode
     if os.environ.get("HOSPITAL_DATA_DIR"):
