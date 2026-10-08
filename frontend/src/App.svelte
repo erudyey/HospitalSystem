@@ -14,6 +14,7 @@
   import PatientsWorkspace from "./components/PatientsWorkspace.svelte";
   import AppointmentsWorkspace from "./components/AppointmentsWorkspace.svelte";
   import DoctorWorkspace from "./components/DoctorWorkspace.svelte";
+  import WelcomeBanner from "./components/WelcomeBanner.svelte";
   import AuthModal from "./components/AuthModal.svelte";
   import SettingsDialog from "./components/SettingsDialog.svelte";
   import ToastContainer from "$lib/components/ToastContainer.svelte";
@@ -41,6 +42,7 @@
   let selectedPatientForBooking = $state<Patient | null>(null);
 
   let isOnline = $state(false);
+  let clinicNow = $state("");
   let globalError = $state<string | null>(null);
 
   // Authentication & Demo State
@@ -128,9 +130,11 @@
       if (res.status === "ok") {
         isOnline = true;
         demoMode = res.mode === "demo";
+        clinicNow = res.now;
       }
     } catch {
       isOnline = false;
+      clinicNow = "";
     }
   }
 
@@ -190,6 +194,9 @@
   onMount(() => {
     checkHealth();
     initAuth();
+    const clockInterval = setInterval(() => void checkHealth(), 60_000);
+    const refreshClock = () => { if (!document.hidden) void checkHealth(); };
+    document.addEventListener("visibilitychange", refreshClock);
 
     const sessionExpired = () => {
       showSignIn();
@@ -230,6 +237,8 @@
 
     window.addEventListener("keydown", handleKeyDown);
     return () => {
+      clearInterval(clockInterval);
+      document.removeEventListener("visibilitychange", refreshClock);
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("staff-session-expired", sessionExpired);
     };
@@ -462,6 +471,9 @@
 
     <!-- Main Workspace Content Canvas -->
     <main class="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto flex flex-col overflow-hidden min-h-0 min-w-0">
+      {#if currentUser && !isAuthChecking}
+        <WelcomeBanner user={currentUser} {clinicNow} {demoMode} />
+      {/if}
       {#if isAuthChecking}
         <div class="flex flex-col items-center justify-center py-24 text-sm text-muted-foreground gap-2">
           <Loader2 class="size-6 animate-spin text-primary" />
