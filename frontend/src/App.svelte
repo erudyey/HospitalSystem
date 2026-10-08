@@ -19,6 +19,7 @@
   import ToastContainer from "$lib/components/ToastContainer.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Badge } from "$lib/components/ui/badge";
+  import * as Dialog from "$lib/components/ui/dialog";
   import {
     Users,
     Calendar,
@@ -46,10 +47,41 @@
   let currentUser = $state<StaffUser | null>(null);
   let isAuthChecking = $state(true);
   let isAuthModalOpen = $state(false);
+  let isRegisteringStaff = $state(false);
+  let staffRevision = $state(0);
   let isSettingsOpen = $state(false);
   let settingsInitialTab = $state<"profile" | "system">("profile");
   let demoMode = $state(false);
   let isSwitchingMode = $state(false);
+  let isResetDemoOpen = $state(false);
+  let isResettingDemo = $state(false);
+
+  $effect(() => { if (!isAuthModalOpen) isRegisteringStaff = false; });
+
+  function showSignIn() {
+    currentUser = null;
+    activeWorkspace = "appointments";
+    isSettingsOpen = false;
+    isResetDemoOpen = false;
+    isRegisteringStaff = false;
+    selectedPatientForBooking = null;
+    triggerPatientRegister = false;
+    triggerAppointmentBook = false;
+    isAuthModalOpen = true;
+  }
+
+  async function handleResetDemo() {
+    if (!demoMode || isResettingDemo) return;
+    isResettingDemo = true;
+    try {
+      await api.demo.reset();
+      await clearUserToken();
+      showSignIn();
+      toast.success("Demo appointments refreshed for today.");
+    } catch (err) {
+      toast.error((err as { message?: string }).message || "Unable to reset demo data.");
+    } finally { isResettingDemo = false; }
+  }
 
   async function handleSwitchMode() {
     if (isSwitchingMode) return;
@@ -107,12 +139,13 @@
     try {
       const startupUrl = new URL(window.location.href);
       if (startupUrl.searchParams.get("signed_out") === "1") {
-        clearUserToken();
+        await clearUserToken();
         startupUrl.searchParams.delete("signed_out");
         window.history.replaceState({}, "", startupUrl);
+      } else {
+        // Explicit sign-out must never restore a remembered session.
+        await restoreRememberedToken();
       }
-      // A remembered token only comes from the operating system credential store.
-      await restoreRememberedToken();
       const token = getUserToken();
       if (token) {
         try {
@@ -125,7 +158,7 @@
           }
           return;
         } catch {
-          clearUserToken();
+          await clearUserToken();
           currentUser = null;
         }
       }
@@ -138,25 +171,31 @@
   }
 
   async function handleLogout() {
+    isRegisteringStaff = false;
     try {
       await api.auth.logout();
     } catch {
       // Non-blocking logout cleanup
     } finally {
-      clearUserToken();
-      currentUser = null;
+      await clearUserToken();
+      showSignIn();
       try {
         sessionStorage.removeItem("hospitalsystem_explicit_logout");
       } catch {
         // Ignore storage restrictions
       }
-      isAuthModalOpen = true;
     }
   }
 
   onMount(() => {
     checkHealth();
     initAuth();
+
+    const sessionExpired = () => {
+      showSignIn();
+      toast.info("Your staff session ended. Please sign in again.");
+    };
+    window.addEventListener("staff-session-expired", sessionExpired);
 
     // Global Error Boundary listener
     window.addEventListener("error", (event) => {
@@ -192,11 +231,12 @@
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("staff-session-expired", sessionExpired);
     };
   });
 </script>
 
-<div class="h-full w-full bg-background text-foreground flex flex-row selection:bg-primary/10 selection:text-primary antialiased overflow-hidden min-h-0 min-w-0">
+<div class="h-screen w-full bg-background text-foreground flex flex-row selection:bg-primary/10 selection:text-primary antialiased overflow-hidden min-h-0 min-w-0">
   <!-- Left Sidebar Navigation -->
   <aside class="w-64 border-r border-border bg-card flex flex-col shrink-0 h-full select-none min-h-0">
     <!-- Clinic Brand Header -->
@@ -445,18 +485,23 @@
           <p class="text-xs text-muted-foreground mt-2">Demo data is separate from clinic records.</p>
         </div>
       {:else if activeWorkspace === "doctor_workspace" && currentUser?.role === "doctor"}
-        <DoctorWorkspace activeDoctor={currentUser} />
+        {#key currentUser.id}
+          <DoctorWorkspace activeDoctor={currentUser} />
+        {/key}
       {:else if activeWorkspace === "patients"}
         <PatientsWorkspace
+          readOnly={currentUser.role === "doctor"}
           bind:isRegisterDialogOpen={triggerPatientRegister}
           onSelectPatientForBooking={handleSelectPatientForBooking}
         />
       {:else}
+        {#key currentUser.id + ":" + staffRevision}
         <AppointmentsWorkspace
           bind:isBookingModalOpen={triggerAppointmentBook}
           preselectedPatient={selectedPatientForBooking}
           onClearPreselectedPatient={handleClearSelectedPatient}
         />
+        {/key}
       {/if}
     </main>
   </div>
@@ -471,6 +516,8 @@
       currentUser = updated;
     }}
     onLogout={handleLogout}
+    onRegisterStaff={() => { isRegisteringStaff = true; isAuthModalOpen = true; }}
+    onResetDemo={() => (isResetDemoOpen = true)}
     onOpenAuth={() => (isAuthModalOpen = true)}
     onSwitchMode={handleSwitchMode}
   />
@@ -479,6 +526,8 @@
   <AuthModal
     bind:open={isAuthModalOpen}
     demoMode={demoMode}
+    registerOnly={isRegisteringStaff}
+    onStaffCreated={() => { isRegisteringStaff = false; staffRevision += 1; }}
     isSwitchingMode={isSwitchingMode}
     onSwitchMode={handleSwitchMode}
     onSuccess={(user) => {
@@ -495,6 +544,19 @@
       }
     }}
   />
+
+  <Dialog.Root bind:open={isResetDemoOpen}>
+    <Dialog.Content class="sm:max-w-md">
+      <Dialog.Header>
+        <Dialog.Title>Reset demo data?</Dialog.Title>
+        <Dialog.Description>Replace demo patients, appointments, and clinical records with current samples. Demo staff profiles are kept. Everyone using this demo database will be signed out.</Dialog.Description>
+      </Dialog.Header>
+      <Dialog.Footer>
+        <Button variant="outline" disabled={isResettingDemo} onclick={() => (isResetDemoOpen = false)}>Cancel</Button>
+        <Button disabled={isResettingDemo} onclick={handleResetDemo}>{isResettingDemo ? "Resetting..." : "Reset demo data"}</Button>
+      </Dialog.Footer>
+    </Dialog.Content>
+  </Dialog.Root>
 
   <ToastContainer />
 </div>

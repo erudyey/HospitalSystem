@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
+  import { calendarDateOffset, nextClinicSlot } from "$lib/calendar";
   import {
     api,
     type Patient,
@@ -96,7 +97,7 @@
   let selectedPatientId = $state<number | null>(null);
   let selectedDoctorId = $state<number | null>(null);
   let doctorName = $state("");
-  let appDate = $state(new Date().toISOString().split("T")[0]);
+  let appDate = $state("");
   let appTime = $state("09:00");
   let reasonForVisit = $state("");
   let conflictWarning = $state<string | null>(null);
@@ -104,6 +105,8 @@
   let overrideConflict = $state(false);
   let overrideReason = $state("");
   let conflictCheckTimer: ReturnType<typeof setTimeout> | null = null;
+  let conflictRequest = 0;
+  let isPreparingBooking = $state(false);
   let isSubmitting = $state(false);
   let bookingErrors = $state<Record<string, string[]>>({});
 
@@ -147,16 +150,16 @@
     }
   }
 
-  async function reloadAppointments() {
-    isLoading = true;
+  async function reloadAppointments(silent = false) {
+    if (!silent) isLoading = true;
     try {
       allAppointments = await api.listAllAppointments();
     } catch (err) {
       const e = err as ApiError;
       errorMessage = e.message || "Failed to refresh appointments.";
-      toast.error(errorMessage);
+      if (!silent) toast.error(errorMessage);
     } finally {
-      isLoading = false;
+      if (!silent) isLoading = false;
     }
   }
 
@@ -269,13 +272,13 @@
     currentPage = 1;
   }
 
-  function setQuickDate(daysOffset: number) {
-    const d = new Date();
-    d.setDate(d.getDate() + daysOffset);
-    appDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  async function setQuickDate(daysOffset: number) {
+    try { appDate = calendarDateOffset((await api.healthCheck()).now, daysOffset); }
+    catch (err) { bookingErrors = (err as ApiError).fields; }
   }
 
   function runConflictCheck() {
+    const request = ++conflictRequest;
     if (conflictCheckTimer) clearTimeout(conflictCheckTimer);
     conflictWarning = null;
     if (!selectedDoctorId || selectedDoctorId <= 0 || !appDate || !appTime) {
@@ -284,14 +287,17 @@
     }
 
     isCheckingConflict = true;
+    const doctorId = selectedDoctorId;
+    const date = appDate;
+    const time = appTime;
     conflictCheckTimer = setTimeout(async () => {
       try {
-        if (!selectedDoctorId || selectedDoctorId <= 0) return;
         const res = await api.clinical.checkScheduleConflict(
-          selectedDoctorId,
-          appDate,
-          appTime
+          doctorId,
+          date,
+          time
         );
+        if (request !== conflictRequest || !isBookingModalOpen || selectedDoctorId !== doctorId || appDate !== date || appTime !== time) return;
         if (res.has_conflict && res.conflicts.length > 0) {
           const first = res.conflicts[0];
           const doc = doctorList.find((d) => d.id === selectedDoctorId);
@@ -305,44 +311,55 @@
       } catch {
         // Non-blocking conflict check failure
       } finally {
-        isCheckingConflict = false;
+        if (request === conflictRequest) isCheckingConflict = false;
       }
     }, 250);
   }
 
   $effect(() => {
     if (isBookingModalOpen && selectedDoctorId && appDate && appTime) {
-      runConflictCheck();
+      untrack(runConflictCheck);
     }
   });
 
   function openBookingModal(patientId?: number) {
-    if (patientId) {
-      selectedPatientId = patientId;
-    } else if (preselectedPatient) {
-      selectedPatientId = preselectedPatient.id;
-    } else if (patientList.length > 0) {
-      selectedPatientId = patientList[0].id;
-    }
-    selectedDoctorId = doctorList.length > 0 ? doctorList[0].id : null;
-    doctorName = doctorList.length > 0 ? doctorList[0].full_name : "";
-    const next = new Date();
-    next.setMinutes(next.getMinutes() + (15 - (next.getMinutes() % 15)), 0, 0);
-    appDate = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
-    appTime = `${String(next.getHours()).padStart(2, "0")}:${String(next.getMinutes()).padStart(2, "0")}`;
-    reasonForVisit = "";
-    conflictWarning = null;
-    overrideConflict = false;
-    overrideReason = "";
-    bookingErrors = {};
+    selectedPatientId = patientId ?? preselectedPatient?.id ?? null;
     isBookingModalOpen = true;
   }
+
+  async function prepareBooking() {
+    isPreparingBooking = true;
+    bookingErrors = {};
+    try {
+      const [context, doctors, patients] = await Promise.all([api.healthCheck(), api.auth.listDoctors(), api.listPatients()]);
+      if (!isBookingModalOpen) return;
+      doctorList = doctors;
+      patientList = patients;
+      if (!patients.some((patient) => patient.id === selectedPatientId)) selectedPatientId = patients[0]?.id ?? null;
+      selectedDoctorId = doctors[0]?.id ?? null;
+      doctorName = doctors[0]?.full_name ?? "";
+      const slot = nextClinicSlot(context.now);
+      appDate = slot.date;
+      appTime = slot.time;
+      reasonForVisit = "";
+      conflictWarning = null;
+      overrideConflict = false;
+      overrideReason = "";
+    } catch (err) {
+      bookingErrors = (err as ApiError).fields;
+    } finally {
+      isPreparingBooking = false;
+    }
+  }
+
+  $effect(() => { if (isBookingModalOpen) untrack(() => void prepareBooking()); });
 
   async function handleCreateBooking(
     e: Event,
     initialStatus: AppointmentStatus = "Scheduled"
   ) {
     e.preventDefault();
+    if (isPreparingBooking || isSubmitting) return;
     if (!selectedPatientId) {
       bookingErrors = { general: ["Please select a patient."] };
       return;
@@ -466,17 +483,26 @@
 
   $effect(() => {
     if (preselectedPatient) {
-      selectedPatientId = preselectedPatient.id;
-      openBookingModal(preselectedPatient.id);
-      onClearPreselectedPatient?.();
+      const patientId = preselectedPatient.id;
+      untrack(() => {
+        void openBookingModal(patientId);
+        onClearPreselectedPatient?.();
+      });
     }
   });
 
   onMount(() => {
     loadInitialData();
+    const refresh = () => {
+      if (!document.hidden && !isSubmitting && !isBookingModalOpen && !isEditDialogOpen && !isDeleteDialogOpen) void reloadAppointments(true);
+    };
+    const refreshTimer = setInterval(refresh, 5000);
+    document.addEventListener("visibilitychange", refresh);
     setTimeout(checkTabScroll, 100);
     window.addEventListener("resize", checkTabScroll);
     return () => {
+      clearInterval(refreshTimer);
+      document.removeEventListener("visibilitychange", refresh);
       window.removeEventListener("resize", checkTabScroll);
     };
   });
@@ -657,7 +683,7 @@
         variant="outline"
         size="sm"
         class="h-9 px-3 cursor-pointer shrink-0"
-        onclick={reloadAppointments}
+        onclick={() => reloadAppointments()}
         disabled={isLoading}
       >
         {#if isLoading}
@@ -916,13 +942,6 @@
                           </DropdownMenu.Item>
                         {:else if app.status === "Checked In"}
                           <DropdownMenu.Item
-                            onclick={() => handleStatusChange(app.id, "In Consultation")}
-                            class="text-purple-800 focus:bg-purple-50 focus:text-purple-900 cursor-pointer"
-                          >
-                            <Stethoscope class="size-4 mr-2" />
-                            <span>Send to Consultation</span>
-                          </DropdownMenu.Item>
-                          <DropdownMenu.Item
                             onclick={() => handleStatusChange(app.id, "Scheduled")}
                             class="cursor-pointer"
                           >
@@ -937,20 +956,7 @@
                             <span>Cancel Appointment</span>
                           </DropdownMenu.Item>
                         {:else if app.status === "In Consultation"}
-                          <DropdownMenu.Item
-                            onclick={() => handleStatusChange(app.id, "Completed")}
-                            class="text-emerald-700 focus:bg-emerald-50 focus:text-emerald-800 cursor-pointer"
-                          >
-                            <CheckCircle2 class="size-4 mr-2" />
-                            <span>Mark Completed</span>
-                          </DropdownMenu.Item>
-                          <DropdownMenu.Item
-                            onclick={() => handleStatusChange(app.id, "Cancelled")}
-                            class="text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
-                          >
-                            <XCircle class="size-4 mr-2" />
-                            <span>Cancel Appointment</span>
-                          </DropdownMenu.Item>
+                          <div class="px-2 py-1.5 text-xs text-muted-foreground">Consultation managed by the assigned doctor</div>
                         {:else if app.status === "Completed"}
                           <div class="px-2 py-1.5 text-xs text-muted-foreground italic">
                             Finalized clinical visit
@@ -1191,7 +1197,7 @@
               <span>Emergency / Walk-in Override (Book Anyway)</span>
             </label>
             {#if overrideConflict}
-              <Input class="mt-1.5 text-xs" placeholder="Required override reason" bind:value={overrideReason} maxlength="255" />
+              <Input class="mt-1.5 text-xs" placeholder="Required override reason" bind:value={overrideReason} maxlength={255} />
               {#if bookingErrors.override_reason}<p class="mt-1 text-xs text-destructive">{bookingErrors.override_reason.join(" ")}</p>{/if}
             {/if}
           </div>
@@ -1217,7 +1223,7 @@
             type="button"
             variant="secondary"
             onclick={(e) => handleWalkIn(e)}
-            disabled={isSubmitting || patientList.length === 0 || (!!conflictWarning && !overrideConflict)}
+            disabled={isPreparingBooking || isSubmitting || !selectedDoctorId || patientList.length === 0 || (!!conflictWarning && !overrideConflict)}
             class="w-full whitespace-normal cursor-pointer"
           >
             {#if isSubmitting}
@@ -1229,7 +1235,7 @@
           </Button>
           <Button
             type="submit"
-            disabled={isSubmitting || patientList.length === 0 || (!!conflictWarning && !overrideConflict)}
+            disabled={isPreparingBooking || isSubmitting || !selectedDoctorId || patientList.length === 0 || (!!conflictWarning && !overrideConflict)}
             class="w-full whitespace-normal cursor-pointer"
           >
             {#if isSubmitting}

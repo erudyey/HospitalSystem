@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { onDestroy, untrack } from "svelte";
+  import { calendarDateOffset } from "$lib/calendar";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -33,7 +35,9 @@
   let conflictWarning = $state<string | null>(null);
   let isCheckingConflict = $state(false);
   let overrideConflict = $state(false);
+  let overrideReason = $state("");
   let conflictCheckTimer: ReturnType<typeof setTimeout> | null = null;
+  let conflictRequest = 0;
 
   let isSubmitting = $state(false);
   let formErrors = $state<Record<string, string[]>>({});
@@ -53,6 +57,7 @@
 
   $effect(() => {
     if (appointment && open) {
+      untrack(() => {
       selectedDoctorId = appointment.doctor_id ?? null;
       doctorName = appointment.doctor_name || "";
       if (!selectedDoctorId && doctorName && doctorList.length > 0) {
@@ -70,11 +75,14 @@
       reasonForVisit = appointment.reason_for_visit || "";
       conflictWarning = null;
       overrideConflict = false;
+      overrideReason = "";
       formErrors = {};
+      });
     }
   });
 
   function runConflictCheck() {
+    const request = ++conflictRequest;
     if (conflictCheckTimer) clearTimeout(conflictCheckTimer);
     conflictWarning = null;
     if (!selectedDoctorId || selectedDoctorId <= 0 || !appDate || !appTime || !appointment) {
@@ -82,17 +90,27 @@
       return;
     }
 
+    if (selectedDoctorId === appointment.doctor_id && appDate === appointment.app_date && appTime === appointment.app_time) {
+      isCheckingConflict = false;
+      overrideConflict = false;
+      return;
+    }
+
     isCheckingConflict = true;
+    const doctorId = selectedDoctorId;
+    const date = appDate;
+    const time = appTime;
+    const appointmentId = appointment.id;
     conflictCheckTimer = setTimeout(async () => {
       try {
-        if (!selectedDoctorId || selectedDoctorId <= 0 || !appointment) return;
         const res = await api.clinical.checkScheduleConflict(
-          selectedDoctorId,
-          appDate,
-          appTime,
+          doctorId,
+          date,
+          time,
           15,
-          appointment.id
+          appointmentId
         );
+        if (request !== conflictRequest || !open || selectedDoctorId !== doctorId || appDate !== date || appTime !== time || appointment?.id !== appointmentId) return;
         if (res.has_conflict && res.conflicts.length > 0) {
           const first = res.conflicts[0];
           const doc = doctorList.find((d) => d.id === selectedDoctorId);
@@ -106,21 +124,25 @@
       } catch {
         // Non-blocking conflict check failure
       } finally {
-        isCheckingConflict = false;
+        if (request === conflictRequest) isCheckingConflict = false;
       }
     }, 250);
   }
 
   $effect(() => {
-    if (open && appointment && selectedDoctorId && appDate && appTime) {
-      runConflictCheck();
+    const ready = open && appointment && selectedDoctorId && appDate && appTime;
+    if (ready) {
+      untrack(runConflictCheck);
     }
   });
 
-  function setQuickDate(daysOffset: number) {
-    const d = new Date();
-    d.setDate(d.getDate() + daysOffset);
-    appDate = d.toISOString().split("T")[0];
+  onDestroy(() => { if (conflictCheckTimer) clearTimeout(conflictCheckTimer); });
+
+  async function setQuickDate(daysOffset: number) {
+    try {
+      const context = await api.healthCheck();
+      appDate = calendarDateOffset(context.now, daysOffset);
+    } catch (err) { formErrors = (err as ApiError).fields; }
   }
 
   async function handleSave(e: SubmitEvent) {
@@ -131,8 +153,8 @@
     const trimmedDoctor = doctorName.trim();
 
     const localErrors: Record<string, string[]> = {};
-    if (!trimmedDoctor && (!selectedDoctorId || selectedDoctorId <= 0)) {
-      localErrors.doctor_name = ["Attending doctor is required."];
+    if (!selectedDoctorId || selectedDoctorId <= 0) {
+      localErrors.doctor_name = ["Select a registered attending doctor."];
     }
     if (!appDate) localErrors.app_date = ["Appointment date is required."];
     if (!appTime) localErrors.app_time = ["Appointment time is required."];
@@ -141,6 +163,9 @@
       localErrors.general = [
         "Schedule conflict detected. Check 'Emergency / Reschedule Override' to proceed.",
       ];
+    }
+    if (overrideConflict && !overrideReason.trim()) {
+      localErrors.general = ["Enter a reason for the schedule override."];
     }
 
     if (Object.keys(localErrors).length > 0) {
@@ -156,6 +181,8 @@
         app_date: appDate,
         app_time: appTime,
         reason_for_visit: reasonForVisit.trim(),
+        allow_conflict: overrideConflict,
+        override_reason: overrideConflict ? overrideReason.trim() : "",
       });
       open = false;
       onSuccess?.();
@@ -170,14 +197,14 @@
 
 <Dialog.Root bind:open>
   <Dialog.Content class="sm:max-w-md">
-    <Dialog.Header>
+    <Dialog.Header class="pr-10">
       <Dialog.Title>Reschedule Appointment #{appointment?.id}</Dialog.Title>
       <Dialog.Description>
         Update the attending doctor, consultation date, or time for {appointment?.patient_name}.
       </Dialog.Description>
     </Dialog.Header>
 
-    <form onsubmit={handleSave} class="flex flex-col gap-4 py-2">
+    <form onsubmit={handleSave} class="flex flex-col gap-4 pt-4 pb-2">
       <!-- Attending Doctor -->
       <div>
         <label for="editDoctorSelect" class="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
@@ -193,8 +220,6 @@
             if (val > 0) {
               const doc = doctorList.find((d) => d.id === val);
               if (doc) doctorName = doc.full_name;
-            } else if (val === -1) {
-              doctorName = "";
             }
           }}
           disabled={isSubmitting}
@@ -206,25 +231,10 @@
                 Dr. {doc.full_name.replace(/^Dr\.\s*/i, "")} ({doc.specialty || "General Medicine"})
               </option>
             {/each}
-            <option value={-1}>Other / Visiting Physician...</option>
           {:else}
             <option value={null}>No registered physicians found</option>
-            <option value={-1}>Custom Physician Name...</option>
           {/if}
         </select>
-
-        {#if selectedDoctorId === -1 || doctorList.length === 0}
-          <div class="mt-2">
-            <Input
-              id="editDoctorCustom"
-              type="text"
-              placeholder="e.g. Dr. Maria Cruz"
-              bind:value={doctorName}
-              aria-invalid={!!formErrors.doctor_name}
-              disabled={isSubmitting}
-            />
-          </div>
-        {/if}
 
         {#if formErrors.doctor_name}
           <p class="text-xs text-destructive mt-1">{formErrors.doctor_name.join(" ")}</p>
@@ -323,6 +333,12 @@
             />
             <span>Emergency / Reschedule Override (Save Anyway)</span>
           </label>
+          {#if overrideConflict}
+            <div>
+              <label for="editOverrideReason" class="block text-xs font-medium mb-1">Override reason</label>
+              <Input id="editOverrideReason" bind:value={overrideReason} required disabled={isSubmitting} />
+            </div>
+          {/if}
         </div>
       {/if}
 

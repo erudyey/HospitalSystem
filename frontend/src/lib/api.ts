@@ -21,6 +21,7 @@ export interface StaffUser {
 export interface UserSession {
   token: string;
   user: StaffUser;
+  remembered?: boolean;
 }
 
 export interface Patient {
@@ -30,6 +31,7 @@ export interface Patient {
   age: number;
   appointment_count?: number;
   active_appointment_count?: number;
+  doctor_appointment_count?: number;
 }
 
 export type AppointmentStatus =
@@ -141,6 +143,7 @@ function getSessionToken(): string {
 }
 
 let userToken = "";
+let rememberSession = false;
 const nativeHost = () => (window as unknown as {
   pywebview?: { api?: {
     load_remembered_token?: () => Promise<string>;
@@ -151,23 +154,48 @@ const nativeHost = () => (window as unknown as {
 
 export function getUserToken(): string { return userToken; }
 
+async function readyNativeHost() {
+  if (nativeHost()?.load_remembered_token) return nativeHost();
+  if (!(window as unknown as { __DESKTOP_HOST__?: boolean }).__DESKTOP_HOST__) return undefined;
+  await new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      window.removeEventListener("pywebviewready", done);
+      resolve();
+    };
+    const timer = setTimeout(done, 1500);
+    window.addEventListener("pywebviewready", done, { once: true });
+  });
+  return nativeHost();
+}
+
 export async function restoreRememberedToken(): Promise<string> {
   try {
-    const token = await nativeHost()?.load_remembered_token?.();
+    const token = await (await readyNativeHost())?.load_remembered_token?.();
     userToken = token || "";
+    rememberSession = !!token;
     return userToken;
   } catch { return ""; }
 }
 
 export async function setUserToken(token: string, remember: boolean = false): Promise<boolean> {
   userToken = token;
-  if (!remember) return true;
-  try { return await nativeHost()?.save_remembered_token?.(token) === true; } catch { return false; }
+  rememberSession = false;
+  try {
+    const host = await readyNativeHost();
+    if (!remember) {
+      await host?.clear_remembered_token?.();
+      return true;
+    }
+    rememberSession = await host?.save_remembered_token?.(token) === true;
+    return rememberSession;
+  } catch { return false; }
 }
 
-export function clearUserToken(): void {
+export async function clearUserToken(): Promise<void> {
   userToken = "";
-  try { void nativeHost()?.clear_remembered_token?.(); } catch { /* native storage unavailable */ }
+  rememberSession = false;
+  try { await (await readyNativeHost())?.clear_remembered_token?.(); } catch { /* native storage unavailable */ }
 }
 
 export async function switchApplicationMode(
@@ -181,8 +209,19 @@ export async function switchApplicationMode(
       "Open the desktop app to switch between clinic and demo mode.",
     );
   }
-  clearUserToken();
+  await clearUserToken();
   await host.switch_mode(mode);
+}
+
+export function normalizeApiError(error: Partial<ApiError>): ApiError {
+  const fields = error.fields || {};
+  const details = Object.values(fields).flat().filter(Boolean);
+  const message = details.join(" ") || error.message || "An unexpected error occurred.";
+  return {
+    code: error.code || "UNKNOWN",
+    message,
+    fields: { ...fields, general: fields.general?.length ? fields.general : [message] },
+  };
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -233,7 +272,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       message: response.statusText || "An unexpected error occurred.",
       fields: {},
     };
-    throw apiError;
+    if (response.status === 401 && userToken && getUserToken() === userToken) {
+      const cleanup = clearUserToken();
+      window.dispatchEvent(new Event("staff-session-expired"));
+      await cleanup;
+    }
+    throw normalizeApiError(apiError);
   }
 
   if (response.status === 204) {
@@ -246,7 +290,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 export const api = {
   /** Initialize connection and set CSRF cookie */
   healthCheck: () =>
-    request<{ status: string; version: string; mode: "clinic" | "demo" }>(
+    request<{ status: string; version: string; mode: "clinic" | "demo"; timezone: string; now: string }>(
       "/api/health/",
     ),
 
@@ -427,7 +471,7 @@ export const api = {
         body: JSON.stringify(payload),
       });
       if (resp?.token) {
-        await setUserToken(resp.token, shouldRemember);
+        resp.remembered = await setUserToken(resp.token, shouldRemember) && shouldRemember;
       }
       return resp;
     },
@@ -440,7 +484,7 @@ export const api = {
           method: "POST",
         });
       } finally {
-        clearUserToken();
+        await clearUserToken();
       }
     },
 
@@ -459,13 +503,14 @@ export const api = {
         method: "PUT",
         body: JSON.stringify(data),
       });
-      if (res.token) await setUserToken(res.token, false);
+      if (res.token) await setUserToken(res.token, rememberSession);
       return res.user;
     },
 
     listDoctors: () => request<StaffUser[]>("/api/doctors/"),
   },
   demo: {
+    reset: () => request<{ status: string }>("/api/demo/reset/", { method: "POST", body: JSON.stringify({ confirm: true }) }),
     accounts: () => request<StaffUser[]>("/api/demo/accounts/"),
     login: async (accountId: number) => {
       const session = await request<UserSession>("/api/demo/login/", { method: "POST", body: JSON.stringify({ account_id: accountId }) });

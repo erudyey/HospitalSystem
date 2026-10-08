@@ -29,7 +29,9 @@
     demoMode?: boolean;
     initialTab?: "profile" | "system";
     onProfileUpdated?: (user: StaffUser) => void;
-    onLogout?: () => void;
+    onLogout?: () => void | Promise<void>;
+    onRegisterStaff?: () => void;
+    onResetDemo?: () => void;
     onOpenAuth?: () => void;
     onSwitchMode?: () => void;
   }
@@ -41,6 +43,8 @@
     initialTab = "profile",
     onProfileUpdated,
     onLogout,
+    onRegisterStaff,
+    onResetDemo,
     onOpenAuth,
     onSwitchMode,
   }: Props = $props();
@@ -120,7 +124,7 @@
       });
 
       toast.success("Profile updated successfully.");
-      onProfileUpdated?.((updated as any).user || updated);
+      onProfileUpdated?.(updated);
       newPassword = "";
       confirmPassword = "";
       currentPassword = "";
@@ -135,14 +139,13 @@
   async function handleLogout() {
     isLoggingOut = true;
     try {
-      await api.auth.logout();
+      await onLogout?.();
     } catch {
       // Clear client session even if API call fails
     } finally {
       isLoggingOut = false;
       open = false;
       toast.success("Signed out successfully.");
-      onLogout?.();
     }
   }
 </script>
@@ -150,7 +153,7 @@
 <Dialog.Root bind:open>
   <Dialog.Content class="sm:max-w-lg p-0 overflow-hidden">
     <!-- Header -->
-    <div class="px-6 pt-6 pb-4 border-b border-border bg-card">
+    <div class="px-6 pt-6 pb-4 border-b border-border bg-card pr-12">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2.5">
           <div class="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
@@ -320,6 +323,18 @@
       {:else}
         <!-- System & Demo Mode Tab -->
         <div class="flex flex-col gap-4">
+          {#if currentUser?.role === "receptionist"}
+            <div class="rounded-lg border p-3">
+              <p class="text-xs text-muted-foreground mb-2">Create doctor or receptionist accounts for this clinic.</p>
+              <Button variant="outline" size="sm" onclick={() => { open = false; onRegisterStaff?.(); }}>Register staff</Button>
+            </div>
+          {/if}
+          {#if demoMode}
+            <div class="rounded-lg border p-3">
+              <p class="text-xs text-muted-foreground mb-2">Refresh sample patients and appointments for today. Demo staff profiles are kept.</p>
+              <Button variant="outline" size="sm" onclick={() => { open = false; onResetDemo?.(); }}>Reset demo data</Button>
+            </div>
+          {/if}
           <!-- Demo Mode Status Card -->
           <div class="rounded-xl border border-primary/20 bg-primary/5 p-4 flex items-start justify-between gap-4">
             <div class="flex flex-col gap-1">

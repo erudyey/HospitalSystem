@@ -42,11 +42,13 @@
   } from "lucide-svelte";
 
   interface Props {
+    readOnly?: boolean;
     isRegisterDialogOpen?: boolean;
     onSelectPatientForBooking?: (patient: Patient) => void;
   }
 
   let {
+    readOnly = false,
     isRegisterDialogOpen = $bindable(false),
     onSelectPatientForBooking,
   }: Props = $props();
@@ -83,8 +85,8 @@
   let isDeleteDialogOpen = $state(false);
   let patientForDelete = $state<Patient | null>(null);
 
-  async function loadPatients() {
-    isLoading = true;
+  async function loadPatients(silent = false) {
+    if (!silent) isLoading = true;
     errorMessage = null;
     try {
       patients = await api.listPatients();
@@ -92,7 +94,7 @@
       const e = err as ApiError;
       errorMessage = e.message || "Failed to load patient records.";
     } finally {
-      isLoading = false;
+      if (!silent) isLoading = false;
     }
   }
 
@@ -195,6 +197,7 @@
   }
 
   function openRegisterDialog() {
+    if (readOnly) return;
     fullName = "";
     contact = "";
     age = "";
@@ -204,6 +207,7 @@
 
   async function handleRegister(e: SubmitEvent) {
     e.preventDefault();
+    if (readOnly) return;
     formErrors = {};
 
     const trimmedName = fullName.trim();
@@ -254,7 +258,16 @@
   }
 
   onMount(() => {
-    loadPatients();
+    void loadPatients();
+    const refresh = () => {
+      if (!document.hidden && !isSubmitting && !isRegisterDialogOpen && !isEditDialogOpen && !isDeleteDialogOpen) void loadPatients(true);
+    };
+    const timer = setInterval(refresh, 5000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   });
 </script>
 
@@ -349,7 +362,7 @@
         variant="outline"
         size="sm"
         class="h-9 px-3 cursor-pointer"
-        onclick={loadPatients}
+        onclick={() => loadPatients()}
         disabled={isLoading}
       >
         {#if isLoading}
@@ -359,10 +372,12 @@
         {/if}
         <span class="sr-only">Refresh</span>
       </Button>
+      {#if !readOnly}
       <Button onclick={openRegisterDialog} size="sm" class="h-9 px-3 cursor-pointer">
         <UserPlus class="size-3.5 mr-1.5" />
         <span>Register Patient</span>
       </Button>
+      {/if}
     </div>
   </div>
 
@@ -446,7 +461,7 @@
                 {/if}
               </button>
             </TableHead>
-            <TableHead class="w-16 text-right">Actions</TableHead>
+            {#if !readOnly}<TableHead class="w-16 text-right">Actions</TableHead>{/if}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -545,7 +560,7 @@
                 </TableCell>
 
                 <!-- Three-Dots Dropdown Menu -->
-                <TableCell class="text-right">
+                {#if !readOnly}<TableCell class="text-right">
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger class="inline-flex items-center justify-center rounded-md size-8 hover:bg-muted text-muted-foreground hover:text-foreground transition-colors cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring">
                       <MoreHorizontal class="size-4" />
@@ -571,6 +586,7 @@
                     </DropdownMenu.Content>
                   </DropdownMenu.Root>
                 </TableCell>
+                {/if}
               </TableRow>
             {/each}
           {/if}

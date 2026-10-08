@@ -94,7 +94,6 @@
     try {
       await api.clinical.createMedicalRecord({
         patient_id: appointment.patient_id,
-        doctor_id: activeDoctor.id,
         appointment_id: appointment.id,
         diagnosis: trimmedDiagnosis,
         symptoms: symptoms.trim(),
@@ -201,7 +200,7 @@
     </div>
 
     <!-- Scrollable SOAP Form -->
-    <form onsubmit={handleCompleteConsultation} class="flex-1 overflow-y-auto px-6 pt-5 pb-4 flex flex-col gap-4">
+    <form id="consultationForm" onsubmit={handleCompleteConsultation} class="flex-1 overflow-y-auto px-6 pt-5 pb-4 flex flex-col gap-4">
       <!-- 1. Symptoms (Subjective) -->
       <div>
         <label for="soapSymptoms" class="block text-xs font-semibold text-foreground mb-1.5">
@@ -307,7 +306,7 @@
 
       <Button
         type="submit"
-        onclick={handleCompleteConsultation}
+        form="consultationForm"
         disabled={isSubmitting || !diagnosis.trim()}
         class="cursor-pointer font-medium"
       >

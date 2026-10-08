@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import * as Dialog from "$lib/components/ui/dialog";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -30,6 +31,8 @@
     isSwitchingMode?: boolean;
     onSwitchMode?: () => void;
     onSuccess?: (user: StaffUser) => void;
+    registerOnly?: boolean;
+    onStaffCreated?: (user: StaffUser) => void;
   }
 
   let {
@@ -38,10 +41,40 @@
     isSwitchingMode = false,
     onSwitchMode,
     onSuccess,
+    registerOnly = false,
+    onStaffCreated,
   }: Props = $props();
 
   type AuthTab = "login" | "register";
   let activeTab = $state<AuthTab>("login");
+  let initialSetupRequired = $state(false);
+
+  $effect(() => {
+    if (open) {
+      untrack(() => {
+        activeTab = registerOnly ? "register" : "login";
+        loginUsername = "";
+        loginPassword = "";
+        keepSignedIn = false;
+        regUsername = "";
+        regPassword = "";
+        regPasswordConfirmation = "";
+        regFullName = "";
+        regRole = "receptionist";
+        regSpecialty = "";
+        regLicenseNumber = "";
+        regContact = "";
+        formErrors = {};
+        void api.auth.status().then((status) => {
+          initialSetupRequired = status.initial_setup_required;
+          if (status.initial_setup_required && !registerOnly) {
+            activeTab = "register";
+            regRole = "receptionist";
+          }
+        }).catch((err) => { formErrors = (err as ApiError).fields; });
+      });
+    }
+  });
 
   // Login form
   let loginUsername = $state("");
@@ -100,6 +133,7 @@
     isSubmitting = true;
     try {
       const session = await api.auth.login(trimmedUser, loginPassword, keepSignedIn);
+      if (keepSignedIn && !session.remembered) toast.info("Signed in for this session. Secure session storage is unavailable.");
       toast.success(`Welcome back, ${session.user.full_name || session.user.username}!`);
       open = false;
       onSuccess?.(session.user);
@@ -126,7 +160,7 @@
 
     isSubmitting = true;
     try {
-      await api.auth.register({
+      const staff = await api.auth.register({
         username: trimmedUser,
         password: regPassword,
         password_confirmation: regPasswordConfirmation,
@@ -137,6 +171,12 @@
         contact: regContact.trim(),
       });
 
+      if (registerOnly) {
+        toast.success("Staff account created for " + staff.full_name + ".");
+        open = false;
+        onStaffCreated?.(staff);
+        return;
+      }
       // Automatically sign in the newly registered staff user to establish session
       const session = await api.auth.login(trimmedUser, regPassword, keepSignedIn);
       toast.success(
@@ -156,17 +196,17 @@
 <Dialog.Root bind:open>
   <Dialog.Content class="sm:max-w-md p-0 overflow-hidden">
     <!-- Modal Header -->
-    <div class="px-6 pt-6 pb-4 border-b border-border bg-card">
+    <div class="px-6 pt-6 pb-4 border-b border-border bg-card pr-12">
       <div class="flex items-center gap-2.5">
         <div class="size-8 rounded-lg bg-muted text-foreground flex items-center justify-center">
           <ShieldCheck class="size-4.5 text-muted-foreground" />
         </div>
         <div>
           <Dialog.Title class="text-base font-semibold">
-            Hospital System Authentication
+            {registerOnly ? "Register staff" : initialSetupRequired ? "Initial clinic setup" : "Hospital System Authentication"}
           </Dialog.Title>
           <Dialog.Description class="text-xs text-muted-foreground">
-            Sign in with your staff account or register new clinical personnel.
+            {registerOnly ? "Create an account while keeping your receptionist session." : initialSetupRequired ? "Create the first receptionist account to set up the clinic." : "Sign in with your staff account."}
           </Dialog.Description>
         </div>
       </div>
@@ -183,8 +223,8 @@
           }}
         >
           <Tabs.List class="w-full grid grid-cols-2">
-            <Tabs.Trigger value="login" class="text-xs">Sign In</Tabs.Trigger>
-            <Tabs.Trigger value="register" class="text-xs">Register Staff</Tabs.Trigger>
+            {#if !registerOnly}<Tabs.Trigger value="login" class="text-xs">Sign In</Tabs.Trigger>{/if}
+            {#if registerOnly || initialSetupRequired}<Tabs.Trigger value="register" class="text-xs">Register Staff</Tabs.Trigger>{/if}
           </Tabs.List>
         </Tabs.Root>
       </div>
@@ -192,7 +232,7 @@
 
     <!-- Modal Body -->
     <div class="px-6 py-4">
-      {#if onSwitchMode}
+      {#if onSwitchMode && !registerOnly}
         <div class="mb-4 rounded-lg border border-border p-3">
           <p class="text-xs text-muted-foreground mb-2">
             {demoMode ? "You are using the separate demo database." : "Explore with sample accounts in a separate demo database."}
@@ -218,6 +258,7 @@
                   variant="outline"
                   size="sm"
                   onclick={() => chooseDemoAccount(account)}
+                  disabled={isSubmitting}
                   class="h-auto py-1.5 px-2.5 justify-between font-normal text-[11px] text-left border bg-background hover:bg-muted/70 cursor-pointer"
                 >
                   <span class="font-medium text-foreground truncate">{account.full_name}{account.specialty ? ` (${account.specialty})` : ""}</span>
@@ -311,14 +352,6 @@
                 disabled={isSubmitting}
                 class="h-8 text-xs"
               />
-              <Input
-                id="regPassConfirm"
-                type="password"
-                placeholder="Confirm password"
-                bind:value={regPasswordConfirmation}
-                disabled={isSubmitting}
-                class="h-8 text-xs mt-2"
-              />
             </div>
             <div>
               <label for="regPass" class="block text-xs font-medium text-foreground mb-1">
@@ -333,6 +366,13 @@
                 class="h-8 text-xs"
               />
             </div>
+          </div>
+
+          <div>
+            <label for="regPassConfirm" class="block text-xs font-medium text-foreground mb-1">
+              Confirm password <span class="text-destructive">*</span>
+            </label>
+            <Input id="regPassConfirm" type="password" bind:value={regPasswordConfirmation} disabled={isSubmitting} class="h-8 text-xs" />
           </div>
 
           <div>
@@ -360,7 +400,7 @@
               disabled={isSubmitting}
             >
               <option value="receptionist">Receptionist / Front Desk</option>
-              <option value="doctor">Physician / Doctor</option>
+              {#if registerOnly || !initialSetupRequired}<option value="doctor">Physician / Doctor</option>{/if}
             </select>
           </div>
 

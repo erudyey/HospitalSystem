@@ -130,7 +130,7 @@
     pollInterval = setInterval(() => {
       // Pause polling if consultation dialog is open or window is blurred
       if (isConsultationOpen || document.hidden) return;
-      loadDoctorQueue(true);
+      void Promise.all([loadDoctorQueue(true), loadMyPatients()]);
     }, 5000);
   }
 
@@ -160,14 +160,13 @@
     isChartOpen = true;
   }
 
-  function openChartFromAppointment(app: Appointment) {
-    selectedPatientForChart = {
-      id: app.patient_id,
-      full_name: app.patient_name,
-      contact: "",
-      age: 0,
-    };
-    isChartOpen = true;
+  async function openChartFromAppointment(app: Appointment) {
+    try {
+      const patient = await api.getPatient(app.patient_id);
+      openPatientChart(patient);
+    } catch (err) {
+      toast.error((err as ApiError).message || "Unable to load the patient chart.");
+    }
   }
 
   let filteredMyPatients = $derived.by(() => {
@@ -208,7 +207,7 @@
 
     const handleVisibilityChange = () => {
       if (!document.hidden && !isConsultationOpen) {
-        loadDoctorQueue(true);
+        void Promise.all([loadDoctorQueue(true), loadMyPatients()]);
       }
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -586,7 +585,7 @@
                   <TableCell class="text-xs text-muted-foreground">{p.age} yrs</TableCell>
                   <TableCell class="text-xs text-muted-foreground font-mono">{p.contact || "--"}</TableCell>
                   <TableCell class="text-center text-xs font-medium text-foreground">
-                    {p.appointment_count || 1}
+                    {p.doctor_appointment_count ?? 0}
                   </TableCell>
                   <TableCell class="text-right">
                     <Button
