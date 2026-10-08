@@ -145,7 +145,7 @@ On macOS / Linux:
 ./run.sh test --quick
 ```
 
-> **Note on Test Performance**: Automated tests execute against in-memory SQLite (`TESTING=True`) with 1-round PBKDF2 password hashing in test settings, running all 76 unit and integration tests in ~0.8 seconds without touching user data directories.
+> **Note on Test Performance**: Automated tests execute against in-memory SQLite (`TESTING=True`) with 1-round PBKDF2 password hashing in test settings, running the backend unit and integration suite without touching user data directories.
 
 ### Run Python Unit Tests Only
 
@@ -163,7 +163,7 @@ On macOS / Linux:
 .venv/bin/pytest backend/tests/ -v
 ```
 
-### Run Strict Python Type Checking
+### Run Python Type Checking
 
 Execute basedpyright across all backend and desktop Python modules:
 
@@ -329,10 +329,10 @@ cross-platform desktop releases:
   1. Sets up `uv` package manager with persistent dependency caching.
   2. Verifies zero em/en dash policy across code and documentation.
   3. Verifies Ruff code formatting and linting rules.
-  4. Runs strict Python static type checking with `basedpyright`.
+  4. Runs Python static type checking with `basedpyright`.
   5. Validates GitHub workflow formatting with Deno (`deno fmt`).
   6. Compiles Svelte 5 frontend with Deno 2.
-  7. Executes the full 76-test unit and integration test suite with `pytest`.
+  7. Executes the full backend unit and integration test suite with `pytest`.
 
 ### Release Workflow (`.github/workflows/release.yml`)
 

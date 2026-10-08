@@ -18,6 +18,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
+$PSNativeCommandUseErrorActionPreference = $true
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $RepoRoot
 
@@ -25,13 +26,19 @@ $VenvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"
 $VenvPytest = Join-Path $RepoRoot ".venv\Scripts\pytest.exe"
 $VenvRuff = Join-Path $RepoRoot ".venv\Scripts\ruff.exe"
 
+$savedEnvironment = @{}
+foreach ($name in @("TESTING", "DEBUG", "DJANGO_SETTINGS_MODULE")) {
+    $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, "Process")
+}
+
+try {
 switch ($Command) {
     "setup" {
         Write-Host "Setting up project dependencies..." -ForegroundColor Cyan
         if (-not (Test-Path $VenvPython)) {
             uv venv .venv
         }
-        uv pip install --python $VenvPython django waitress pywebview whitenoise pytest pytest-django ruff django-stubs pyinstaller basedpyright
+        uv pip install --python $VenvPython -e ".[dev]"
         Push-Location "$RepoRoot\frontend"
         try {
             deno install
@@ -45,6 +52,7 @@ switch ($Command) {
         Write-Host "Starting development servers (Vite + Django)..." -ForegroundColor Cyan
         $env:DJANGO_SETTINGS_MODULE = "backend.config.settings"
         $env:DEBUG = "True"
+        $env:TESTING = $null
         
         # Migrate local dev DB
         & $VenvPython "$RepoRoot\backend\manage.py" migrate
@@ -65,6 +73,8 @@ switch ($Command) {
     }
 
     "desktop" {
+        $env:TESTING = $null
+        $env:DEBUG = $null
         Write-Host "Launching HospitalSystem Desktop..." -ForegroundColor Cyan
         # Ensure frontend is built if dist does not exist
         if (-not (Test-Path "$RepoRoot\frontend\dist\index.html")) {
@@ -81,7 +91,7 @@ switch ($Command) {
 
     "test" {
         if (-not $Quick) {
-            Write-Host "Running basedpyright strict type checks..." -ForegroundColor Cyan
+            Write-Host "Running basedpyright type checks..." -ForegroundColor Cyan
             & $VenvPython -m basedpyright
             Write-Host ""
         }
@@ -116,5 +126,10 @@ switch ($Command) {
         & $VenvPython "$RepoRoot\package.py" @packageArgs
         Write-Host "`nRunning automated standalone verification..." -ForegroundColor Cyan
         & $VenvPython "$RepoRoot\desktop\verify_bundle.py"
+    }
+}
+} finally {
+    foreach ($name in $savedEnvironment.Keys) {
+        [Environment]::SetEnvironmentVariable($name, $savedEnvironment[$name], "Process")
     }
 }

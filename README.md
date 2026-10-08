@@ -121,7 +121,7 @@ On macOS / Linux:
 
 ### Run Automated Tests and Type Checks
 
-Run full quality gate (`basedpyright` strict type check + full `pytest` suite):
+Run backend tests and the configured Python type check:
 
 On Windows:
 
@@ -241,7 +241,7 @@ HospitalSystem/
 ├── package.py                # Standalone PyInstaller build script
 ├── desktop.spec              # PyInstaller Windows/macOS build specification
 ├── pyproject.toml            # Ruff linter, formatter, and pytest configuration
-├── pyrightconfig.json        # basedpyright strict type configuration
+├── pyrightconfig.json        # basedpyright type configuration
 ├── run.ps1                   # Windows PowerShell task runner
 └── run.sh                    # macOS and Linux Bash task runner
 ```

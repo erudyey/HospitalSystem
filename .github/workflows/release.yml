@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref_name || github.ref }}
+  group: release-${{ github.event.inputs.tag_name || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -24,27 +24,37 @@ jobs:
     runs-on: windows-latest
     outputs:
       tag_name: ${{ steps.resolve-tag.outputs.tag_name }}
+      commit_sha: ${{ steps.release-commit.outputs.commit_sha }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Resolve and validate tag name
         id: resolve-tag
         shell: bash
+        env:
+          REQUESTED_TAG: ${{ github.event.inputs.tag_name }}
         run: |
-          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
-            TAG="${{ github.event.inputs.tag_name }}"
+          if [ -n "$REQUESTED_TAG" ]; then
+            TAG="$REQUESTED_TAG"
           else
             TAG="${GITHUB_REF#refs/tags/}"
           fi
 
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?(\+[A-Za-z0-9.-]+)?$ ]]; then
             echo "::error::Release tag '$TAG' is invalid. Must follow SemVer pattern (e.g. v0.0.1, v1.0.0-rc1)."
             exit 1
           fi
 
           echo "tag_name=$TAG" >> $GITHUB_OUTPUT
           echo "Resolved release tag: $TAG"
+
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ steps.resolve-tag.outputs.tag_name }}
+
+      - name: Pin verified release commit
+        id: release-commit
+        shell: bash
+        run: echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -74,7 +84,7 @@ jobs:
           uv run ruff check backend desktop package.py
           uv run ruff format --check backend desktop package.py
 
-      - name: Strict Python Type Check
+      - name: Python Type Check
         run: uv run python -m basedpyright
 
       - name: Check Workflow Formatting
@@ -96,6 +106,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.pre-flight-check.outputs.commit_sha }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -148,6 +160,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.pre-flight-check.outputs.commit_sha }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -202,6 +216,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.pre-flight-check.outputs.commit_sha }}
 
       - name: Download release assets
         uses: actions/download-artifact@v4

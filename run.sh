@@ -55,6 +55,7 @@ case "$COMMAND" in
         echo "Starting development servers (Vite + Django)..."
         export DJANGO_SETTINGS_MODULE="backend.config.settings"
         export DEBUG="True"
+        unset TESTING
 
         "$VENV_PYTHON" "$REPO_ROOT/backend/manage.py" migrate
 
@@ -76,7 +77,7 @@ case "$COMMAND" in
 
     test)
         if [ "$OPTION" != "--quick" ]; then
-            echo "Running basedpyright strict type checks..."
+            echo "Running basedpyright type checks..."
             "$VENV_PYTHON" -m basedpyright
             echo ""
         fi
