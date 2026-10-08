@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Release tag (e.g. v0.0.1)"
+        description: "Release tag matching pyproject.toml (e.g. v0.1.0)"
         required: true
-        default: "v0.0.1"
+        default: "v0.1.0"
 
 permissions:
   contents: write
@@ -38,8 +38,8 @@ jobs:
             TAG="${GITHUB_REF#refs/tags/}"
           fi
 
-          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?(\+[A-Za-z0-9.-]+)?$ ]]; then
-            echo "::error::Release tag '$TAG' is invalid. Must follow SemVer pattern (e.g. v0.0.1, v1.0.0-rc1)."
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[A-Za-z0-9.-]+)?(\+[A-Za-z0-9.-]+)?$ ]]; then
+            echo "::error::Release tag '$TAG' is invalid. Must follow SemVer pattern (e.g. v0.1.0, v1.0.0-rc1)."
             exit 1
           fi
 
@@ -74,6 +74,12 @@ jobs:
         run: |
           uv venv .venv
           uv pip install -e ".[dev]"
+
+      - name: Check release package version
+        env:
+          RELEASE_TAG: ${{ steps.resolve-tag.outputs.tag_name }}
+        run: |
+          uv run python -c "import os, sys, tomllib; from packaging.version import Version; tag = os.environ['RELEASE_TAG']; version = tomllib.loads(open('pyproject.toml', encoding='utf-8').read())['project']['version']; matches = Version(tag.removeprefix('v')) == Version(version); print(f'Release tag {tag}; package version {version}'); sys.exit(0 if matches else 'Release tag must match the package version in pyproject.toml.')"
 
       - name: Zero Em/En Dash Compliance
         run: |
@@ -258,7 +264,7 @@ jobs:
           | Platform | File | SHA-256 Checksum |
           | :--- | :--- | :--- |
           | **Windows (x64)** | {b}{win_file.name}{b} | {b}{win_hash}{b} |
-          | **macOS (Apple Silicon / Intel)** | {b}{mac_file.name}{b} | {b}{mac_hash}{b} |
+          | **macOS** | {b}{mac_file.name}{b} | {b}{mac_hash}{b} |
           | **Integrity Hashes** | {b}SHA256SUMS.txt{b} | See attached asset |
 
           ### Quick Start
