@@ -93,6 +93,25 @@ export interface ApiError {
   fields: Record<string, string[]>;
 }
 
+export interface ReportCounters {
+  appointments: number;
+  patients: number;
+  scheduled: number;
+  checked_in: number;
+  in_consultation: number;
+  completed: number;
+  cancelled: number;
+}
+
+export interface DailyReport {
+  date: string;
+  generated_at: string;
+  mode: "clinic" | "demo";
+  scope: "clinic" | "doctor";
+  totals: ReportCounters;
+  doctors: (ReportCounters & { doctor_id: number | null; doctor_name: string })[];
+}
+
 function getCookie(name: string): string | null {
   const match = document.cookie.match(
     new RegExp("(^|;\\s*)(" + name + ")=([^;]*)"),
@@ -149,13 +168,14 @@ const nativeHost = () => (window as unknown as {
     load_remembered_token?: () => Promise<string>;
     save_remembered_token?: (token: string) => Promise<boolean>;
     clear_remembered_token?: () => Promise<void>;
+    save_report_csv?: (filename: string, content: string) => Promise<{ status: "saved" | "cancelled" }>;
   } };
 }).pywebview?.api;
 
 export function getUserToken(): string { return userToken; }
 
 async function readyNativeHost() {
-  if (nativeHost()?.load_remembered_token) return nativeHost();
+  if (nativeHost()?.load_remembered_token || nativeHost()?.save_report_csv) return nativeHost();
   if (!(window as unknown as { __DESKTOP_HOST__?: boolean }).__DESKTOP_HOST__) return undefined;
   await new Promise<void>((resolve) => {
     const done = () => {
@@ -167,6 +187,27 @@ async function readyNativeHost() {
     window.addEventListener("pywebviewready", done, { once: true });
   });
   return nativeHost();
+}
+
+export async function saveCsvFile(filename: string, content: string): Promise<"saved" | "cancelled" | "downloaded"> {
+  const host = await readyNativeHost();
+  if (host?.save_report_csv) {
+    const result = await host.save_report_csv(filename, content);
+    return result.status;
+  }
+  if ((window as unknown as { __DESKTOP_HOST__?: boolean }).__DESKTOP_HOST__) {
+    throw new Error("The desktop Save dialog is unavailable. Please reopen the app and try again.");
+  }
+  const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  try { link.click(); } finally {
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  return "downloaded";
 }
 
 export async function restoreRememberedToken(): Promise<string> {
@@ -288,6 +329,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  reports: {
+    daily: (date?: string) => request<DailyReport>(
+      "/api/reports/daily/" + (date === undefined ? "" : "?" + new URLSearchParams({ date })),
+    ),
+  },
   /** Initialize connection and set CSRF cookie */
   healthCheck: () =>
     request<{ status: string; version: string; mode: "clinic" | "demo"; timezone: string; now: string }>(

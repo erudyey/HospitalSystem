@@ -382,6 +382,13 @@ def main() -> None:
             if window is not None:
                 window.destroy()
 
+        def save_report_csv(self, filename: str, content: str) -> dict[str, str]:
+            if window is None:
+                raise RuntimeError("The desktop window is unavailable.")
+            from desktop.reports import save_report_csv
+
+            return save_report_csv(window, filename, content)
+
     api = DesktopHostApi()
 
     try:

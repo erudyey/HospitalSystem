@@ -15,6 +15,7 @@
   import AppointmentsWorkspace from "./components/AppointmentsWorkspace.svelte";
   import DoctorWorkspace from "./components/DoctorWorkspace.svelte";
   import WelcomeBanner from "./components/WelcomeBanner.svelte";
+  import DailyReportWorkspace from "./components/DailyReportWorkspace.svelte";
   import AuthModal from "./components/AuthModal.svelte";
   import SettingsDialog from "./components/SettingsDialog.svelte";
   import ToastContainer from "$lib/components/ToastContainer.svelte";
@@ -35,9 +36,10 @@
     UserCheck,
     Lock,
     Loader2,
+    ClipboardList,
   } from "lucide-svelte";
 
-  type Workspace = "patients" | "appointments" | "doctor_workspace";
+  type Workspace = "patients" | "appointments" | "doctor_workspace" | "daily_report";
   let activeWorkspace = $state<Workspace>("appointments");
   let selectedPatientForBooking = $state<Patient | null>(null);
 
@@ -330,6 +332,17 @@
       {/if}
     </div>
 
+    {#if currentUser}
+      <div class="px-3 pb-3">
+        <Button variant={activeWorkspace === "daily_report" ? "secondary" : "ghost"} size="sm"
+          onclick={() => activeWorkspace = "daily_report"}
+          class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs">
+          <ClipboardList data-icon="inline-start" />
+          Daily report
+        </Button>
+      </div>
+    {/if}
+
     <!-- User / Session Footer (Sidebar Bottom) -->
     <div class="p-3 border-t border-border mt-auto flex flex-col gap-2">
       {#if currentUser}
@@ -400,6 +413,8 @@
         <span class="font-semibold text-foreground">
           {#if activeWorkspace === "doctor_workspace"}
             Doctor Workspace (Physician Dashboard)
+          {:else if activeWorkspace === "daily_report"}
+            Daily report
           {:else if activeWorkspace === "patients"}
             Patients Directory
           {:else}
@@ -496,6 +511,10 @@
           </Button>
           <p class="text-xs text-muted-foreground mt-2">Demo data is separate from clinic records.</p>
         </div>
+      {:else if activeWorkspace === "daily_report"}
+        {#key currentUser.id}
+          <DailyReportWorkspace user={currentUser} {clinicNow} />
+        {/key}
       {:else if activeWorkspace === "doctor_workspace" && currentUser?.role === "doctor"}
         {#key currentUser.id}
           <DoctorWorkspace activeDoctor={currentUser} />

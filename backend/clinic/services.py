@@ -51,6 +51,72 @@ def clinic_context() -> dict[str, str]:
     return {"timezone": getattr(tz, "key", None) or str(tz), "now": clinic_now().isoformat()}
 
 
+def get_daily_report(user: StaffUser, date_str: str | None = None) -> dict[str, Any]:
+    """Summarize a date's current schedule within the authenticated staff scope."""
+    now = clinic_now()
+    target_date = now.date()
+    if date_str is not None:
+        try:
+            target_date = date.fromisoformat(date_str)
+            if target_date.isoformat() != date_str:
+                raise ValueError
+        except (ValueError, TypeError) as exc:
+            raise ValidationError({"date": "Choose a valid date in YYYY-MM-DD format."}) from exc
+
+    if not user.is_active or user.role not in (StaffRole.RECEPTIONIST, StaffRole.DOCTOR):
+        raise ValidationError({"auth": "An active receptionist or doctor account is required."})
+
+    appointments = Appointment.objects.filter(app_date=target_date)
+    if user.role == StaffRole.DOCTOR:
+        appointments = appointments.filter(doctor_id=user.id)
+    status_keys = {
+        AppointmentStatus.SCHEDULED: "scheduled",
+        AppointmentStatus.CHECKED_IN: "checked_in",
+        AppointmentStatus.IN_CONSULTATION: "in_consultation",
+        AppointmentStatus.COMPLETED: "completed",
+        AppointmentStatus.CANCELLED: "cancelled",
+    }
+
+    def counters() -> dict[str, int]:
+        return dict.fromkeys(["appointments", "patients", *status_keys.values()], 0)
+
+    totals = counters()
+    doctors: dict[int | None, dict[str, Any]] = {}
+    patients: set[int] = set()
+    doctor_patients: dict[int | None, set[int]] = {}
+    # One query keeps every subtotal within the same schedule snapshot.
+    for row in appointments.values("doctor_id", "doctor__full_name", "patient_id", "status"):
+        doctor_id = row["doctor_id"]
+        if doctor_id not in doctors:
+            doctors[doctor_id] = {
+                "doctor_id": doctor_id,
+                "doctor_name": row["doctor__full_name"] or "Unassigned",
+                **counters(),
+            }
+            doctor_patients[doctor_id] = set()
+        patients.add(row["patient_id"])
+        doctor_patients[doctor_id].add(row["patient_id"])
+        key = status_keys[row["status"]]
+        totals["appointments"] += 1
+        totals[key] += 1
+        doctors[doctor_id]["appointments"] += 1
+        doctors[doctor_id][key] += 1
+    totals["patients"] = len(patients)
+    for doctor_id, patient_ids in doctor_patients.items():
+        doctors[doctor_id]["patients"] = len(patient_ids)
+    return {
+        "date": target_date.isoformat(),
+        "generated_at": now.isoformat(),
+        "mode": "demo" if os.environ.get("HOSPITAL_MODE") == "demo" else "clinic",
+        "scope": "doctor" if user.role == StaffRole.DOCTOR else "clinic",
+        "totals": totals,
+        "doctors": sorted(
+            doctors.values(),
+            key=lambda doctor: (doctor["doctor_name"].casefold(), doctor["doctor_id"] or 0),
+        ),
+    }
+
+
 def _appointment_snapshot(appointment: Appointment) -> dict[str, str | int | None]:
     return {
         "doctor_id": appointment.doctor_id,

@@ -797,6 +797,22 @@ def doctor_queue(request: HttpRequest) -> JsonResponse:
 
 
 @require_GET
+def daily_report(request: HttpRequest) -> JsonResponse:
+    """Return a role-scoped snapshot of the selected date's schedule."""
+    user = get_authenticated_user(request)
+    if not user:
+        return JsonResponse(
+            format_error("UNAUTHENTICATED", "Active session required. Please sign in."),
+            status=401,
+        )
+    try:
+        report = services.get_daily_report(user, request.GET.get("date"))
+    except ValidationError as err:
+        return validation_error_response(err, "Daily report could not be generated.")
+    return JsonResponse(report)
+
+
+@require_GET
 def doctor_patients(request: HttpRequest) -> JsonResponse:
     """Return the roster of patients under the authenticated physician's care."""
     user = get_authenticated_user(request)
