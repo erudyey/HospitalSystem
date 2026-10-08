@@ -7,6 +7,7 @@
   import * as Tabs from "$lib/components/ui/tabs";
   import {
     api,
+    normalizeApiError,
     type StaffUser,
     type StaffRole,
     type UserSession,
@@ -71,7 +72,7 @@
             activeTab = "register";
             regRole = "receptionist";
           }
-        }).catch((err) => { formErrors = (err as ApiError).fields; });
+        }).catch((err) => { formErrors = normalizeApiError(err as ApiError).fields; });
       });
     }
   });

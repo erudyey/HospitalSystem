@@ -59,6 +59,12 @@ Deno.test("empty error fields and hidden validation fields always produce a visi
   );
 });
 
+Deno.test("network failures keep sign-in error fields renderable", () => {
+  const error = normalizeApiError(new TypeError("Failed to fetch"));
+  equal(error.fields.general, ["Failed to fetch"]);
+  equal(error.message, "Failed to fetch");
+});
+
 Deno.test("logout waits for native cleanup before a token can be restored", async () => {
   const { host } = setupHost();
   await setUserToken("synthetic-staff-session", true);
