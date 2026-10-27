@@ -1,4 +1,4 @@
-# Hospital Management System
+# CareRegistry: Hospital Management System
 
 > Local-first Windows and macOS desktop application for patient registration and
 > appointment scheduling, built with Svelte 5, `shadcn-svelte`, Tailwind CSS,
@@ -18,7 +18,7 @@ Daily reports show a selected date's current schedule and can be saved as CSV
 with doctor subtotals and an independently calculated overall patient count.
 Desktop exports use a native Save dialog; browser development uses a download.
 See [API contracts](docs/api-contracts.md) for the report's data and access rules.
-See the [v0.1.0 changelog](CHANGELOG.md) for this release's changes and verification scope.
+See the [v0.1.1 changelog](CHANGELOG.md) for this release's changes and verification scope.
 
 [![CI Status](https://github.com/erudyey/HospitalSystem/actions/workflows/ci.yml/badge.svg)](https://github.com/erudyey/HospitalSystem/actions/workflows/ci.yml)
 [![Type Checked with basedpyright](https://img.shields.io/badge/types-basedpyright-blue.svg)](https://github.com/DetachHead/basedpyright)
@@ -148,9 +148,28 @@ Demo edits persist between launches. To refresh old sample dates, use
 **Settings > System > Reset demo data**. This replaces demo clinical data,
 retains staff profiles, and signs out demo sessions.
 
-For a fresh clinic, register the first receptionist on the sign-in screen.
-That receptionist can add physicians through **Settings > System > Register staff**
-while staying signed in.
+For a fresh clinic, register the first receptionist on the sign-in screen. After
+setup, staff can choose **Create account** to register as a receptionist or
+doctor. A signed-in receptionist can also add staff through **Settings > System
+& Demo Mode > Register staff**, without signing out.
+
+Fresh demo databases contain four sample accounts: `maria` (receptionist),
+`dreyes`, `dsantos`, and `dtan` (doctors). Their initial password is
+`password123`. The demo account chooser signs in without typing a password.
+Profile and password changes persist; resetting demo data retains staff profiles.
+
+Desktop data lives under `%LOCALAPPDATA%\HospitalSystem\` on Windows or
+`~/Library/Application Support/HospitalSystem/` on macOS. The active database
+path appears under **Settings > System & Demo Mode** after signing in. Clinic
+data is in `clinic.sqlite3`; demo data is in `clinic_demo.sqlite3`. SQLite may
+also create `-wal` and `-shm` companion files. The folder contains diagnostic
+`launcher.log` and runtime `app_state.json`; remembered login sessions use the
+operating system's secure credential store when available. Close the app before
+copying the entire data folder for a backup. Development databases and a custom
+`HOSPITAL_DATA_DIR` are separate from these default desktop locations.
+
+The changes described above are included in v0.1.1. The earlier v0.1.0
+release retains its original registration and interface behavior.
 
 ---
 
@@ -240,7 +259,8 @@ On macOS / Linux:
   (`Ctrl+K` on Windows, `Cmd+K` on macOS, or `/`).
 - **Appointments Workspace**: Schedule appointments by selecting a patient,
   doctor name, and calendar date. Tracks visit status through a controlled
-  lifecycle (`Scheduled`, `Completed`, `Cancelled`) with interactive column
+  lifecycle (`Scheduled`, `Checked In`, `In Consultation`, `Completed`,
+  `Cancelled`) with interactive column
   sorting and active visit indicators.
 - **Offline-First Storage**: Saves clinical records directly to
   `%LOCALAPPDATA%\HospitalSystem\clinic.sqlite3` on Windows or

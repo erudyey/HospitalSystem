@@ -249,16 +249,16 @@
 
 <div class="h-screen w-full bg-background text-foreground flex flex-row selection:bg-accent selection:text-accent-foreground antialiased overflow-hidden min-h-0 min-w-0">
   <!-- Left Sidebar Navigation -->
-  <aside class="w-64 border-r border-border bg-card flex flex-col shrink-0 h-full select-none min-h-0">
+  <aside class="w-16 min-[1100px]:w-64 border-r border-border bg-card flex flex-col shrink-0 h-full select-none min-h-0">
     <!-- Clinic Brand Header -->
     <div class="px-4 h-14 border-b border-border flex items-center">
       <div class="flex items-center gap-2.5">
         <div class="size-7 rounded-lg bg-primary text-primary-foreground flex items-center justify-center shrink-0 shadow-xs">
           <SquarePlus class="size-4" />
         </div>
-        <div>
+        <div class="sr-only min-[1100px]:not-sr-only">
           <h1 class="text-sm font-semibold tracking-tight text-foreground leading-tight">
-            Hospital System
+            CareRegistry
           </h1>
           <p class="text-[10px] text-muted-foreground font-medium">Clinical Core</p>
         </div>
@@ -275,14 +275,14 @@
           class="w-full justify-center gap-2 text-xs font-medium cursor-pointer shadow-xs"
         >
           <UserPlus class="size-3.5" />
-          <span>+ Register Patient</span>
+          <span class="sr-only min-[1100px]:not-sr-only">Register Patient</span>
         </Button>
       </div>
     {/if}
 
     <!-- Navigation Workspace Switcher -->
     <div class="flex-1 py-3 px-2 flex flex-col gap-1 overflow-y-auto">
-      <p class="text-[11px] font-medium text-muted-foreground px-2.5 py-1">
+      <p class="hidden min-[1100px]:block text-[11px] font-medium text-muted-foreground px-2.5 py-1">
         Clinical Modules
       </p>
 
@@ -297,7 +297,7 @@
           class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer"
         >
           <Stethoscope data-icon="inline-start" />
-          <span>Doctor Workspace</span>
+          <span class="sr-only min-[1100px]:not-sr-only">Doctor Workspace</span>
         </Button>
 
         <Button
@@ -309,7 +309,7 @@
           class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer"
         >
           <Users data-icon="inline-start" />
-          <span>Patient Directory</span>
+          <span class="sr-only min-[1100px]:not-sr-only">Patient Directory</span>
         </Button>
 
       {:else}
@@ -323,7 +323,7 @@
           class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer"
         >
           <Calendar data-icon="inline-start" />
-          <span>Appointments & Triage</span>
+          <span class="sr-only min-[1100px]:not-sr-only">Appointments & Triage</span>
         </Button>
 
         <Button
@@ -335,7 +335,7 @@
           class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs cursor-pointer"
         >
           <Users data-icon="inline-start" />
-          <span>Patients Directory</span>
+          <span class="sr-only min-[1100px]:not-sr-only">Patients Directory</span>
         </Button>
       {/if}
     </div>
@@ -347,7 +347,7 @@
           onclick={() => activeWorkspace = "daily_report"}
           class="w-full justify-start gap-2.5 px-2.5 h-9 text-xs">
           <ClipboardList data-icon="inline-start" />
-          Daily report
+          <span class="sr-only min-[1100px]:not-sr-only">Daily report</span>
         </Button>
       </div>
     {/if}
@@ -365,7 +365,7 @@
             <div class="size-6 rounded-full bg-accent text-accent-foreground font-semibold text-[10px] flex items-center justify-center shrink-0 border border-clinic/20 transition-colors">
               {currentUser.full_name?.charAt(0) || currentUser.username.charAt(0).toUpperCase()}
             </div>
-            <div class="min-w-0">
+            <div class="sr-only min-[1100px]:not-sr-only min-w-0">
               <p class="font-semibold text-foreground truncate leading-tight group-hover:text-accent-foreground transition-colors">
                 {currentUser.full_name || currentUser.username}
               </p>
@@ -375,12 +375,12 @@
             </div>
           </div>
 
-          <div class="size-6 rounded-md flex items-center justify-center text-muted-foreground group-hover:text-foreground shrink-0">
+          <div class="hidden min-[1100px]:flex size-6 rounded-md items-center justify-center text-muted-foreground group-hover:text-foreground shrink-0">
             <Settings class="size-3.5" />
           </div>
         </button>
       {:else}
-        <div class="rounded-lg bg-muted/30 p-2 text-xs flex items-center justify-between border border-border/40">
+        <div class="hidden min-[1100px]:flex rounded-lg bg-muted/30 p-2 text-xs items-center justify-between border border-border/40">
           <div class="flex items-center gap-2 min-w-0">
             <div class="size-6 rounded-full bg-muted text-muted-foreground flex items-center justify-center shrink-0 border border-border/70">
               <Lock class="size-3" />
@@ -401,7 +401,7 @@
         </div>
       {/if}
 
-      <div class="flex items-center justify-between text-xs text-muted-foreground px-1">
+      <div class="hidden min-[1100px]:flex items-center justify-between text-xs text-muted-foreground px-1">
         <span class="inline-flex items-center gap-1.5 text-[11px]">
           <span class="size-1.5 rounded-full {isOnline ? 'bg-emerald-500' : 'bg-amber-500'}"></span>
           {isOnline ? "Core Online" : "Connecting..."}
@@ -416,10 +416,10 @@
     <!-- Top Bar Header -->
     <header class="border-b border-border bg-card/95 backdrop-blur shrink-0 z-40 h-14 flex items-center justify-between px-4 sm:px-6 shadow-xs min-w-0">
       <!-- Breadcrumb / Active Workspace Title -->
-      <div class="flex items-center gap-2 text-xs">
-        <span class="text-muted-foreground font-normal">Hospital System</span>
+      <div class="flex items-center gap-2 text-xs min-w-0 overflow-hidden">
+        <span class="text-muted-foreground font-normal shrink-0">CareRegistry</span>
         <span class="text-muted-foreground">/</span>
-        <span class="font-semibold text-foreground">
+        <span class="font-semibold text-foreground truncate">
           {#if activeWorkspace === "doctor_workspace"}
             Doctor Workspace (Physician Dashboard)
           {:else if activeWorkspace === "daily_report"}

@@ -203,59 +203,17 @@ agents must execute and pass the full 6-gate verification:
 
 ---
 
-## 5. Current Active Milestone: Role-Based Clinical Hospital System
+## 5. Current Product Status
 
-The system is transitioning from a single-window desktop baseline into a dual-role
-hospital management application with separate workspaces for **Receptionists** and
-**Doctors**.
+The v0.1.0 release includes receptionist and doctor workspaces, staff
+authentication, clinical records, demo data, daily reports, and standalone
+Windows and macOS packages. See `ROADMAP.md` and `CHANGELOG.md` for the
+completed slices and release history.
 
-### What Has Been Completed (Slices 1 to 3 -- 100% Backend Complete)
-
-- **Slice 1: Database Schema & Migrations**:
-  - Models: `StaffRole`, `StaffUser` (PBKDF2 passwords), `UserSession` (URL tokens),
-    `MedicalRecord` (SOAP notes).
-  - Enriched `Appointment`: added `app_time` (`TimeField`), `reason_for_visit`,
-    `doctor` FK, and 5-state lifecycle (`Scheduled`, `Checked In`,
-    `In Consultation`, `Completed`, `Cancelled`).
-  - Migration `0002` applied and verified.
-- **Slice 2: Authentication & Staff Service Layer**:
-  - Services: `register_staff()`, `authenticate_staff()`, `validate_session()`,
-    `logout_staff()`, `update_staff_profile()`, `list_doctors()`.
-  - Endpoints: `/api/auth/register/`, `/api/auth/login/`, `/api/auth/me/`,
-    `/api/auth/logout/`, `/api/auth/profile/`, `/api/doctors/`.
-- **Slice 3: Clinical Logic & Schedule Conflict Engine**:
-  - Services: `check_schedule_conflict()` (+/- 15 min overlap detection),
-    `update_appointment_status()` (5-state lifecycle matrix, immutable completed
-    records, protected deletion), `get_doctor_queue()`, `get_doctor_patients()`,
-    `create_medical_record()`, `update_medical_record()`.
-  - Endpoints: `/api/appointments/conflict-check/`, `/api/doctor/queue/`,
-    `/api/doctor/patients/`, `/api/doctor/appointments/`, `/api/medical-records/`,
-    `/api/patients/<id>/medical-records/`.
-  - Test Suite: **76 passing tests** in `backend/tests/` (100% pass rate).
-
-### What Is In Progress and Yet to Be Done (Slices 4 to 7)
-
-1. **Slice 4: Receptionist Workspace UI**:
-   - Files: `frontend/src/components/AppointmentsWorkspace.svelte`,
-     `EditAppointmentDialog.svelte`, `frontend/src/lib/api.ts`.
-   - Tasks: Doctor dropdown from `/api/doctors/`, time input `<Input type="time">`,
-     real-time schedule conflict warning banner, "Book & Check In" triage action,
-     and waiting room "Check In" table action button.
-2. **Slice 5: Doctor Workspace UI**:
-   - Files: `frontend/src/components/DoctorWorkspace.svelte`,
-     `ConsultationDialog.svelte`, `PatientChartDialog.svelte`.
-   - Tasks: Tabbed physician dashboard (Waiting Room queue, today's schedule,
-     my patients roster, clinical notes log), SOAP consultation dialog
-     (Diagnosis, Symptoms, Notes, Prescription, Follow-up), and patient chart.
-3. **Slice 6: Auth Gateway & Settings Suite**:
-   - Files: `frontend/src/components/AuthModal.svelte`, `SettingsDialog.svelte`,
-     `frontend/src/App.svelte`.
-   - Tasks: Sign In / Register staff modal with demo quick-fill buttons, unified
-     Settings dialog with Demo Mode toggle, and role-based workspace mounting.
-4. **Slice 7: Seed Data & Final Packaging Proof**:
-   - Files: `backend/clinic/management/commands/seed.py`, `docs/`, `package.py`.
-   - Tasks: Multi-role seed data fixtures, documentation sync, and standalone
-     `.exe` bundle verification.
+The CareRegistry v0.1.1 release adds staff self-registration after
+initial receptionist setup, an authenticated storage-location view, smaller
+window layouts, and documentation updates. Both clinic and demo databases
+remain separate and existing data paths remain unchanged.
 
 ---
 

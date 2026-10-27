@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SummaryPanel from "./SummaryPanel.svelte";
   import { onMount, onDestroy, untrack } from "svelte";
   import { api, saveCsvFile, type DailyReport, type StaffUser } from "$lib/api";
   import { isCalendarDate } from "$lib/calendar";
@@ -119,12 +120,12 @@
     </div>
   </div>
 
-  <div class="grid grid-cols-4 gap-3 shrink-0">
+  <SummaryPanel><div class="grid grid-cols-2 md:grid-cols-4 gap-3">
     <MetricCard label="Appointments" value={report?.totals.appointments ?? null} description="All five appointment states" icon={Calendar} {loading} unavailable={!!errorMessage} />
     <MetricCard label="Patients on schedule" value={report?.totals.patients ?? null} description="Distinct patients, all statuses" icon={Users} {loading} unavailable={!!errorMessage} />
     <MetricCard label="Completed visits" value={report?.totals.completed ?? null} description="Finalized appointments" icon={CheckCircle2} {loading} unavailable={!!errorMessage} />
     <MetricCard label="Cancelled visits" value={report?.totals.cancelled ?? null} description="Cancelled appointments" icon={XCircle} {loading} unavailable={!!errorMessage} />
-  </div>
+  </div></SummaryPanel>
 
   {#if errorMessage}<p role="alert" class="text-sm text-destructive shrink-0">{errorMessage} Select Refresh to try again.</p>{/if}
   {#if exportError}<p role="alert" class="text-sm text-destructive shrink-0">{exportError}</p>{/if}

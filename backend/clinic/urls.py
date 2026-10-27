@@ -7,6 +7,7 @@ from backend.clinic import views
 urlpatterns = [
     path("reports/daily/", views.daily_report, name="api-daily-report"),
     path("health/", views.health_check, name="api-health"),
+    path("system/storage/", views.system_storage, name="api-system-storage"),
     path("patients/", views.patients_collection, name="api-patients"),
     path("patients/<int:patient_id>/", views.patient_detail, name="api-patient-detail"),
     path(

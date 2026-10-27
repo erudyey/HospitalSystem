@@ -48,6 +48,9 @@ during network or broadband interruptions:
 
 ### Receptionist Workspace
 
+- **Staff Accounts**: A new clinic starts with a receptionist account. After
+  initial setup, staff can self-register for either role at sign-in, or a
+  receptionist can create an account from Settings while staying signed in.
 - **Patient Registration**: Capture full name, contact information, and age.
   Unique auto-incrementing IDs identify each patient, with full support for duplicate
   names as distinct records.

@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 
@@ -49,6 +49,18 @@ def clinic_now() -> datetime:
 def clinic_context() -> dict[str, str]:
     tz = clinic_timezone()
     return {"timezone": getattr(tz, "key", None) or str(tz), "now": clinic_now().isoformat()}
+
+
+def storage_info() -> dict[str, str]:
+    """Describe the active database without exposing it through the public health check."""
+    with connection.cursor() as cursor:
+        cursor.execute("PRAGMA journal_mode")
+        result = cursor.fetchone()
+    return {
+        "mode": "demo" if os.environ.get("HOSPITAL_MODE") == "demo" else "clinic",
+        "database_path": str(connection.settings_dict["NAME"]),
+        "journal_mode": str(result[0]) if result else "unknown",
+    }
 
 
 def get_daily_report(user: StaffUser, date_str: str | None = None) -> dict[str, Any]:

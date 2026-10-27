@@ -9,23 +9,23 @@
 
 @layer base {
   :root {
-    --background: 180 20% 98%;
-    --foreground: 240 10% 3.9%;
+    --background: 180 14% 97%;
+    --foreground: 220 12% 19%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card: 180 14% 99%;
+    --card-foreground: 220 12% 19%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
+    --popover: 180 14% 99%;
+    --popover-foreground: 220 12% 19%;
 
     --primary: 355 84% 44%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 10% 3.9%;
+    --secondary-foreground: 220 12% 19%;
 
     --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
+    --muted-foreground: 225 7% 40%;
 
     --clinic: 174 62% 25%;
     --info: 210 61% 38%;
@@ -133,6 +133,13 @@
   .metric-card:hover {
     box-shadow: 0 4px 14px hsl(var(--clinic) / 0.09);
   }
+}
+
+@media (max-height: 699px) {
+  main { padding-block: 0.5rem !important; }
+  .staff-banner { padding-block: 0.35rem; margin-bottom: 0.5rem; }
+  .staff-banner .size-9 { display: none; }
+  .workspace-enter { gap: 0.5rem; }
 }
 
 @keyframes workspace-reveal {

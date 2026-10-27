@@ -16,10 +16,10 @@ Role-based clinical desktop app. Single `.exe` / `.app`. No server install requi
 ## Authentication
 
 - Staff login with username + password (PBKDF2-hashed).
-- "Keep me signed in" checkbox -- persists token in `localStorage`; unchecked uses `sessionStorage`.
+- "Keep me signed in" stores a staff session in the operating system credential store when available; otherwise the session is not remembered after exit.
 - Default startup: logged out. No auto-login into demo account.
 - Session validated on launch; expired/invalid tokens silently cleared.
-- Staff register, update profile, change password, log out.
+- After initial receptionist setup, staff can create an account at sign-in as a receptionist or doctor. A signed-in receptionist can also create accounts in Settings without replacing their session.
 
 ---
 
@@ -78,8 +78,8 @@ Unified contextual settings dialog:
 ## System & Demo Mode
 
 - Demo mode populates seed patients and appointments for evaluation.
-- Toggle persisted in `localStorage`.
-- SQLite WAL status indicator shows database health.
+- Switching modes restarts the desktop application with a separate database and leaves the user signed out.
+- Settings displays the signed-in user's active database path and SQLite journal mode.
 - Demo toggle never bypasses explicit logout.
 
 ---

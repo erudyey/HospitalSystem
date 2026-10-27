@@ -303,8 +303,7 @@ Or directly via `package.py`:
 ### Build Pipeline Stages
 
 1. **Frontend Compilation**: Deno executes `deno task build` in `frontend/`,
-   writing production HTML, CSS, and JS bundles to
-   `backend/config/static_dist/`.
+   writing production HTML, CSS, and JS bundles to `frontend/dist/`.
 2. **Collect Static**: Django gathers static files into the configured
    distribution path.
 3. **PyInstaller Freeze**: PyInstaller processes `desktop.spec`, bundling the
@@ -393,10 +392,10 @@ The `seed` management command populates your local database with realistic
 sample patients and appointments so the application looks and behaves like a
 live clinic without manual data entry.
 
-> **Note:** The command writes to your real AppData database
-> (`%LOCALAPPDATA%\HospitalSystem\clinic.sqlite3` on Windows,
-> `~/Library/Application Support/HospitalSystem/clinic.sqlite3` on macOS).
-> Use `--clear` only when a fresh dataset is acceptable.
+> **Note:** Sample seeding is permitted only in development, tests, or demo mode.
+> It is rejected in clinic mode. `--clear` replaces sample clinical data in the
+> selected permitted database and retains staff profiles. Never use real clinic
+> data as a test fixture.
 
 ### Add sample data (skips if records already exist)
 
@@ -421,8 +420,7 @@ uv run python backend/manage.py seed --clear --count 30
 | Detail              | Value                                              |
 | :------------------ | :------------------------------------------------- |
 | Patients            | 15 (default) with names, ages, and optional contacts |
-| Appointments        | 1 to 4 per patient, spread over -180 to +60 days  |
-| Past appointments   | Mostly `Completed`, occasionally `Cancelled`       |
-| Future appointments | Mostly `Scheduled`, occasionally `Cancelled`       |
-| Doctors             | 6 rotating sample doctors                          |
+| Appointments        | One sample appointment per patient                 |
+| Statuses            | Checked in, in consultation, scheduled, completed, or cancelled |
+| Doctors             | Three sample doctors                               |
 | Reproducibility     | Fixed random seed -- same names every run          |

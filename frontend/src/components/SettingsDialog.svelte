@@ -8,6 +8,7 @@
     api,
     type StaffUser,
     type ApiError,
+    type StorageInfo,
   } from "$lib/api";
   import { toast } from "$lib/toast.svelte";
   import {
@@ -65,6 +66,33 @@
   let isSaving = $state(false);
   let isLoggingOut = $state(false);
   let formErrors = $state<Record<string, string[]>>({});
+  let storage = $state<StorageInfo | null>(null);
+  let storageError = $state(false);
+
+  $effect(() => {
+    if (!open || !currentUser) {
+      storage = null;
+      return;
+    }
+    let active = true;
+    storageError = false;
+    void api.storage().then((info) => {
+      if (active) storage = info;
+    }).catch(() => {
+      if (active) storageError = true;
+    });
+    return () => { active = false; };
+  });
+
+  async function copyStoragePath() {
+    if (!storage) return;
+    try {
+      await navigator.clipboard.writeText(storage.database_path);
+      toast.success("Database path copied.");
+    } catch {
+      toast.error("Could not copy the path. Select it below to copy it.");
+    }
+  }
 
   $effect(() => {
     if (open) {
@@ -151,9 +179,9 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="sm:max-w-lg p-0 overflow-hidden">
+  <Dialog.Content class="sm:max-w-lg p-0 overflow-hidden flex flex-col gap-0">
     <!-- Header -->
-    <div class="px-6 pt-6 pb-4 border-b border-border bg-card pr-12">
+    <div class="px-6 pt-6 pb-4 border-b border-border bg-card pr-12 shrink-0">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2.5">
           <div class="size-8 rounded-lg bg-clinic/10 text-clinic flex items-center justify-center">
@@ -201,7 +229,7 @@
     </div>
 
     <!-- Body -->
-    <div class="px-6 py-4">
+    <div class="px-6 py-4 overflow-y-auto min-h-0">
       {#if activeTab === "profile"}
         <form onsubmit={handleSaveProfile} class="flex flex-col gap-3.5">
           <div class="grid grid-cols-2 gap-2.5">
@@ -346,7 +374,7 @@
                 </Badge>
               </div>
               <p class="text-xs text-muted-foreground leading-relaxed">
-                Demo mode uses a separate database and sample accounts. Sign out to switch modes from the sign-in screen.
+                Demo mode uses a separate database and sample accounts. Switching modes signs you out.
               </p>
             </div>
 
@@ -369,9 +397,22 @@
             </div>
 
             <div class="flex flex-col gap-1.5 text-muted-foreground">
+              {#if storage}
+                <div class="flex flex-col gap-1">
+                  <span>{storage.mode === "demo" ? "Demo database" : "Clinic database"}:</span>
+                  <span class="font-mono text-foreground break-all select-text">{storage.database_path}</span>
+                  <Button variant="outline" size="sm" class="self-start" onclick={copyStoragePath}>Copy path</Button>
+                </div>
+              {:else if storageError}
+                <p>Database location is unavailable.</p>
+              {:else if !currentUser}
+                <p>Sign in to view the database location.</p>
+              {:else}
+                <p>Loading database location...</p>
+              {/if}
               <div class="flex justify-between">
                 <span>Engine:</span>
-                <span class="font-mono text-foreground">SQLite 3 (WAL Mode)</span>
+                <span class="font-mono text-foreground">SQLite ({storage?.journal_mode || "unknown"})</span>
               </div>
               <div class="flex justify-between">
                 <span>Multi-reader concurrency:</span>
@@ -392,7 +433,7 @@
     </div>
 
     <!-- Footer -->
-    <div class="px-6 py-3 border-t border-border bg-card flex items-center justify-between">
+    <div class="px-6 py-3 border-t border-border bg-card flex items-center justify-between shrink-0">
       <Button
         type="button"
         variant="ghost"

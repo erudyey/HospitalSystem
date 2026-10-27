@@ -76,8 +76,8 @@
 <Dialog.Root bind:open>
   <Dialog.Content class="sm:max-w-2xl max-h-[85vh] flex flex-col p-0 overflow-hidden">
     <!-- Header -->
-    <div class="px-6 pt-6 pb-4 border-b border-border bg-card">
-      <div class="flex items-center justify-between">
+    <div class="px-6 pt-6 pb-4 border-b border-border bg-card pr-12">
+      <div class="flex flex-wrap items-center justify-between gap-2">
         <div class="flex items-center gap-2.5">
           <div class="size-8 rounded-lg bg-clinic/10 text-clinic flex items-center justify-center">
             <FileText class="size-4.5" />
