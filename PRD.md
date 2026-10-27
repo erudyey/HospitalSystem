@@ -65,12 +65,14 @@ embedded SQLite database in Write-Ahead Logging (WAL) mode.
 - **Seed Utility**: Management command to populate realistic sample data into
   the OS-specific application directory.
 
-### Milestone 2: Role-Based Clinical Hospital System (In Progress)
+### Milestone 2: Role-Based Clinical Hospital System (Released in v0.1.0)
 
 - **Staff Authentication**:
   - Secure credential storage using PBKDF2-SHA256 password hashing.
   - Role-based access control distinguishing `Receptionist` and `Doctor` users.
   - Profile modification and password change capabilities.
+  - v0.1.1: self-registration after first receptionist setup,
+    with either staff role selected at sign-in.
 - **Dual Workspaces**:
   - **Receptionist Workspace**: Directory search, patient registration,
     appointment scheduling with date/time granularity, and front-desk check-in.

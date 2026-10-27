@@ -292,7 +292,7 @@
     </form>
 
     <!-- Footer: Complete Action -->
-    <div class="px-6 py-3 border-t border-border bg-card flex items-center justify-between">
+    <div class="px-6 py-3 border-t border-border bg-card flex flex-wrap items-center justify-between gap-2 shrink-0">
       <Button
         type="button"
         variant="ghost"

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SummaryPanel from "./SummaryPanel.svelte";
   import MetricCard from "./MetricCard.svelte";
   import { onMount, onDestroy } from "svelte";
   import {
@@ -226,12 +227,12 @@
 </script>
 
 <div class="workspace-enter flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
-  <div class="grid grid-cols-4 gap-3 shrink-0">
+  <SummaryPanel><div class="grid grid-cols-2 md:grid-cols-4 gap-3">
     <MetricCard label="Waiting room" value={checkedInQueue.length} description="Your checked-in visits today" icon={UserCheck} loading={isLoading} unavailable={!!errorMessage} />
     <MetricCard label="In consultation" value={inConsultationQueue.length} description="Your visits in progress today" icon={Stethoscope} loading={isLoading} unavailable={!!errorMessage} />
     <MetricCard label="Scheduled today" value={scheduledToday.length} description="Your visits pending arrival" icon={CalendarCheck} loading={isLoading} unavailable={!!errorMessage} />
     <MetricCard label="Completed visits" value={completedToday.length} description="Your finalized visits today" icon={ClipboardList} loading={isLoading} unavailable={!!errorMessage} />
-  </div>
+  </div></SummaryPanel>
 
   <!-- Workspace Tabs Navigation & Refresh -->
   <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0 min-w-0">
@@ -306,7 +307,7 @@
       <!-- Active Consultation Banner (if patient is currently consulting) -->
       {#if inConsultationQueue.length > 0}
         <div class="rounded-xl border bg-card p-4 shadow-sm flex flex-col gap-3">
-          <div class="flex items-center justify-between">
+          <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center gap-2">
               <Stethoscope class="size-4 text-muted-foreground" />
               <span class="text-xs font-semibold text-foreground">
@@ -320,11 +321,11 @@
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             {#each inConsultationQueue as activeApp (activeApp.id)}
-              <div class="rounded-lg border bg-muted/20 p-3.5 shadow-2xs flex flex-col justify-between gap-3">
+              <div class="rounded-lg border bg-muted/20 p-3.5 shadow-2xs flex flex-col justify-between gap-3 min-w-0">
                 <div>
-                  <div class="flex items-start justify-between">
-                    <div>
-                      <h4 class="text-sm font-semibold text-foreground">{activeApp.patient_name}</h4>
+                  <div class="flex flex-wrap items-start justify-between gap-2">
+                    <div class="min-w-0">
+                      <h4 class="text-sm font-semibold text-foreground break-words">{activeApp.patient_name}</h4>
                       <p class="text-xs text-muted-foreground">Patient #{activeApp.patient_id} • Appt #{activeApp.id}</p>
                     </div>
                     <Badge variant="secondary" class="text-xs border border-border/80">
@@ -338,11 +339,11 @@
                   {/if}
                 </div>
 
-                <div class="flex items-center justify-between pt-2 border-t border-border/60">
+                <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-border/60">
                   <Button
                     variant="outline"
                     size="sm"
-                    class="h-7 text-xs px-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                    class="h-7 flex-auto text-xs px-2.5 text-muted-foreground hover:text-foreground cursor-pointer"
                     onclick={() => openChartFromAppointment(activeApp)}
                   >
                     <FileText class="size-3.5 mr-1" />
@@ -351,7 +352,7 @@
                   <Button
                     variant="default"
                     size="sm"
-                    class="h-7 text-xs px-3 cursor-pointer"
+                    class="h-7 flex-auto text-xs px-3 cursor-pointer"
                     onclick={() => handleBeginConsultation(activeApp)}
                   >
                     Resume Consultation
@@ -365,7 +366,7 @@
 
       <!-- Waiting Room Cards -->
       <div class="rounded-xl border bg-card p-5 shadow-xs">
-        <div class="flex items-center justify-between mb-4">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
           <div class="flex items-center gap-2">
             <h3 class="text-sm font-semibold text-foreground">Waiting Room Triage</h3>
             <Badge variant="secondary" class="text-xs font-semibold">
@@ -386,15 +387,15 @@
         {:else}
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {#each checkedInQueue as app, idx (app.id)}
-              <div class="rounded-xl border bg-card p-4 shadow-xs flex flex-col justify-between gap-3 hover:border-clinic/40 transition-colors duration-150">
+              <div class="rounded-xl border bg-card p-4 shadow-xs flex flex-col justify-between gap-3 min-w-0 hover:border-clinic/40 transition-colors duration-150">
                 <div>
-                  <div class="flex items-start justify-between gap-2">
-                    <div>
+                  <div class="flex flex-wrap items-start justify-between gap-2">
+                    <div class="min-w-0">
                       <div class="flex items-center gap-2">
                         <span class="size-5 rounded-full bg-secondary text-secondary-foreground font-bold text-xs flex items-center justify-center">
                           {idx + 1}
                         </span>
-                        <h4 class="text-sm font-semibold text-foreground">{app.patient_name}</h4>
+                        <h4 class="text-sm font-semibold text-foreground break-words">{app.patient_name}</h4>
                       </div>
                       <p class="text-xs text-muted-foreground font-mono mt-0.5 pl-7">
                         Record #{app.patient_id} • Appt #{app.id}
@@ -421,11 +422,11 @@
                 </div>
 
                 <!-- Card Actions -->
-                <div class="flex items-center justify-between pt-3 border-t border-border/60">
+                <div class="flex flex-wrap items-center gap-2 pt-3 border-t border-border/60">
                   <Button
                     variant="outline"
                     size="sm"
-                    class="h-8 text-xs px-2.5 cursor-pointer"
+                    class="h-8 flex-auto text-xs px-2.5 cursor-pointer"
                     onclick={() => openChartFromAppointment(app)}
                   >
                     <FileText class="size-3.5 mr-1" />
@@ -435,7 +436,7 @@
                   <Button
                     variant="default"
                     size="sm"
-                    class="h-8 text-xs px-3 font-medium cursor-pointer"
+                    class="h-8 flex-auto text-xs px-3 font-medium cursor-pointer"
                     onclick={() => handleBeginConsultation(app)}
                   >
                     <Play class="size-3.5 mr-1" />

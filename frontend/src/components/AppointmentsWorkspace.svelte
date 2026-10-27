@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SummaryPanel from "./SummaryPanel.svelte";
   import MetricCard from "./MetricCard.svelte";
   import { onMount, untrack } from "svelte";
   import { calendarDateOffset, nextClinicSlot } from "$lib/calendar";
@@ -529,7 +530,7 @@
 </script>
 
 <div class="workspace-enter flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
-  <div class="flex flex-wrap items-end gap-3 shrink-0">
+  <SummaryPanel label="Schedule dates"><div class="flex flex-wrap items-end gap-3">
     <div class="flex flex-col gap-1">
       <label for="schedule-dates" class="text-xs font-medium">Schedule dates</label>
       <Select.Root type="single" value={dateMode} onValueChange={changeDateMode}>
@@ -558,15 +559,15 @@
       </div>
     {/if}
     <p class="text-[11px] text-muted-foreground pb-2">Summary: {dateError ? "choose valid dates" : dateScopeLabel}</p>
-  </div>
+  </div></SummaryPanel>
   {#if dateError}<p id="schedule-date-error" role="alert" class="text-xs text-destructive shrink-0">{dateError}</p>{/if}
-  <div class="grid grid-cols-5 gap-3 shrink-0">
+  <SummaryPanel><div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
     <MetricCard label="Appointments" value={countAll} description="All appointment states" icon={Calendar} loading={isLoading} unavailable={!!errorMessage || !!dateError} />
     <MetricCard label="Waiting room" value={countCheckedIn} description="Checked-in visits" icon={UserCheck} loading={isLoading} unavailable={!!errorMessage || !!dateError} />
     <MetricCard label="Scheduled" value={countScheduled} description="Pending visits" icon={Clock} loading={isLoading} unavailable={!!errorMessage || !!dateError} />
     <MetricCard label="In consultation" value={countInConsultation} description="Visits in progress" icon={Stethoscope} loading={isLoading} unavailable={!!errorMessage || !!dateError} />
     <MetricCard label="Completed visits" value={countCompleted} description="Finalized visits" icon={CheckCircle2} loading={isLoading} unavailable={!!errorMessage || !!dateError} />
-  </div>
+  </div></SummaryPanel>
   <!-- Tier 1: Status Filter Tabs (Dedicated Full-Width Strip with Scroll Affordances) -->
   <div class="relative flex items-center shrink-0 min-w-0">
     <Tabs.Root
@@ -873,22 +874,22 @@
                 <TableCell class="text-center">
                   {#if app.status === "Scheduled"}
                     <Badge variant="outline" class="gap-1 font-medium text-xs text-muted-foreground">
-                      <Clock class="size-3 shrink-0" />
+                      <Clock class="size-3 shrink-0 text-info" />
                       Scheduled
                     </Badge>
                   {:else if app.status === "Checked In"}
                     <Badge variant="secondary" class="gap-1 font-medium text-xs">
-                      <UserCheck class="size-3 shrink-0" />
+                      <UserCheck class="size-3 shrink-0 text-clinic" />
                       Checked In
                     </Badge>
                   {:else if app.status === "In Consultation"}
                     <Badge variant="secondary" class="gap-1 font-medium text-xs border border-border/80">
-                      <Stethoscope class="size-3 shrink-0" />
+                      <Stethoscope class="size-3 shrink-0 text-clinic" />
                       Consulting
                     </Badge>
                   {:else if app.status === "Completed"}
                     <Badge variant="outline" class="gap-1 font-medium text-xs">
-                      <CheckCircle2 class="size-3 shrink-0" />
+                      <CheckCircle2 class="size-3 shrink-0 text-emerald-700" />
                       Completed
                     </Badge>
                   {:else if app.status === "Cancelled"}

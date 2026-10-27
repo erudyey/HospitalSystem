@@ -6,6 +6,12 @@
 
 export type StaffRole = "receptionist" | "doctor";
 
+export interface StorageInfo {
+  mode: "clinic" | "demo";
+  database_path: string;
+  journal_mode: string;
+}
+
 export interface StaffUser {
   id: number;
   username: string;
@@ -474,6 +480,7 @@ export const api = {
   },
 
   // Authentication & Staff Methods
+  storage: () => request<StorageInfo>("/api/system/storage/"),
   auth: {
     register: (data: {
       username: string;

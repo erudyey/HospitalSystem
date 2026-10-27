@@ -392,13 +392,20 @@ def main() -> None:
     api = DesktopHostApi()
 
     try:
+        width, height = 1320, 840
+        try:
+            screen = webview.screens[0]
+            width = min(width, int(screen.width * 0.9))
+            height = min(height, int(screen.height * 0.9))
+        except (IndexError, AttributeError, RuntimeError):
+            logger.info("Display size unavailable; using the default window size.")
         window = webview.create_window(
-            title="Hospital Management System",
+            title="CareRegistry",
             url=f"http://127.0.0.1:{port}/?token={session_token}"
             + ("&signed_out=1" if "--signed-out" in sys.argv else ""),
-            width=1320,
-            height=840,
-            min_size=(1024, 700),
+            width=width,
+            height=height,
+            min_size=(min(800, width), min(480, height)),
             js_api=api,
         )
         assert window is not None

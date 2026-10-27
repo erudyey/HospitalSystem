@@ -147,9 +147,17 @@ All routes are mounted under `/api/`. Desktop requests require the
 
 ### Staff Authentication Endpoints
 
+In a fresh database the first registered account must be a receptionist.
+After setup, registration is available at sign-in for either role. The desktop
+launch token and CSRF protections still apply. Signing in as a self-selected
+role grants that role's existing permissions; there is no administrator approval.
+`GET /api/system/storage/` requires a staff session and returns the actual
+configured database path, mode (`clinic` or `demo`), and SQLite journal mode.
+
 | Method   | Endpoint                             | Role         | Description                                                 |
 | :------- | :----------------------------------- | :----------- | :---------------------------------------------------------- |
-| `POST`   | `/api/auth/register/`                | Public/Admin | Register new staff account (`receptionist` or `doctor`).    |
+| `POST`   | `/api/auth/register/`                | Local app | Register a staff account. The first account must be a receptionist; later accounts may choose either role. |
+| `GET`    | `/api/system/storage/`              | Staff | Return the active `mode`, `database_path`, and SQLite `journal_mode`. |
 | `POST`   | `/api/auth/login/`                   | Public       | Authenticate credentials and receive a user session token.  |
 | `GET`    | `/api/auth/me/`                      | Staff        | Retrieve authenticated staff profile.                       |
 | `POST`   | `/api/auth/logout/`                  | Staff        | Revoke active user session token.                           |

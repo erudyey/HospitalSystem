@@ -15,6 +15,7 @@ on execution mode:
 | Environment            | Mode Flag               | Database Location                                                                                                              | Lifecycle & Isolation Rules                                                                             |
 | :--------------------- | :---------------------- | :----------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------ |
 | **Desktop Production** | Default (`DEBUG=False`) | `%LOCALAPPDATA%\HospitalSystem\clinic.sqlite3` (Win)<br/>`~/Library/Application Support/HospitalSystem/clinic.sqlite3` (macOS) | **Protected User Data**: Persistent clinic database. Never commit, overwrite, or use as a test fixture. |
+| **Desktop Demo** | `HOSPITAL_MODE=demo` | `clinic_demo.sqlite3` in the same platform-specific application folder | Separate persistent demo data; reset preserves staff profiles. |
 | **Development**        | `DEBUG=True`            | `clinic_dev.sqlite3` (Repository root)                                                                                         | Developer scratch database. Ignored by Git.                                                             |
 | **Automated Testing**  | `TESTING=True`          | `:memory:` (In-memory SQLite)                                                                                                  | Destroyed after test execution. Complete isolation from physical storage.                               |
 
@@ -25,7 +26,6 @@ On every database connection, the Django backend enforces:
 ```sql
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
-PRAGMA synchronous = NORMAL;
 ```
 
 - **WAL Mode**: Allows concurrent reads while writes are occurring, preventing
@@ -186,7 +186,7 @@ The application provides an automated data seeding tool:
 # Populate sample staff, patients, appointments, and medical records
 python backend/manage.py seed
 
-# Wipe existing data and re-seed from scratch
+# Replace sample clinical data in demo or development; retain staff profiles
 python backend/manage.py seed --clear
 
 # Control number of seeded patients (default: 15)
@@ -195,6 +195,5 @@ python backend/manage.py seed --clear --count 30
 
 - **Deterministic Generation**: Uses a fixed random seed (`Random(42)`) so
   repeated runs generate consistent, reproducible datasets.
-- **Service Layer Execution**: Seeding runs directly through
-  `backend/clinic/services.py`, verifying that all business rules, model
-  validators, and state machine guards are exercised.
+- **Service Layer Execution**: Seeding runs through `backend/clinic/services.py`
+  and is rejected for a production clinic database.

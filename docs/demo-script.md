@@ -2,7 +2,7 @@
 
 ## Before you start
 
-- Open the `0.1.0-beta.1` build, choose **Try demo**, and wait for the app to restart.
+- Open the application, choose **Try demo**, and wait for the app to restart.
 - Check that **Maria Santos** and **Dr. Chloe Tan** appear in the demo account chooser.
 - Use a fictional patient: **Jordan Lee**, age **29**, contact **0917 555 0142**.
 - Pick a future date and two available appointment times at least 15 minutes apart.

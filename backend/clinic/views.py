@@ -507,6 +507,15 @@ def auth_status(_request: HttpRequest) -> JsonResponse:
     return JsonResponse({"initial_setup_required": not StaffUser.objects.exists()})
 
 
+@require_GET
+def system_storage(request: HttpRequest) -> JsonResponse:
+    """Show the current storage location to signed-in staff."""
+    _, response = authentication_required(request)
+    if response is not None:
+        return response
+    return JsonResponse(services.storage_info())
+
+
 @require_http_methods(["POST"])
 def auth_register(request: HttpRequest) -> JsonResponse:
     """Register a new staff account (Receptionist or Doctor)."""
@@ -538,9 +547,6 @@ def auth_register(request: HttpRequest) -> JsonResponse:
         if not StaffUser.objects.exists():
             staff = services.bootstrap_receptionist(**payload)
         else:
-            user, response = receptionist_required(request)
-            if response is not None:
-                return response
             staff = services.register_staff(**payload)
         return JsonResponse(serialize_staff_user(staff), status=201)
     except ValidationError as err:

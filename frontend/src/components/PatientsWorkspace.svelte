@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SummaryPanel from "./SummaryPanel.svelte";
   import MetricCard from "./MetricCard.svelte";
   import { onMount } from "svelte";
   import { api, type Patient, type ApiError } from "$lib/api";
@@ -273,11 +274,11 @@
 </script>
 
 <div class="workspace-enter flex flex-col gap-4 flex-1 min-h-0 min-w-0 overflow-hidden">
-  <div class="grid grid-cols-3 gap-3 shrink-0">
+  <SummaryPanel><div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
     <MetricCard label="Registered patients" value={totalPatients} description="All saved directory records" icon={Users} loading={isLoading} unavailable={!!errorMessage} />
     <MetricCard label="Patients with active visits" value={activeAppointmentsCount} description="Directory patients with pending visits" icon={CalendarCheck} loading={isLoading} unavailable={!!errorMessage} />
     <MetricCard label="Appointments recorded" value={appointmentsRecorded} description="Lifetime bookings, all statuses" icon={ClipboardList} loading={isLoading} unavailable={!!errorMessage} />
-  </div>
+  </div></SummaryPanel>
 
   <!-- Table Toolbar Bar (Matching Reference Screenshot) -->
   <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0 min-w-0">

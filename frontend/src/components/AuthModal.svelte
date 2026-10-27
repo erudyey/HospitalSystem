@@ -140,7 +140,7 @@
       onSuccess?.(session.user);
     } catch (err) {
       const e = err as ApiError;
-      formErrors = e.fields || { general: [e.message] };
+      formErrors = normalizeApiError(e).fields;
     } finally {
       isSubmitting = false;
     }
@@ -187,7 +187,7 @@
       onSuccess?.(session.user);
     } catch (err) {
       const e = err as ApiError;
-      formErrors = e.fields || { general: [e.message] };
+      formErrors = normalizeApiError(e).fields;
     } finally {
       isSubmitting = false;
     }
@@ -195,19 +195,19 @@
 </script>
 
 <Dialog.Root bind:open>
-  <Dialog.Content class="sm:max-w-md p-0 overflow-hidden">
+  <Dialog.Content class="sm:max-w-md p-0 overflow-hidden flex flex-col gap-0">
     <!-- Modal Header -->
-    <div class="px-6 pt-6 pb-4 border-b border-border bg-card pr-12">
+    <div class="px-6 pt-6 pb-4 border-b border-border bg-card pr-12 shrink-0">
       <div class="flex items-center gap-2.5">
         <div class="size-8 rounded-lg bg-muted text-foreground flex items-center justify-center">
           <ShieldCheck class="size-4.5 text-muted-foreground" />
         </div>
         <div>
           <Dialog.Title class="text-base font-semibold">
-            {registerOnly ? "Register staff" : initialSetupRequired ? "Initial clinic setup" : "Hospital System Authentication"}
+            {registerOnly ? "Register staff" : initialSetupRequired ? "Initial clinic setup" : "CareRegistry"}
           </Dialog.Title>
           <Dialog.Description class="text-xs text-muted-foreground">
-            {registerOnly ? "Create an account while keeping your receptionist session." : initialSetupRequired ? "Create the first receptionist account to set up the clinic." : "Sign in with your staff account."}
+            {registerOnly ? "Create an account while keeping your receptionist session." : initialSetupRequired ? "Create the first receptionist account to set up the clinic." : "Sign in or create a staff account."}
           </Dialog.Description>
         </div>
       </div>
@@ -225,14 +225,14 @@
         >
           <Tabs.List class="w-full grid grid-cols-2">
             {#if !registerOnly}<Tabs.Trigger value="login" class="text-xs">Sign In</Tabs.Trigger>{/if}
-            {#if registerOnly || initialSetupRequired}<Tabs.Trigger value="register" class="text-xs">Register Staff</Tabs.Trigger>{/if}
+            <Tabs.Trigger value="register" class="text-xs">Create account</Tabs.Trigger>
           </Tabs.List>
         </Tabs.Root>
       </div>
     </div>
 
     <!-- Modal Body -->
-    <div class="px-6 py-4">
+    <div class="px-6 py-4 overflow-y-auto min-h-0">
       {#if onSwitchMode && !registerOnly}
         <div class="mb-4 rounded-lg border border-border p-3">
           <p class="text-xs text-muted-foreground mb-2">
@@ -353,6 +353,7 @@
                 disabled={isSubmitting}
                 class="h-8 text-xs"
               />
+              {#if formErrors.username}<p class="mt-1 text-xs text-destructive">{formErrors.username.join(" ")}</p>{/if}
             </div>
             <div>
               <label for="regPass" class="block text-xs font-medium text-foreground mb-1">
@@ -366,6 +367,7 @@
                 disabled={isSubmitting}
                 class="h-8 text-xs"
               />
+              {#if formErrors.password}<p class="mt-1 text-xs text-destructive">{formErrors.password.join(" ")}</p>{/if}
             </div>
           </div>
 
@@ -374,6 +376,7 @@
               Confirm password <span class="text-destructive">*</span>
             </label>
             <Input id="regPassConfirm" type="password" bind:value={regPasswordConfirmation} disabled={isSubmitting} class="h-8 text-xs" />
+            {#if formErrors.password_confirmation}<p class="mt-1 text-xs text-destructive">{formErrors.password_confirmation.join(" ")}</p>{/if}
           </div>
 
           <div>
@@ -388,6 +391,7 @@
               disabled={isSubmitting}
               class="h-8 text-xs"
             />
+            {#if formErrors.full_name}<p class="mt-1 text-xs text-destructive">{formErrors.full_name.join(" ")}</p>{/if}
           </div>
 
           <div>
@@ -403,6 +407,7 @@
               <option value="receptionist">Receptionist / Front Desk</option>
               {#if registerOnly || !initialSetupRequired}<option value="doctor">Physician / Doctor</option>{/if}
             </select>
+            {#if formErrors.role}<p class="mt-1 text-xs text-destructive">{formErrors.role.join(" ")}</p>{/if}
           </div>
 
           {#if regRole === "doctor"}

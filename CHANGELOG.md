@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.1
+
+- Add staff self-registration after initial receptionist setup, with receptionist or doctor roles.
+- Show the active clinic or demo database path and journal mode in Settings, with a copy action.
+- Adapt navigation, summaries, tables, and dialogs to smaller windows.
+- Use CareRegistry in window titles and soften surface contrast while preserving the logo and clinical colors.
+- Document demo credentials, account creation, local storage, and safe manual backups.
+- Preserve existing database locations, sessions, and clinical data protections.
+
+
 ## v0.1.0
 
 - Add role-based receptionist and doctor workspaces, booking and check-in,

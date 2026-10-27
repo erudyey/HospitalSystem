@@ -160,6 +160,12 @@ Business logic is strictly decoupled from the web framework in
 
 ## 5. Persistence and Storage Architecture
 
+Clinic and demo data use separate `clinic.sqlite3` and `clinic_demo.sqlite3`
+files. `HOSPITAL_DATA_DIR` overrides the desktop folder; development uses
+separate repository-local databases. Signed-in staff can see the actual active
+path and journal mode in Settings via `GET /api/system/storage/`. Remembered
+staff sessions use the OS credential store when available.
+
 - **File Location**: The database is stored at
   `%LOCALAPPDATA%\HospitalSystem\clinic.sqlite3` on Windows or
   `~/Library/Application Support/HospitalSystem/clinic.sqlite3` on macOS.
